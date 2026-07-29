@@ -1,6 +1,7 @@
 use std::net::UdpSocket;
-use std::str;
 use chrono::Local;
+use bincode;
+use teste::types::{GamePacket, ServerResponse};
 
 fn main() {
     // Bind to UDP socket on localhost:8080
@@ -14,23 +15,41 @@ fn main() {
         match socket.recv_from(&mut buf) {
             Ok((num_bytes, src_addr)) => {
                 let received_data = &buf[..num_bytes];
-                let message = str::from_utf8(received_data).unwrap_or("<invalid utf-8>");
                 
-                println!("[{}] Received {} bytes from {}: {}", 
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    num_bytes,
-                    src_addr,
-                    message
-                );
+                // Deserialize binary GamePacket
+                match bincode::deserialize::<GamePacket>(received_data) {
+                    Ok(packet) => {
+                        println!("[{}] Received {} bytes from {}: sequence_id={}, intent={:?}", 
+                            Local::now().format("%Y-%m-%d %H:%M:%S"),
+                            num_bytes,
+                            src_addr,
+                            packet.sequence_id,
+                            packet.intent
+                        );
 
-                // Echo the message back to the client
-                let response = format!("ACK: {}", message);
-                socket.send_to(response.as_bytes(), src_addr).expect("Failed to send response");
-                println!("[{}] Sent response to {}: {}", 
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    src_addr,
-                    response
-                );
+                        // Create and send binary response
+                        let response = ServerResponse {
+                            sequence_id: packet.sequence_id,
+                            status: format!("ACK: {:?}", packet.intent),
+                        };
+                        
+                        let serialized_response = bincode::serialize(&response).expect("Failed to serialize response");
+                        socket.send_to(&serialized_response, src_addr).expect("Failed to send response");
+                        println!("[{}] Sent {} bytes response to {}: sequence_id={}", 
+                            Local::now().format("%Y-%m-%d %H:%M:%S"),
+                            serialized_response.len(),
+                            src_addr,
+                            response.sequence_id
+                        );
+                    }
+                    Err(e) => {
+                        println!("[{}] Failed to deserialize packet from {}: {}", 
+                            Local::now().format("%Y-%m-%d %H:%M:%S"),
+                            src_addr,
+                            e
+                        );
+                    }
+                }
             }
             Err(e) => {
                 println!("[{}] Error receiving data: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);

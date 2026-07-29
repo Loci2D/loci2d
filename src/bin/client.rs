@@ -1,7 +1,8 @@
 use std::net::UdpSocket;
 use std::io;
-use std::str;
 use chrono::Local;
+use bincode;
+use teste::types::{GamePacket, ServerResponse, ClientIntent, Vector2};
 
 fn main() {
     // Bind to any available port for the client
@@ -12,10 +13,11 @@ fn main() {
     println!("[{}] Connecting to server at {}", Local::now().format("%Y-%m-%d %H:%M:%S"), server_addr);
 
     let mut buf = [0u8; 1024];
+    let mut sequence_id: u64 = 0;
 
     loop {
         // Read user input
-        print!("[{}] Enter message to send (or 'quit' to exit): ", Local::now().format("%Y-%m-%d %H:%M:%S"));
+        print!("[{}] Enter command (move/action/ping/quit): ", Local::now().format("%Y-%m-%d %H:%M:%S"));
         io::Write::flush(&mut io::stdout()).expect("Failed to flush stdout");
 
         let mut input = String::new();
@@ -31,17 +33,58 @@ fn main() {
             continue;
         }
 
-        // Send message to server
-        match socket.send_to(input.as_bytes(), server_addr) {
-            Ok(num_bytes) => {
-                println!("[{}] Sent {} bytes to server: {}", 
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    num_bytes,
-                    input
-                );
+        // Create GamePacket based on input
+        let intent = match input {
+            "ping" => ClientIntent::Ping,
+            cmd if cmd.starts_with("move") => {
+                // Simple parsing: move x y
+                let parts: Vec<&str> = cmd.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    let x = parts[1].parse::<f32>().unwrap_or(0.0);
+                    let y = parts[2].parse::<f32>().unwrap_or(0.0);
+                    ClientIntent::Move { direction: Vector2 { x, y } }
+                } else {
+                    ClientIntent::Move { direction: Vector2 { x: 1.0, y: 0.0 } }
+                }
+            }
+            cmd if cmd.starts_with("action") => {
+                let parts: Vec<&str> = cmd.split_whitespace().collect();
+                let ability_id = if parts.len() >= 2 {
+                    parts[1].parse::<u32>().unwrap_or(0)
+                } else {
+                    0
+                };
+                ClientIntent::Action { ability_id }
+            }
+            _ => ClientIntent::Ping,
+        };
+
+        let packet = GamePacket {
+            sequence_id,
+            intent,
+        };
+        sequence_id += 1;
+
+        // Serialize and send packet to server
+        match bincode::serialize(&packet) {
+            Ok(serialized) => {
+                match socket.send_to(&serialized, server_addr) {
+                    Ok(num_bytes) => {
+                        println!("[{}] Sent {} bytes to server: sequence_id={}, intent={:?}", 
+                            Local::now().format("%Y-%m-%d %H:%M:%S"),
+                            num_bytes,
+                            packet.sequence_id,
+                            packet.intent
+                        );
+                    }
+                    Err(e) => {
+                        println!("[{}] Failed to send message: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+                        continue;
+                    }
+                }
             }
             Err(e) => {
-                println!("[{}] Failed to send message: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+                println!("[{}] Failed to serialize packet: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
                 continue;
             }
         }
@@ -52,13 +95,20 @@ fn main() {
         match socket.recv_from(&mut buf) {
             Ok((num_bytes, src_addr)) => {
                 let received_data = &buf[..num_bytes];
-                let message = str::from_utf8(received_data).unwrap_or("<invalid utf-8>");
-                println!("[{}] Received {} bytes from {}: {}", 
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    num_bytes,
-                    src_addr,
-                    message
-                );
+                match bincode::deserialize::<ServerResponse>(received_data) {
+                    Ok(response) => {
+                        println!("[{}] Received {} bytes from {}: sequence_id={}, status={}", 
+                            Local::now().format("%Y-%m-%d %H:%M:%S"),
+                            num_bytes,
+                            src_addr,
+                            response.sequence_id,
+                            response.status
+                        );
+                    }
+                    Err(e) => {
+                        println!("[{}] Failed to deserialize response: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+                    }
+                }
             }
             Err(e) => {
                 println!("[{}] No response from server (timeout or error): {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
