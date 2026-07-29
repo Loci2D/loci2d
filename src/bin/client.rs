@@ -2,7 +2,7 @@ use std::net::UdpSocket;
 use std::io;
 use chrono::Local;
 use bincode;
-use teste::types::{GamePacket, ServerResponse, ClientIntent, Vector2};
+use teste::network::{GamePacket, ServerResponse, ClientIntent, Vector2};
 
 fn main() {
     // Bind to any available port for the client
