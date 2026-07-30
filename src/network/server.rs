@@ -1,6 +1,6 @@
 use std::net::UdpSocket;
 use chrono::Local;
-use bincode;
+use prost::Message;
 use super::packets::{GamePacket, ServerResponse};
 
 pub fn run_server() {
@@ -16,8 +16,8 @@ pub fn run_server() {
             Ok((num_bytes, src_addr)) => {
                 let received_data = &buf[..num_bytes];
                 
-                // Deserialize binary GamePacket
-                match bincode::deserialize::<GamePacket>(received_data) {
+                // Deserialize Protobuf GamePacket
+                match GamePacket::decode(received_data) {
                     Ok(packet) => {
                         println!("[{}] Received {} bytes from {}: sequence_id={}, intent={:?}", 
                             Local::now().format("%Y-%m-%d %H:%M:%S"),
@@ -27,23 +27,24 @@ pub fn run_server() {
                             packet.intent
                         );
 
-                        // Create and send binary response
+                        // Create and send Protobuf response
                         let response = ServerResponse {
                             sequence_id: packet.sequence_id,
-                            status: format!("ACK: {:?}", packet.intent),
+                            status: format!("ACK: sequence_id={}", packet.sequence_id),
                         };
                         
-                        let serialized_response = bincode::serialize(&response).expect("Failed to serialize response");
-                        socket.send_to(&serialized_response, src_addr).expect("Failed to send response");
+                        let mut response_buf = Vec::new();
+                        response.encode(&mut response_buf).expect("Failed to serialize response");
+                        socket.send_to(&response_buf, src_addr).expect("Failed to send response");
                         println!("[{}] Sent {} bytes response to {}: sequence_id={}", 
                             Local::now().format("%Y-%m-%d %H:%M:%S"),
-                            serialized_response.len(),
+                            response_buf.len(),
                             src_addr,
                             response.sequence_id
                         );
                     }
                     Err(e) => {
-                        println!("[{}] Failed to deserialize packet from {}: {}", 
+                        println!("[{}] Failed to deserialize Protobuf packet from {}: {}", 
                             Local::now().format("%Y-%m-%d %H:%M:%S"),
                             src_addr,
                             e

@@ -1,35 +1,37 @@
-use serde::{Serialize, Deserialize};
+// Importa os tipos gerados pelo prost a partir do proto/game_packets.proto
+include!(concat!(env!("OUT_DIR"), "/loci2d.rs"));
 
-// Vetor 2D simples para o mapa 2D
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub struct Vector2 {
-    pub x: f32,
-    pub y: f32,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use prost::Message;
 
-// O que o cliente *pode querer fazer* (Intenções)
-#[derive(Serialize, Deserialize, Debug)]
-pub enum ClientIntent {
-    // Intenção de movimento informando uma direção ou delta
-    Move { direction: Vector2 },
-    
-    // Outras intenções comuns em jogos
-    Action { ability_id: u32 },
-    
-    // Heartbeat/Ping para manter a conexão viva
-    Ping,
-}
+    #[test]
+    fn test_protobuf_packet_roundtrip() {
+        let packet = GamePacket {
+            sequence_id: 42,
+            timestamp: 1000,
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Move(MoveIntent {
+                    direction: Some(Vector2 { x: 1.0, y: -2.5 }),
+                })),
+            }),
+        };
 
-// O pacote completo que trafega na rede (Envelope)
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GamePacket {
-    pub sequence_id: u64, // Útil para ordenar pacotes e evitar replay attacks básico
-    pub intent: ClientIntent,
-}
+        let mut buf = Vec::new();
+        packet.encode(&mut buf).expect("Failed to encode packet");
 
-// Resposta do servidor
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ServerResponse {
-    pub sequence_id: u64,
-    pub status: String,
+        let decoded = GamePacket::decode(&buf[..]).expect("Failed to decode packet");
+        assert_eq!(decoded.sequence_id, 42);
+        assert_eq!(decoded.timestamp, 1000);
+
+        match decoded.intent {
+            Some(ClientIntent { intent: Some(client_intent::Intent::Move(m)) }) => {
+                let dir = m.direction.expect("Missing direction");
+                assert_eq!(dir.x, 1.0);
+                assert_eq!(dir.y, -2.5);
+            }
+            _ => panic!("Expected Move intent"),
+        }
+    }
 }

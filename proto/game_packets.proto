@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package loci2d;
+
+// 2D Vector representation
+message Vector2 {
+  float x = 1;
+  float y = 2;
+}
+
+// Client Intents
+message MoveIntent {
+  Vector2 direction = 1;
+}
+
+message ActionIntent {
+  uint32 ability_id = 1;
+}
+
+message PingIntent {}
+
+message ClientIntent {
+  oneof intent {
+    MoveIntent move = 1;
+    ActionIntent action = 2;
+    PingIntent ping = 3;
+  }
+}
+
+// Top-level Network Game Packet (Envelope)
+message GamePacket {
+  uint64 sequence_id = 1;
+  uint64 timestamp = 2;
+  ClientIntent intent = 3;
+}
+
+// Server Response Packet
+message ServerResponse {
+  uint64 sequence_id = 1;
+  string status = 2;
+}
