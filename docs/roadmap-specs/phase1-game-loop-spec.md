@@ -2,7 +2,7 @@
 
 > **Status:** Open / Ready for implementation  
 > **Roadmap Phase:** Phase 1 — Game Loop & Single-Instance Core  
-> **Reference ADRs:** [ADR-0001](../adr/0001-authoritative-server-archoitecture.md) · [ADR-0002](../adr/0002-instance-based-architecture.md) · [ADR-0005](../adr/0005-cross-language-binary-serialization.md)
+> **Reference ADRs:** [ADR-0001](../adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](../adr/en/0002-instance-based-architecture.md) · [ADR-0005](../adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md)
 
 ---
 
@@ -322,7 +322,7 @@ fn main() {
 | `src/world/mod.rs` | Re-exports only |
 | `src/game_loop/mod.rs` | Re-export of `tick` only |
 | `src/scripting/` | Reserved for Phase 5 (Lua engine) |
-| `docs/adr/` | No new ADR needed — threading/mpsc decisions fall within the scope of ADR-0001 and ADR-0002 |
+| `docs/adr/` | ADR-0006 added — documents the two-thread `mpsc` architecture, its known limitations, and the migration path to async in Phase 5 |
 
 **New files added in this phase:**
 
