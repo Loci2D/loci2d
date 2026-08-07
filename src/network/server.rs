@@ -1,12 +1,13 @@
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
+use std::sync::mpsc;
 use chrono::Local;
 use prost::Message;
-use super::packets::{GamePacket, ServerResponse};
+use super::packets::{GamePacket, ClientIntent};
 
-pub fn run_server() {
-    // Bind to UDP socket on localhost:8080
-    let socket = UdpSocket::bind("127.0.0.1:8080").expect("Failed to bind to address");
-    println!("[{}] UDP Server listening on 127.0.0.1:8080", Local::now().format("%Y-%m-%d %H:%M:%S"));
+pub fn run_server(intent_tx: mpsc::Sender<(SocketAddr, ClientIntent)>, bind_addr: &str) {
+    // Bind to UDP socket
+    let socket = UdpSocket::bind(bind_addr).expect("Failed to bind to address");
+    println!("[{}] UDP Server listening on {}", Local::now().format("%Y-%m-%d %H:%M:%S"), bind_addr);
 
     let mut buf = [0u8; 1024];
 
@@ -27,21 +28,9 @@ pub fn run_server() {
                             packet.intent
                         );
 
-                        // Create and send Protobuf response
-                        let response = ServerResponse {
-                            sequence_id: packet.sequence_id,
-                            status: format!("ACK: sequence_id={}", packet.sequence_id),
-                        };
-                        
-                        let mut response_buf = Vec::new();
-                        response.encode(&mut response_buf).expect("Failed to serialize response");
-                        socket.send_to(&response_buf, src_addr).expect("Failed to send response");
-                        println!("[{}] Sent {} bytes response to {}: sequence_id={}", 
-                            Local::now().format("%Y-%m-%d %H:%M:%S"),
-                            response_buf.len(),
-                            src_addr,
-                            response.sequence_id
-                        );
+                        if let Some(intent) = packet.intent {
+                            let _ = intent_tx.send((src_addr, intent));
+                        }
                     }
                     Err(e) => {
                         println!("[{}] Failed to deserialize Protobuf packet from {}: {}", 
@@ -58,3 +47,4 @@ pub fn run_server() {
         }
     }
 }
+

@@ -8,6 +8,8 @@ default-run = "teste"
 chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 prost = "0.13"
+dotenvy = "0.15"
+
 
 [build-dependencies]
 prost-build = "0.13"

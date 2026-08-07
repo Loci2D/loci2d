@@ -3,7 +3,7 @@ use std::io;
 use chrono::Local;
 use prost::Message;
 use teste::network::{
-    GamePacket, ServerResponse, ClientIntent, Vector2, MoveIntent, ActionIntent, PingIntent,
+    GamePacket, ClientIntent, Vector2, MoveIntent, ActionIntent, PingIntent,
     client_intent,
 };
 
@@ -15,8 +15,8 @@ fn main() {
     let server_addr = "127.0.0.1:8080";
     println!("[{}] Connecting to server at {}", Local::now().format("%Y-%m-%d %H:%M:%S"), server_addr);
 
-    let mut buf = [0u8; 1024];
     let mut sequence_id: u64 = 0;
+
 
     loop {
         // Read user input
@@ -91,31 +91,6 @@ fn main() {
                 continue;
             }
         }
-
-        // Wait for response from server (with timeout)
-        socket.set_read_timeout(Some(std::time::Duration::from_secs(5))).expect("Failed to set timeout");
-
-        match socket.recv_from(&mut buf) {
-            Ok((num_bytes, src_addr)) => {
-                let received_data = &buf[..num_bytes];
-                match ServerResponse::decode(received_data) {
-                    Ok(response) => {
-                        println!("[{}] Received {} bytes from {}: sequence_id={}, status={}", 
-                            Local::now().format("%Y-%m-%d %H:%M:%S"),
-                            num_bytes,
-                            src_addr,
-                            response.sequence_id,
-                            response.status
-                        );
-                    }
-                    Err(e) => {
-                        println!("[{}] Failed to deserialize response: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
-                    }
-                }
-            }
-            Err(e) => {
-                println!("[{}] No response from server (timeout or error): {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
-            }
-        }
     }
 }
+

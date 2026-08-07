@@ -86,9 +86,11 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 ---
 
 ### Phase 4: Event Logging & Deterministic Replay System
+> **Spec:** [Phase 4 Spec](roadmap-specs/phase4-deterministic-replay-spec.md) · **Reference ADR:** [ADR-0007](adr/en/0007-deterministic-simulation-and-fixed-point.md)
 ### Fase 4: Registro de Eventos & Sistema de Replay Determinístico
 
 #### English
+
 * [ ] **Event Sourcing Architecture**:
   - Log all incoming client intents, timestamp/tick numbers, and system inputs sequentially into an event log buffer.
 * [ ] **Deterministic Execution Guarantee**:
