@@ -46,6 +46,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 ---
 
 ### Phase 2: Lightweight Client/Session Mapping
+> **Spec:** [Phase 2 Spec](roadmap-specs/phase2-client-session-mapping-spec.md) · **Reference ADRs:** [ADR-0001](adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](adr/en/0002-instance-based-architecture.md) · [ADR-0005](adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](adr/en/0006-two-thread-network-gameloop-separation.md)
 ### Fase 2: Mapeamento Leve de Cliente/Sessão
 
 #### English
