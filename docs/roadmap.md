@@ -66,7 +66,9 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 ---
 
 ### Phase 3: World State Broadcasting & Client Sync
+> **Spec:** [Phase 3 Spec](roadmap-specs/phase3-world-state-broadcasting-spec.md) · **Reference ADRs:** [ADR-0001](adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](adr/en/0002-instance-based-architecture.md) · [ADR-0003](adr/en/0003-2d-map-only.md) · [ADR-0005](adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0008](adr/en/0008-session-lifecycle-and-client-identity.md)
 ### Fase 3: Transmissão de Estado do Mundo & Sincronização de Clientes
+
 
 #### English
 * [ ] **Snapshot Generation**:
