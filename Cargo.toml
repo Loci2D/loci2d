@@ -1,8 +1,8 @@
 [package]
-name = "teste"
+name = "loci2d"
 version = "0.1.0"
 edition = "2024"
-default-run = "teste"
+default-run = "loci2d"
 
 [dependencies]
 chrono = "0.4"

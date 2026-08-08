@@ -51,6 +51,8 @@ impl GameLoop {
         }
     }
 
+    // [2026-08-08] Allowed dead_code: graceful shutdown method to be hooked into OS signals / server lifecycle.
+    #[allow(dead_code)]
     pub fn stop(&mut self) {
         self.running = false;
     }

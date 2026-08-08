@@ -2,7 +2,7 @@ use std::net::UdpSocket;
 use std::io;
 use chrono::Local;
 use prost::Message;
-use teste::network::{
+use loci2d::network::{
     GamePacket, ClientIntent, Vector2, MoveIntent, ActionIntent, PingIntent,
     client_intent,
 };

@@ -1,3 +1,6 @@
+// [2026-08-08] Allowed dead_code: includes Protobuf types (e.g. ServerResponse) generated via prost.
+#![allow(dead_code)]
+
 // Importa os tipos gerados pelo prost a partir do proto/game_packets.proto
 include!(concat!(env!("OUT_DIR"), "/loci2d.rs"));
 

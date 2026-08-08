@@ -1,15 +1,9 @@
-mod config;
-mod network;
-mod world;
-mod game_loop;
-mod scripting;
-
 use std::sync::mpsc;
 use std::thread;
-use network::server::run_server;
-use game_loop::tick::GameLoop;
-use world::instance::Instance;
-use config::ServerConfig;
+use loci2d::config::ServerConfig;
+use loci2d::game_loop::tick::GameLoop;
+use loci2d::network::server::run_server;
+use loci2d::world::instance::Instance;
 
 fn main() {
     let cfg = ServerConfig::from_env();

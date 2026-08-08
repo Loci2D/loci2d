@@ -9,6 +9,8 @@ use crate::network::packets::ClientIntent;
 // Re-export Vector2 from network for now
 pub use crate::network::packets::Vector2;
 
+// [2026-08-08] Allowed dead_code: fields like id and tick_rate are essential metadata for multi-room management (Phase 5).
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Instance {
     pub id: u64,
@@ -67,6 +69,12 @@ impl Instance {
     }
 
     pub fn tick(&mut self, tick_count: u64) {
+        // [2026-08-08] NOTE: The position calculation currently performs a simple additive step (position += velocity)
+        // assuming velocity is given in units per tick.
+        // FUTURE ADJUSTMENT REQUIRED: In Phase 4 (Deterministic Replay) and Phase 6 (Physics & Collisions),
+        // this calculation will need to be upgraded to use fixed-point arithmetic (to prevent floating-point drift)
+        // and incorporate explicit delta_time scaling (units/second * dt) or fixed-step integration
+        // so that simulation speed remains constant regardless of tick_rate changes.
         for entity in self.entities.values_mut() {
             entity.position.x += entity.velocity.x;
             entity.position.y += entity.velocity.y;
@@ -74,10 +82,13 @@ impl Instance {
         println!("[Tick {}] {} active entities", tick_count, self.entities.len());
     }
 
+    // [2026-08-08] Allowed dead_code: entity lifecycle helper methods for Phase 2 (Session Mapping) and Phase 5.
+    #[allow(dead_code)]
     pub fn add_entity(&mut self, entity: Entity) {
         self.entities.insert(entity.id, entity);
     }
 
+    #[allow(dead_code)]
     pub fn remove_entity(&mut self, entity_id: u64) -> Option<Entity> {
         self.entities.remove(&entity_id)
     }
@@ -119,5 +130,3 @@ mod tests {
         assert_eq!(updated_entity.position.y, -1.0);
     }
 }
-
-
