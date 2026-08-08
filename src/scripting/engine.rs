@@ -8,6 +8,13 @@ pub struct ScriptEngine {
 }
 
 #[allow(dead_code)]
+impl Default for ScriptEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(dead_code)]
 impl ScriptEngine {
     pub fn new() -> Self {
         Self {

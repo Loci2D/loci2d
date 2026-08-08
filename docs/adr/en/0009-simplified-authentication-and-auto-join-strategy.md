@@ -1,4 +1,4 @@
-# ADR 0009: Simplified Authentication & Auto-Join Strategy
+# ADR 0009: Simplified Authentication & Explicit Session Handshake
 
 ## Status
 
@@ -34,11 +34,11 @@ Alternatives considered:
 | Full OAuth/JWT in Phase 2 | Too complex for validation phase; blocks rapid prototyping |
 | Database-backed user accounts | Requires external infrastructure; violates single-instance simplicity |
 | Pre-shared keys/passwords | Still requires key distribution infrastructure; poor UX |
-| No authentication at all | Too permissive; even Phase 2 needs basic session boundaries |
+| Implicit auto-join on raw intent | Bypasses session boundaries; spawns phantom entities on random packets |
 
 ## Decision
 
-We adopt a **minimal trust-based authentication model** optimized for rapid prototyping:
+We adopt a **minimal trust-based authentication model with explicit session handshake** optimized for rapid prototyping:
 
 ### Identity Mechanism
 - **Primary identifier**: `SocketAddr` (client IP:port)
@@ -46,11 +46,10 @@ We adopt a **minimal trust-based authentication model** optimized for rapid prot
 - **No cryptographic tokens**: Trust the network address for session binding
 - **No database**: All session state is in-memory within the `Instance`
 
-### Auto-Join Fallback
-- **Configuration**: `AUTO_JOIN_ON_INTENT` (default: `true`)
-- **Behavior**: If a client sends gameplay intents (`MoveIntent`, `ActionIntent`) without prior `JoinIntent`, automatically create a session with generated name (`Player_<id>`)
-- **Purpose**: Maintains backward compatibility with Phase 1 clients and enables quick testing
-- **Security implication**: Acceptable for trusted localhost/LAN environments
+### Explicit Handshake Protocol
+- **Behavior**: A client MUST send an explicit `JoinIntent` containing their `player_name` to register a session and spawn an entity in the instance.
+- **Unjoined Intent Policy**: If an unknown `SocketAddr` sends gameplay intents (`MoveIntent`, `ActionIntent`, `PingIntent`) without a prior `JoinIntent`, the packet is dropped and ignored.
+- **Graceful Leave**: A client can send `DisconnectIntent` with an optional reason to cleanly terminate their session and despawn their entity.
 
 ### Security Trade-offs (Explicitly Accepted)
 - **Packet spoofing**: Malicious clients could impersonate any IP in LAN environments
@@ -65,7 +64,6 @@ We adopt a **minimal trust-based authentication model** optimized for rapid prot
 ### Protocol Extensions
 - **`JoinIntent`**: Explicit handshake with `player_name` field
 - **`DisconnectIntent`**: Graceful session termination with optional reason
-- **Backward compatibility**: Phase 1 raw intents still work via auto-join
 
 ## Why This Is Temporary
 
@@ -102,7 +100,7 @@ Phase 5 will introduce full authentication & security:
 - **Rapid iteration**: Focus on game mechanics, not auth infrastructure
 - **Simple debugging**: No token expiration, database migrations, or auth flows to debug
 - **Educational clarity**: Session mechanics are visible and understandable without crypto complexity
-- **Backward compatible**: Auto-join allows gradual migration to explicit joins
+- **Clean session boundaries**: Explicit join requirement ensures only intentional connections spawn entities
 
 **Negative:**
 - **No security**: Completely unsuitable for public internet deployment

@@ -18,6 +18,7 @@ impl GameLoop {
         }
     }
 
+    #[allow(clippy::while_immutable_condition)]
     pub fn start(
         &mut self,
         mut instance: Instance,
@@ -31,11 +32,8 @@ impl GameLoop {
             let start = Instant::now();
 
             // 1. Drain the intent queue (non-blocking)
-            loop {
-                match intent_rx.try_recv() {
-                    Ok((addr, intent)) => instance.apply_intent(addr, intent),
-                    Err(_) => break, // queue empty or channel closed
-                }
+            while let Ok((addr, intent)) = intent_rx.try_recv() {
+                instance.apply_intent(addr, intent);
             }
 
             // 2. Advance simulation

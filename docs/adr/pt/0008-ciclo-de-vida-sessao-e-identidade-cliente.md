@@ -39,7 +39,7 @@ Implementamos um **ciclo de vida de sessão baseado em SocketAddr** com a seguin
 ### Máquina de Estado de Sessão
 ```
 SocketAddr Desconhecido → [JoinIntent] → Sessão Ativa
-SocketAddr Desconhecido → [Outro Intent + AUTO_JOIN_ON_INTENT=true] → Sessão Ativa  
+SocketAddr Desconhecido → [Outro Intent] → Descarte (Sem Sessão)
 Sessão Ativa → [DisconnectIntent] → Desconectado → Despawn de Entidade
 Sessão Ativa → [Sem pacotes por > CLIENT_TIMEOUT_SECS] → TimedOut → Despawn de Entidade
 ```
@@ -97,8 +97,8 @@ Quando multi-instância e autenticação forem introduzidos:
 - **Rastreamento de atividade**: `last_seen` permite monitoramento de heartbeat e detecção de inatividade
 - **Desconexões graciosas**: Clientes podem sinalizar intenção de sair com razão opcional
 - **Visibilidade de debug**: Metadados de sessão auxiliam logging e troubleshooting
-- **Implementação simples**: Usa coleções padrão do Rust com semânticas claras
-- **Compatível com versões anteriores**: Fallback auto-join mantém comportamento da Fase 1
+- **Implementação simples**: Usa coleções padrão do Rust com semântica clara
+- **Limite explícito**: Exige JoinIntent válido antes de processar intents de gameplay
 
 **Negativo:**
 - **Fragilidade de SocketAddr**: Mudanças de IP quebram sessões (aceitável para escopo localhost/LAN da Fase 2–4)

@@ -30,9 +30,17 @@ function love.load()
         local loaded = pb.loadfile("../../proto/game_packets.proto")
         if not loaded then
             print("[Warning] Could not load ../../proto/game_packets.proto")
+        else
+            -- Automatically join instance on startup
+            send_intent({ join = { player_name = "Love2DPlayer" } })
         end
     end
 end
+
+function love.quit()
+    send_intent({ disconnect = { reason = "closing client" } })
+end
+
 
 function send_intent(intent_table)
     if not pb then

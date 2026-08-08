@@ -37,4 +37,48 @@ mod tests {
             _ => panic!("Expected Move intent"),
         }
     }
+
+    #[test]
+    fn test_protobuf_join_and_disconnect_roundtrip() {
+        // Join intent
+        let join_packet = GamePacket {
+            sequence_id: 1,
+            timestamp: 2000,
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: "Alice".to_string(),
+                })),
+            }),
+        };
+        let mut buf = Vec::new();
+        join_packet.encode(&mut buf).unwrap();
+        let decoded_join = GamePacket::decode(&buf[..]).unwrap();
+        match decoded_join.intent {
+            Some(ClientIntent { intent: Some(client_intent::Intent::Join(j)) }) => {
+                assert_eq!(j.player_name, "Alice");
+            }
+            _ => panic!("Expected Join intent"),
+        }
+
+        // Disconnect intent
+        let dc_packet = GamePacket {
+            sequence_id: 2,
+            timestamp: 2001,
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Disconnect(DisconnectIntent {
+                    reason: "Leaving match".to_string(),
+                })),
+            }),
+        };
+        let mut dc_buf = Vec::new();
+        dc_packet.encode(&mut dc_buf).unwrap();
+        let decoded_dc = GamePacket::decode(&dc_buf[..]).unwrap();
+        match decoded_dc.intent {
+            Some(ClientIntent { intent: Some(client_intent::Intent::Disconnect(d)) }) => {
+                assert_eq!(d.reason, "Leaving match");
+            }
+            _ => panic!("Expected Disconnect intent"),
+        }
+    }
 }
+

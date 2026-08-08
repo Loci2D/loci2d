@@ -82,18 +82,23 @@ cargo run --bin client
 ```
 
 ### 3. Client Commands / Comandos do Cliente
+- `join <name>` — Send join handshake with player name (e.g., `join Alice`) / Envia handshake de entrada com nome do jogador (ex: `join Alice`)
+- `leave [reason]` — Send disconnect intent (e.g., `leave quitting`) / Envia intenção de desconexão (ex: `leave quitting`)
 - `ping` — Send ping intent / Envia intenção de ping
 - `move <x> <y>` — Send 2D movement intent (e.g., `move 1.0 0.5`) / Envia intenção de movimento 2D (ex: `move 1.0 0.5`)
 - `action <id>` — Send action intent with ability ID (e.g., `action 42`) / Envia intenção de ação com ID de habilidade (ex: `action 42`)
-- `quit` — Exit client / Sair do cliente
+- `quit` — Gracefully disconnect and exit client / Desconecta graciosamente e sai do cliente
 
 ### Example Session / Sessão de Exemplo
 ```
-Enter command (move/action/ping/quit): ping
-[2026-07-30 15:30:00] Sent 12 bytes to server: sequence_id=0
-[2026-07-30 15:30:00] Received 19 bytes from 127.0.0.1:8080: sequence_id=0, status=ACK: sequence_id=0
+Enter command: join Alice
+[2026-08-08 17:30:00] Sent 16 bytes to server: sequence_id=0
 
-Enter command (move/action/ping/quit): move 1.0 0.5
-[2026-07-30 15:30:05] Sent 22 bytes to server: sequence_id=1
-[2026-07-30 15:30:05] Received 19 bytes from 127.0.0.1:8080: sequence_id=1, status=ACK: sequence_id=1
+Enter command: move 1.0 0.5
+[2026-08-08 17:30:05] Sent 22 bytes to server: sequence_id=1
+
+Enter command: quit
+[2026-08-08 17:30:10] Sending disconnect and shutting down...
+[2026-08-08 17:30:10] Sent 22 bytes to server: sequence_id=2
 ```
+

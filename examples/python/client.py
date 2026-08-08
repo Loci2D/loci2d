@@ -18,16 +18,15 @@ def main():
     sock.settimeout(5.0)
     
     sequence_id = 0
-    print("[Python Client] Connected to loci2d server at 127.0.0.1:8080")
+    print("[Python Client] Ready to connect to loci2d server at 127.0.0.1:8080")
+    print("Commands: join <name> | leave [reason] | move <x> <y> | action <id> | ping | quit")
 
     while True:
         try:
-            cmd = input("Enter command (ping/move <x> <y>/action <id>/quit): ").strip()
+            cmd = input("Enter command: ").strip()
         except (EOFError, KeyboardInterrupt):
             break
 
-        if cmd == "quit":
-            break
         if not cmd:
             continue
 
@@ -36,7 +35,21 @@ def main():
         packet.timestamp = int(time.time())
         sequence_id += 1
 
-        if cmd == "ping":
+        if cmd == "quit":
+            packet.intent.disconnect.reason = "normal quit"
+            data = packet.SerializeToString()
+            sock.sendto(data, SERVER_ADDR)
+            print(f"[Sent] Disconnect packet ({len(data)} bytes) | Shutting down...")
+            break
+        elif cmd.startswith("join"):
+            parts = cmd.split(maxsplit=1)
+            player_name = parts[1] if len(parts) > 1 else "PythonPlayer"
+            packet.intent.join.player_name = player_name
+        elif cmd.startswith("leave"):
+            parts = cmd.split(maxsplit=1)
+            reason = parts[1] if len(parts) > 1 else "leaving session"
+            packet.intent.disconnect.reason = reason
+        elif cmd == "ping":
             packet.intent.ping.CopyFrom(game_packets_pb2.PingIntent())
         elif cmd.startswith("move"):
             parts = cmd.split()
@@ -49,7 +62,8 @@ def main():
             ability_id = int(parts[1]) if len(parts) > 1 else 1
             packet.intent.action.ability_id = ability_id
         else:
-            packet.intent.ping.CopyFrom(game_packets_pb2.PingIntent())
+            print("Unknown command. Available: join <name>, leave [reason], move <x> <y>, action <id>, ping, quit")
+            continue
 
         # Serialize packet to binary bytes
         data = packet.SerializeToString()
@@ -62,7 +76,7 @@ def main():
             response.ParseFromString(response_data)
             print(f"[Received] {len(response_data)} bytes | ACK sequence_id={response.sequence_id} | status={response.status}")
         except socket.timeout:
-            print("[Timeout] No response received from server")
+            pass
 
 if __name__ == "__main__":
     main()

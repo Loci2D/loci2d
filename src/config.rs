@@ -3,6 +3,7 @@
 pub struct ServerConfig {
     pub bind_addr: String,
     pub tick_rate: u32,
+    pub client_timeout_secs: u64,
 }
 
 impl ServerConfig {
@@ -17,6 +18,11 @@ impl ServerConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30),
+            client_timeout_secs: std::env::var("CLIENT_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
         }
     }
 }
+

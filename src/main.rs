@@ -7,11 +7,13 @@ use loci2d::world::instance::Instance;
 
 fn main() {
     let cfg = ServerConfig::from_env();
-    println!("[Config] bind_addr={} tick_rate={} Hz", cfg.bind_addr, cfg.tick_rate);
+    println!("[Config] bind_addr={} tick_rate={} Hz client_timeout={}s", 
+        cfg.bind_addr, cfg.tick_rate, cfg.client_timeout_secs);
 
     let (intent_tx, intent_rx) = mpsc::channel();
     let bind_addr = cfg.bind_addr.clone();
     let tick_rate = cfg.tick_rate;
+    let client_timeout_secs = cfg.client_timeout_secs;
 
     // Network thread: produces intents
     let net_thread = thread::spawn(move || {
@@ -20,7 +22,7 @@ fn main() {
 
     // Game loop thread: consumes intents and advances simulation
     let loop_thread = thread::spawn(move || {
-        let instance = Instance::new(1, tick_rate);
+        let instance = Instance::new(1, tick_rate, client_timeout_secs);
         let mut game_loop = GameLoop::new(tick_rate);
         game_loop.start(instance, intent_rx);
     });

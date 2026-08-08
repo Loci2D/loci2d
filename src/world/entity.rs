@@ -9,15 +9,17 @@ use super::instance::Vector2;
 #[derive(Debug, Clone)]
 pub struct Entity {
     pub id: u64,
+    pub name: String,
     pub position: Vector2,
     pub velocity: Vector2,
     pub entity_type: EntityType,
 }
 
 impl Entity {
-    pub fn new(id: u64, entity_type: EntityType) -> Self {
+    pub fn new(id: u64, name: String, entity_type: EntityType) -> Self {
         Self {
             id,
+            name,
             position: Vector2 { x: 0.0, y: 0.0 },
             velocity: Vector2 { x: 0.0, y: 0.0 },
             entity_type,

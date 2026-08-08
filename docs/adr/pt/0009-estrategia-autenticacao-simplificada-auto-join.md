@@ -1,4 +1,4 @@
-# ADR 0009: Estratégia de Autenticação Simplificada e Auto-Join
+# ADR 0009: Estratégia de Autenticação Simplificada e Handshake Explícito de Sessão
 
 ## Status
 
@@ -34,11 +34,11 @@ Alternativas consideradas:
 | OAuth/JWT completo na Fase 2 | Complexo demais para fase de validação; bloqueia prototipagem rápida |
 | Contas de usuário com banco de dados | Requer infraestrutura externa; viola simplicidade de instância única |
 | Chaves/senhas pré-compartilhadas | Ainda requer infraestrutura de distribuição de chaves; UX ruim |
-| Nenhuma autenticação | Muito permissivo; mesmo Fase 2 precisa de limites básicos de sessão |
+| Auto-join implícito em intent cru | Burlar limites de sessão; cria entidades fantasmas em pacotes aleatórios |
 
 ## Decisão
 
-Adotamos um **modelo de autenticação baseado em confiança mínima** otimizado para prototipagem rápida:
+Adotamos um **modelo de autenticação baseado em confiança mínima com handshake explícito de sessão** otimizado para prototipagem rápida:
 
 ### Mecanismo de Identidade
 - **Identificador primário**: `SocketAddr` (IP:porta do cliente)
@@ -46,11 +46,10 @@ Adotamos um **modelo de autenticação baseado em confiança mínima** otimizado
 - **Sem tokens criptográficos**: Confia no endereço de rede para vinculação de sessão
 - **Sem banco de dados**: Todo estado de sessão está em memória dentro da `Instance`
 
-### Fallback Auto-Join
-- **Configuração**: `AUTO_JOIN_ON_INTENT` (padrão: `true`)
-- **Comportamento**: Se um cliente envia intents de gameplay (`MoveIntent`, `ActionIntent`) sem `JoinIntent` prévio, automaticamente cria uma sessão com nome gerado (`Player_<id>`)
-- **Propósito**: Mantém compatibilidade com versões anteriores de clientes da Fase 1 e permite testes rápidos
-- **Implicação de segurança**: Aceitável para ambientes confiáveis localhost/LAN
+### Protocolo de Handshake Explícito
+- **Comportamento**: Um cliente DEVE enviar um `JoinIntent` explícito contendo seu `player_name` para registrar uma sessão e criar uma entidade na instância.
+- **Política para Intents sem Sessão**: Se um `SocketAddr` desconhecido envia intents de gameplay (`MoveIntent`, `ActionIntent`, `PingIntent`) sem `JoinIntent` prévio, o pacote é descartado e ignorado.
+- **Saída Graciosa**: Um cliente pode enviar `DisconnectIntent` com uma razão opcional para terminar sua sessão e destruir sua entidade de forma limpa.
 
 ### Trade-offs de Segurança (Explicitamente Aceitos)
 - **Falsificação de pacotes**: Clientes maliciosos poderiam impersonar qualquer IP em ambientes LAN
@@ -65,7 +64,6 @@ Adotamos um **modelo de autenticação baseado em confiança mínima** otimizado
 ### Extensões de Protocolo
 - **`JoinIntent`**: Handshake explícito com campo `player_name`
 - **`DisconnectIntent`**: Terminação graciosa de sessão com razão opcional
-- **Compatibilidade com versões anteriores**: Intents crus da Fase 1 ainda funcionam via auto-join
 
 ## Por Que Isso É Temporário
 
@@ -102,7 +100,7 @@ A Fase 5 introduzirá autenticação e segurança completas:
 - **Iteração rápida**: Focar em mecânicas de jogo, não infraestrutura de autenticação
 - **Debug simples**: Sem expiração de token, migrações de banco de dados ou fluxos de autenticação para depurar
 - **Clareza educacional**: Mecânicas de sessão são visíveis e compreensíveis sem complexidade criptográfica
-- **Compatível com versões anteriores**: Auto-join permite migração gradual para joins explícitos
+- **Limites limpos de sessão**: Exigência de join explícito garante que apenas conexões intencionais gerem entidades
 
 **Negativo:**
 - **Sem segurança**: Completamente inadequado para deploy em internet pública

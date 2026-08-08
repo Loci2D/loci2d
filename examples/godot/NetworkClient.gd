@@ -20,6 +20,14 @@ func _process(_delta: float) -> void:
 		var raw_bytes: PackedByteArray = _udp.get_packet()
 		_handle_server_response(raw_bytes)
 
+func send_join(player_name: String = "GodotPlayer") -> void:
+	_sequence_id += 1
+	print("[loci2d NetworkClient] Sending Join name=", player_name, " (seq=", _sequence_id, ")")
+
+func send_disconnect(reason: String = "normal quit") -> void:
+	_sequence_id += 1
+	print("[loci2d NetworkClient] Sending Disconnect reason=", reason, " (seq=", _sequence_id, ")")
+
 func send_ping() -> void:
 	_sequence_id += 1
 	print("[loci2d NetworkClient] Sending Ping (seq=", _sequence_id, ")")

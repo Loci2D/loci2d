@@ -39,7 +39,7 @@ We implement a **SocketAddr-based session lifecycle** with the following archite
 ### Session State Machine
 ```
 Unknown SocketAddr → [JoinIntent] → Active Session
-Unknown SocketAddr → [Other Intent + AUTO_JOIN_ON_INTENT=true] → Active Session  
+Unknown SocketAddr → [Other Intent] → Drop (No Session)
 Active Session → [DisconnectIntent] → Disconnected → Despawn Entity
 Active Session → [No packets for > CLIENT_TIMEOUT_SECS] → TimedOut → Despawn Entity
 ```
@@ -98,7 +98,7 @@ When multi-instance and authentication are introduced:
 - **Graceful disconnects**: Clients can signal intent to leave with optional reason
 - **Debug visibility**: Session metadata aids logging and troubleshooting
 - **Simple implementation**: Uses standard Rust collections with clear semantics
-- **Backward compatible**: Auto-join fallback maintains Phase 1 behavior
+- **Explicit boundary**: Enforces valid JoinIntent before processing gameplay intents
 
 **Negative:**
 - **SocketAddr fragility**: IP changes break sessions (acceptable for Phase 2–4 localhost/LAN scope)

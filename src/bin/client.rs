@@ -1,43 +1,95 @@
 use std::net::UdpSocket;
-use std::io;
+use std::io::{self, Write};
 use chrono::Local;
 use prost::Message;
 use loci2d::network::{
     GamePacket, ClientIntent, Vector2, MoveIntent, ActionIntent, PingIntent,
-    client_intent,
+    JoinIntent, DisconnectIntent, client_intent,
 };
+
+fn send_packet(socket: &UdpSocket, server_addr: &str, sequence_id: &mut u64, intent_inner: client_intent::Intent) {
+    let packet = GamePacket {
+        sequence_id: *sequence_id,
+        timestamp: 0,
+        intent: Some(ClientIntent {
+            intent: Some(intent_inner),
+        }),
+    };
+    *sequence_id += 1;
+
+    let mut serialized = Vec::new();
+    if let Err(e) = packet.encode(&mut serialized) {
+        println!("[{}] Failed to serialize packet: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+        return;
+    }
+
+    match socket.send_to(&serialized, server_addr) {
+        Ok(num_bytes) => {
+            println!("[{}] Sent {} bytes to server: sequence_id={}", 
+                Local::now().format("%Y-%m-%d %H:%M:%S"),
+                num_bytes,
+                packet.sequence_id,
+            );
+        }
+        Err(e) => {
+            println!("[{}] Failed to send message: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+        }
+    }
+}
 
 fn main() {
     // Bind to any available port for the client
     let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind client socket");
-    println!("[{}] UDP Client started", Local::now().format("%Y-%m-%d %H:%M:%S"));
+    println!("[{}] UDP Client started on {}", Local::now().format("%Y-%m-%d %H:%M:%S"), socket.local_addr().unwrap());
 
     let server_addr = "127.0.0.1:8080";
     println!("[{}] Connecting to server at {}", Local::now().format("%Y-%m-%d %H:%M:%S"), server_addr);
+    println!("Commands: join <name> | leave [reason] | move <x> <y> | action <id> | ping | quit");
 
     let mut sequence_id: u64 = 0;
 
-
     loop {
         // Read user input
-        print!("[{}] Enter command (move/action/ping/quit): ", Local::now().format("%Y-%m-%d %H:%M:%S"));
-        io::Write::flush(&mut io::stdout()).expect("Failed to flush stdout");
+        print!("[{}] Enter command: ", Local::now().format("%Y-%m-%d %H:%M:%S"));
+        io::stdout().flush().expect("Failed to flush stdout");
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read input");
-        let input = input.trim();
-
-        if input == "quit" {
-            println!("[{}] Client shutting down", Local::now().format("%Y-%m-%d %H:%M:%S"));
+        if io::stdin().read_line(&mut input).is_err() {
             break;
         }
+        let input = input.trim();
 
         if input.is_empty() {
             continue;
         }
 
-        // Create GamePacket based on input
+        if input == "quit" {
+            println!("[{}] Sending disconnect and shutting down...", Local::now().format("%Y-%m-%d %H:%M:%S"));
+            send_packet(&socket, server_addr, &mut sequence_id, client_intent::Intent::Disconnect(DisconnectIntent {
+                reason: "normal quit".to_string(),
+            }));
+            break;
+        }
+
         let intent_inner = match input {
+            cmd if cmd.starts_with("join") => {
+                let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
+                let player_name = if parts.len() > 1 && !parts[1].trim().is_empty() {
+                    parts[1].trim().to_string()
+                } else {
+                    "Player".to_string()
+                };
+                client_intent::Intent::Join(JoinIntent { player_name })
+            }
+            cmd if cmd.starts_with("leave") => {
+                let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
+                let reason = if parts.len() > 1 {
+                    parts[1].trim().to_string()
+                } else {
+                    "leaving session".to_string()
+                };
+                client_intent::Intent::Disconnect(DisconnectIntent { reason })
+            }
             "ping" => client_intent::Intent::Ping(PingIntent {}),
             cmd if cmd.starts_with("move") => {
                 let parts: Vec<&str> = cmd.split_whitespace().collect();
@@ -59,38 +111,12 @@ fn main() {
                 };
                 client_intent::Intent::Action(ActionIntent { ability_id })
             }
-            _ => client_intent::Intent::Ping(PingIntent {}),
-        };
-
-        let packet = GamePacket {
-            sequence_id,
-            timestamp: 0,
-            intent: Some(ClientIntent {
-                intent: Some(intent_inner),
-            }),
-        };
-        sequence_id += 1;
-
-        // Serialize and send packet to server
-        let mut serialized = Vec::new();
-        if let Err(e) = packet.encode(&mut serialized) {
-            println!("[{}] Failed to serialize packet: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
-            continue;
-        }
-
-        match socket.send_to(&serialized, server_addr) {
-            Ok(num_bytes) => {
-                println!("[{}] Sent {} bytes to server: sequence_id={}", 
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    num_bytes,
-                    packet.sequence_id,
-                );
-            }
-            Err(e) => {
-                println!("[{}] Failed to send message: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+            _ => {
+                println!("Unknown command. Available: join <name>, leave [reason], move <x> <y>, action <id>, ping, quit");
                 continue;
             }
-        }
+        };
+
+        send_packet(&socket, server_addr, &mut sequence_id, intent_inner);
     }
 }
-

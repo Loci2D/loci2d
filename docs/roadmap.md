@@ -45,22 +45,22 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 
 ---
 
-### Phase 2: Lightweight Client/Session Mapping
-> **Spec:** [Phase 2 Spec](roadmap-specs/phase2-client-session-mapping-spec.md) · **Reference ADRs:** [ADR-0001](adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](adr/en/0002-instance-based-architecture.md) · [ADR-0005](adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](adr/en/0006-two-thread-network-gameloop-separation.md)
-### Fase 2: Mapeamento Leve de Cliente/Sessão
+### Phase 2: Lightweight Client/Session Mapping (Done)
+> **Spec:** [Phase 2 Spec](roadmap-specs/phase2-client-session-mapping-spec.md) · **Reference ADRs:** [ADR-0001](adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](adr/en/0002-instance-based-architecture.md) · [ADR-0005](adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0008](adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0009](adr/en/0009-simplified-authentication-and-auto-join-strategy.md)
+### Fase 2: Mapeamento Leve de Cliente/Sessão (Concluído)
 
 #### English
-* [ ] **SocketAddr to Entity Mapping**:
+* [x] **SocketAddr to Entity Mapping**:
   - Map incoming client IP / `SocketAddr` directly to a unique `EntityID` inside the active instance.
   - Handle basic client join / disconnect / timeout detection.
-* [ ] **Simplified Handshake**:
+* [x] **Simplified Handshake**:
   - Keep authentication minimal (no token/auth servers for now, optimized for rapid prototype validation).
 
 #### Português
-* [ ] **Mapeamento de SocketAddr para Entidade**:
+* [x] **Mapeamento de SocketAddr para Entidade**:
   - Mapear o IP / `SocketAddr` do cliente diretamente para um `EntityID` único dentro da instância ativa.
   - Tratar entrada, desconexão básica e detecção de timeout de clientes.
-* [ ] **Handshake Simplificado**:
+* [x] **Handshake Simplificado**:
   - Manter a autenticação mínima (sem servidores de token/auth por enquanto, otimizado para validação rápida do protótipo).
 
 ---
