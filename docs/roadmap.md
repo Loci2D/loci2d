@@ -24,22 +24,22 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 
 ## Roadmap Phases / Fases do Roadmap
 
-### Phase 1: Game Loop & Single-Instance Core (Active / Next Step)
-### Fase 1: Game Loop & Núcleo de Instância Única (Ativo / Próximo Passo)
+### Phase 1: Game Loop & Single-Instance Core (Done)
+### Fase 1: Game Loop & Núcleo de Instância Única (Concluído)
 
 #### English
-* [ ] **Network & Loop Integration**:
+* [x] **Network & Loop Integration**:
   - Connect UDP socket network thread to `GameLoop` via thread-safe channels (`mpsc`).
   - Implement non-blocking intent queue consumption inside fixed tick rate (e.g., 20/30 Hz).
-* [ ] **Localhost Single Instance**:
+* [x] **Localhost Single Instance**:
   - Ensure a single `Instance` manages entity positions, input application, and spatial ticks on `localhost`.
   - Multi-instance / room management is deferred to future phases.
 
 #### Português
-* [ ] **Integração de Rede & Game Loop**:
+* [x] **Integração de Rede & Game Loop**:
   - Conectar a thread de rede do socket UDP ao `GameLoop` via canais seguros para threads (`mpsc`).
   - Implementar o consumo não-bloqueante da fila de intenções dentro da taxa de tick fixa (ex: 20/30 Hz).
-* [ ] **Instância Única em Localhost**:
+* [x] **Instância Única em Localhost**:
   - Garantir que uma única `Instance` gerencie posições de entidades, aplicação de inputs e ticks espaciais em `localhost`.
   - Gerenciamento de múltiplas instâncias / salas é postergado para fases futuras.
 
@@ -132,3 +132,24 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Adicionar tokens de sessão, validação de segurança e validação de intenções contra adulteração.
 * [ ] **Utilitários para Clientes**:
   - Predição no lado do cliente e utilitários de interpolação para renderização suave sob latência.
+
+---
+
+### Phase 6: Physics & Collision Engine
+### Fase 6: Motor de Física e Colisão
+
+#### English
+* [ ] **Deterministic Collision Detection**:
+  - Implement AABB (Axis-Aligned Bounding Box) and circle collision using fixed-point math.
+* [ ] **Map Boundaries & Static Geometry**:
+  - Define map boundaries and static colliders (e.g., walls, obstacles) loaded from configuration or Lua scripts.
+* [ ] **Spatial Partitioning (Optional)**:
+  - Add a simple grid or QuadTree for efficient collision queries if entity count grows.
+
+#### Português
+* [ ] **Detecção de Colisão Determinística**:
+  - Implementar colisão AABB (Caixa Delimitadora Alinhada aos Eixos) e de círculos usando matemática de ponto fixo.
+* [ ] **Limites do Mapa e Geometria Estática**:
+  - Definir limites do mapa e colisores estáticos (ex: paredes, obstáculos) carregados a partir de configurações ou scripts Lua.
+* [ ] **Particionamento Espacial (Opcional)**:
+  - Adicionar um grid simples ou QuadTree para consultas de colisão eficientes caso o número de entidades cresça.
