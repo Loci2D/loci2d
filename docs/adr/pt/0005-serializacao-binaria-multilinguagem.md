@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceito (Substitui [ADR 0004](0004-packet-serialization-format.md))
+Aceito (Substitui [ADR 0004](0004-formato-serializacao-pacotes.md))
 
 ## Contexto
 

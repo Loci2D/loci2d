@@ -2,7 +2,7 @@
 
 ## Status
 
-Substituído por [ADR 0005](0005-cross-language-binary-serialization.md)
+Substituído por [ADR 0005](0005-serializacao-binaria-multilinguagem.md)
 
 ## Contexto
 
