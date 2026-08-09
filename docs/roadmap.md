@@ -146,6 +146,8 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implement AABB (Axis-Aligned Bounding Box) and circle collision using fixed-point math.
 * [ ] **Map Boundaries & Static Geometry**:
   - Define map boundaries and static colliders (e.g., walls, obstacles) loaded from configuration or Lua scripts.
+* [ ] **Click-to-Move Steering & Navigation**:
+  - Implement destination-based steering (`MoveToPositionIntent`) and obstacle pathfinding for RTS/MOBA mouse controls.
 * [ ] **Spatial Partitioning (Optional)**:
   - Add a simple grid or QuadTree for efficient collision queries if entity count grows.
 
@@ -154,5 +156,8 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implementar colisão AABB (Caixa Delimitadora Alinhada aos Eixos) e de círculos usando matemática de ponto fixo.
 * [ ] **Limites do Mapa e Geometria Estática**:
   - Definir limites do mapa e colisores estáticos (ex: paredes, obstáculos) carregados a partir de configurações ou scripts Lua.
+* [ ] **Navegação & Movimento por Clique (Click-to-Move)**:
+  - Implementar movimentação baseada em destino (`MoveToPositionIntent`) e desvio de obstáculos para controles de mouse estilo RTS/MOBA.
 * [ ] **Particionamento Espacial (Opcional)**:
   - Adicionar um grid simples ou QuadTree para consultas de colisão eficientes caso o número de entidades cresça.
+

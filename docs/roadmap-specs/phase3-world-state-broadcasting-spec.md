@@ -104,8 +104,14 @@ message DisconnectIntent {
   string reason = 1;
 }
 
+// Continuous Directional Movement (Joystick / WASD / Analog Stick)
 message MoveIntent {
-  Vector2 direction = 1;
+  Vector2 direction = 1; // Heading vector with magnitude <= 1.0
+}
+
+// Destination / Target Movement (Mouse Click-to-Move / Screen Tap - Phase 6)
+message MoveToPositionIntent {
+  Vector2 target_position = 1; // Absolute map coordinates
 }
 
 message ActionIntent {
@@ -117,10 +123,11 @@ message PingIntent {}
 message ClientIntent {
   oneof intent {
     MoveIntent move = 1;
-    ActionIntent action = 2;
-    PingIntent ping = 3;
-    JoinIntent join = 4;
-    DisconnectIntent disconnect = 5;
+    MoveToPositionIntent move_to_pos = 2; // Reserved for Phase 6 click-to-move
+    ActionIntent action = 3;
+    PingIntent ping = 4;
+    JoinIntent join = 5;
+    DisconnectIntent disconnect = 6;
   }
 }
 
