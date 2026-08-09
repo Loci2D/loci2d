@@ -1,8 +1,10 @@
+use std::net::{SocketAddr, UdpSocket};
 use std::sync::mpsc;
-use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::thread;
-use crate::network::packets::ClientIntent;
+use prost::Message;
+use crate::network::packets::{ClientIntent, ServerPacket, server_packet};
 use crate::world::instance::Instance;
 
 pub struct GameLoop {
@@ -23,10 +25,12 @@ impl GameLoop {
         &mut self,
         mut instance: Instance,
         intent_rx: mpsc::Receiver<(SocketAddr, ClientIntent)>,
+        socket: Arc<UdpSocket>,
     ) {
         self.running = true;
         let tick_duration = Duration::from_secs_f64(1.0 / self.tick_rate as f64);
         let mut tick_count = 0u64;
+        let mut out_buf = Vec::with_capacity(2048);
 
         while self.running {
             let start = Instant::now();
@@ -36,12 +40,28 @@ impl GameLoop {
                 instance.apply_intent(addr, intent);
             }
 
-            // 2. Advance simulation
+            // 2. Advance simulation physics & sweep timeouts
             instance.tick(tick_count);
+
+            // 3. Generate WorldState snapshot
+            let world_state = instance.create_snapshot(tick_count);
+            let packet = ServerPacket {
+                sequence_id: tick_count,
+                payload: Some(server_packet::Payload::WorldState(world_state)),
+            };
+
+            // 4. Encode packet
+            out_buf.clear();
+            if let Ok(()) = packet.encode(&mut out_buf) {
+                // 5. Broadcast to all active sessions
+                for client_addr in instance.get_broadcast_addresses() {
+                    let _ = socket.send_to(&out_buf, client_addr);
+                }
+            }
 
             tick_count += 1;
 
-            // 3. Sleep to maintain tick rate
+            // 6. Sleep to maintain tick rate
             let elapsed = start.elapsed();
             if elapsed < tick_duration {
                 thread::sleep(tick_duration - elapsed);

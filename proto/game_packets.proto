@@ -2,13 +2,13 @@ syntax = "proto3";
 
 package loci2d;
 
-// 2D Vector representation
+// 2D Vector representation (ADR-0003)
 message Vector2 {
   float x = 1;
   float y = 2;
 }
 
-// Client Intents
+// Client Intents (Inbound)
 message JoinIntent {
   string player_name = 1;
 }
@@ -17,8 +17,14 @@ message DisconnectIntent {
   string reason = 1;
 }
 
+// Continuous Directional Movement (Joystick / WASD / Analog Stick)
 message MoveIntent {
-  Vector2 direction = 1;
+  Vector2 direction = 1; // Heading vector with magnitude <= 1.0
+}
+
+// Destination / Target Movement (Mouse Click-to-Move / Screen Tap - Phase 6)
+message MoveToPositionIntent {
+  Vector2 target_position = 1; // Absolute map coordinates
 }
 
 message ActionIntent {
@@ -30,23 +36,59 @@ message PingIntent {}
 message ClientIntent {
   oneof intent {
     MoveIntent move = 1;
-    ActionIntent action = 2;
-    PingIntent ping = 3;
-    JoinIntent join = 4;
-    DisconnectIntent disconnect = 5;
+    MoveToPositionIntent move_to_pos = 2; // Reserved for Phase 6 click-to-move
+    ActionIntent action = 3;
+    PingIntent ping = 4;
+    JoinIntent join = 5;
+    DisconnectIntent disconnect = 6;
   }
 }
 
-// Top-level Network Game Packet (Envelope)
+// Top-level Inbound Game Packet Envelope
 message GamePacket {
   uint64 sequence_id = 1;
   uint64 timestamp = 2;
   ClientIntent intent = 3;
 }
 
-// Server Response Packet
+// ==========================================
+// Phase 3 Outbound Protocols (Server -> Client)
+// ==========================================
+
+enum EntityType {
+  PLAYER = 0;
+  NPC = 1;
+  PROP = 2;
+}
+
+// Individual Entity State in World Snapshot
+message EntityState {
+  uint64 id = 1;
+  string name = 2;
+  Vector2 position = 3;
+  Vector2 velocity = 4;
+  EntityType entity_type = 5;
+}
+
+// Full Authoritative World Snapshot
+message WorldState {
+  uint64 tick = 1;
+  uint64 timestamp = 2;
+  repeated EntityState entities = 3;
+}
+
+// Direct Acknowledgment / Server Response
 message ServerResponse {
   uint64 sequence_id = 1;
   string status = 2;
+}
+
+// Top-level Outbound Server Packet Envelope
+message ServerPacket {
+  uint64 sequence_id = 1;
+  oneof payload {
+    WorldState world_state = 2;
+    ServerResponse response = 3;
+  }
 }
 

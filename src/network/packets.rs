@@ -80,5 +80,60 @@ mod tests {
             _ => panic!("Expected Disconnect intent"),
         }
     }
+
+    #[test]
+    fn test_protobuf_server_packet_world_state_roundtrip() {
+        let server_packet = ServerPacket {
+            sequence_id: 100,
+            payload: Some(server_packet::Payload::WorldState(WorldState {
+                tick: 100,
+                timestamp: 1723140000000,
+                entities: vec![
+                    EntityState {
+                        id: 1,
+                        name: "Arthur".to_string(),
+                        position: Some(Vector2 { x: 10.5, y: -20.0 }),
+                        velocity: Some(Vector2 { x: 1.0, y: 0.0 }),
+                        entity_type: EntityType::Player as i32,
+                    },
+                    EntityState {
+                        id: 2,
+                        name: "Goblin".to_string(),
+                        position: Some(Vector2 { x: 50.0, y: 30.0 }),
+                        velocity: Some(Vector2 { x: 0.0, y: 0.0 }),
+                        entity_type: EntityType::Npc as i32,
+                    },
+                ],
+            })),
+        };
+
+        let mut buf = Vec::new();
+        server_packet.encode(&mut buf).expect("Failed to encode server packet");
+
+        let decoded = ServerPacket::decode(&buf[..]).expect("Failed to decode server packet");
+        assert_eq!(decoded.sequence_id, 100);
+
+        match decoded.payload {
+            Some(server_packet::Payload::WorldState(ws)) => {
+                assert_eq!(ws.tick, 100);
+                assert_eq!(ws.timestamp, 1723140000000);
+                assert_eq!(ws.entities.len(), 2);
+
+                let e1 = &ws.entities[0];
+                assert_eq!(e1.id, 1);
+                assert_eq!(e1.name, "Arthur");
+                assert_eq!(e1.entity_type, EntityType::Player as i32);
+                let pos1 = e1.position.as_ref().unwrap();
+                assert_eq!(pos1.x, 10.5);
+                assert_eq!(pos1.y, -20.0);
+
+                let e2 = &ws.entities[1];
+                assert_eq!(e2.id, 2);
+                assert_eq!(e2.name, "Goblin");
+                assert_eq!(e2.entity_type, EntityType::Npc as i32);
+            }
+            _ => panic!("Expected WorldState payload"),
+        }
+    }
 }
 

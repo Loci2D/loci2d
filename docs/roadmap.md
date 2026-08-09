@@ -65,25 +65,24 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 
 ---
 
-### Phase 3: World State Broadcasting & Client Sync
+### Phase 3: World State Broadcasting & Client Sync (Done)
 > **Spec:** [Phase 3 Spec](roadmap-specs/phase3-world-state-broadcasting-spec.md) · **Reference ADRs:** [ADR-0001](adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](adr/en/0002-instance-based-architecture.md) · [ADR-0003](adr/en/0003-2d-map-only.md) · [ADR-0005](adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0008](adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0009](adr/en/0009-simplified-authentication-and-auto-join-strategy.md)
-### Fase 3: Transmissão de Estado do Mundo & Sincronização de Clientes
-
+### Fase 3: Transmissão de Estado do Mundo & Sincronização de Clientes (Concluído)
 
 #### English
-* [ ] **Snapshot Generation**:
+* [x] **Snapshot Generation**:
   - Create a `WorldState` snapshot protobuf packet representing all active entity positions and states.
-* [ ] **Tick Broadcast**:
+* [x] **Tick Broadcast**:
   - Send state snapshots to all mapped client addresses at regular tick intervals.
-* [ ] **Client Integration**:
+* [x] **Client Integration**:
   - Validate snapshot consumption in Love2D, Godot, Python, and Rust CLI examples.
 
 #### Português
-* [ ] **Geração de Snapshots**:
+* [x] **Geração de Snapshots**:
   - Criar um pacote Protobuf de snapshot (`WorldState`) representando as posições e estados de todas as entidades ativas.
-* [ ] **Transmissão por Tick**:
+* [x] **Transmissão por Tick**:
   - Enviar snapshots de estado para todos os endereços de clientes mapeados em intervalos regulares de tick.
-* [ ] **Integração com Clientes**:
+* [x] **Integração com Clientes**:
   - Validar o consumo de snapshots nos exemplos de Love2D, Godot, Python e CLI Rust.
 
 ---

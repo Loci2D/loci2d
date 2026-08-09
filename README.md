@@ -35,15 +35,15 @@ Projetado para jogos multiplayer 2D em tempo real (ex: MOBAs) e ambientes educac
 ## Architecture & Serialization / Arquitetura & Serialização
 
 ### English
-- **Protocol Definition (`proto/game_packets.proto`)**: Authoritative `.proto` schema defining envelopes (`GamePacket`, `ServerResponse`) and extensible client intents (`MoveIntent`, `ActionIntent`, `PingIntent`).
+- **Protocol Definition (`proto/game_packets.proto`)**: Authoritative `.proto` schema defining envelopes (`GamePacket`, `ServerPacket`), outbound snapshots (`WorldState`, `EntityState`), responses (`ServerResponse`), and extensible client intents (`MoveIntent`, `MoveToPositionIntent`, `ActionIntent`, `PingIntent`, `JoinIntent`, `DisconnectIntent`).
 - **Rust Code Generation**: Handled automatically at build time via `build.rs`, `prost-build`, and `protoc-bin-vendored` (no manual `protoc` installation required).
-- **Architectural Decision Records**: See [ADR 0005: Cross-Language Binary Serialization](docs/adr/0005-cross-language-binary-serialization.md) for full design rationale.
+- **Architectural Decision Records**: See [ADR 0005: Cross-Language Binary Serialization](docs/adr/0005-cross-language-binary-serialization.md) and [ADR 0006: Two-Thread Network/Game-Loop Separation](docs/adr/0006-two-thread-network-gameloop-separation.md) for full design rationale.
 - **Project Roadmap**: See [docs/roadmap.md](docs/roadmap.md) for planned milestones and development stages.
 
 ### Português
-- **Definição de Protocolo (`proto/game_packets.proto`)**: Esquema `.proto` autoritativo definindo envelopes (`GamePacket`, `ServerResponse`) e intenções extensíveis de cliente (`MoveIntent`, `ActionIntent`, `PingIntent`).
+- **Definição de Protocolo (`proto/game_packets.proto`)**: Esquema `.proto` autoritativo definindo envelopes (`GamePacket`, `ServerPacket`), snapshots de saída (`WorldState`, `EntityState`), respostas (`ServerResponse`) e intenções extensíveis de cliente (`MoveIntent`, `MoveToPositionIntent`, `ActionIntent`, `PingIntent`, `JoinIntent`, `DisconnectIntent`).
 - **Geração de Código Rust**: Executada automaticamente no tempo de compilação via `build.rs`, `prost-build` e `protoc-bin-vendored` (sem necessidade de instalação manual do `protoc`).
-- **Registros de Decisão de Arquitetura (ADRs)**: Veja a [ADR 0005: Serialização Binária Multi-linguagem](docs/adr/0005-cross-language-binary-serialization.md) para a justificativa do design.
+- **Registros de Decisão de Arquitetura (ADRs)**: Veja a [ADR 0005: Serialização Binária Multi-linguagem](docs/adr/0005-cross-language-binary-serialization.md) e [ADR 0006: Separação Rede/Game-Loop](docs/adr/0006-two-thread-network-gameloop-separation.md) para a justificativa do design.
 - **Roadmap do Projeto**: Veja [docs/roadmap.md](docs/roadmap.md) para os marcos planejados e etapas de desenvolvimento.
 
 ---
@@ -53,16 +53,16 @@ Projetado para jogos multiplayer 2D em tempo real (ex: MOBAs) e ambientes educac
 ### English
 Cross-language client integration examples are available in the [`examples/`](examples/) directory:
 
-- **[Python Example](examples/python/README.md)**: Python UDP client using standard `protobuf`.
-- **[Love2D Example](examples/love2d/README.md)**: Love2D Lua client using `lua-protobuf` and `luasocket`.
-- **[Godot Example](examples/godot/README.md)**: Godot 4 GDScript example using `PacketPeerUDP` and GDScript Protobuf.
+- **[Python Example](examples/python/README.md)**: Python UDP client using standard `protobuf` decoding real-time `WorldState` snapshots.
+- **[Love2D Example](examples/love2d/README.md)**: Love2D Lua client using `lua-protobuf` rendering 2D multi-entity movement in real time.
+- **[Godot Example](examples/godot/README.md)**: Godot 4 GDScript example using `PacketPeerUDP` and GDScript Protobuf for spatial synchronization.
 
 ### Português
 Exemplos de integração de clientes em diferentes linguagens estão disponíveis no diretório [`examples/`](examples/):
 
-- **[Exemplo em Python](examples/python/README.md)**: Cliente UDP em Python utilizando a biblioteca padrão `protobuf`.
-- **[Exemplo em Love2D](examples/love2d/README.md)**: Cliente em Lua para Love2D utilizando `lua-protobuf` e `luasocket`.
-- **[Exemplo em Godot](examples/godot/README.md)**: Exemplo em GDScript para Godot 4 utilizando `PacketPeerUDP` e GDScript Protobuf.
+- **[Exemplo em Python](examples/python/README.md)**: Cliente UDP em Python utilizando a biblioteca padrão `protobuf` decodificando snapshots de `WorldState` em tempo real.
+- **[Exemplo em Love2D](examples/love2d/README.md)**: Cliente em Lua para Love2D utilizando `lua-protobuf` renderizando movimentação 2D de múltiplas entidades em tempo real.
+- **[Exemplo em Godot](examples/godot/README.md)**: Exemplo em GDScript para Godot 4 utilizando `PacketPeerUDP` e GDScript Protobuf para sincronização espacial.
 
 ---
 
@@ -94,8 +94,14 @@ cargo run --bin client
 Enter command: join Alice
 [2026-08-08 17:30:00] Sent 16 bytes to server: sequence_id=0
 
+[2026-08-08 17:30:00] [Snapshot Tick 1] 1 entity/entities in world:
+  - Entity 1 ("Alice", Player) @ (0.0, 0.0), vel=(0.0, 0.0)
+
 Enter command: move 1.0 0.5
 [2026-08-08 17:30:05] Sent 22 bytes to server: sequence_id=1
+
+[2026-08-08 17:30:05] [Snapshot Tick 150] 1 entity/entities in world:
+  - Entity 1 ("Alice", Player) @ (1.0, 0.5), vel=(1.0, 0.5)
 
 Enter command: quit
 [2026-08-08 17:30:10] Sending disconnect and shutting down...

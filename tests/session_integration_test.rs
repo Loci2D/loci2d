@@ -1,5 +1,6 @@
 use std::net::UdpSocket;
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use prost::Message;
@@ -12,19 +13,23 @@ use loci2d::game_loop::tick::GameLoop;
 #[test]
 fn test_end_to_end_session_lifecycle() {
     let test_bind = "127.0.0.1:18080";
+    let socket = UdpSocket::bind(test_bind).expect("Failed to bind UDP socket");
+    let socket = Arc::new(socket);
+
     let (intent_tx, intent_rx) = mpsc::channel();
 
     // Spawn server thread
-    let server_bind = test_bind.to_string();
+    let net_socket = Arc::clone(&socket);
     thread::spawn(move || {
-        run_server(intent_tx, &server_bind);
+        run_server(net_socket, intent_tx);
     });
 
     // Spawn game loop thread
+    let loop_socket = Arc::clone(&socket);
     thread::spawn(move || {
         let instance = Instance::new(1, 60, 2);
         let mut game_loop = GameLoop::new(60);
-        game_loop.start(instance, intent_rx);
+        game_loop.start(instance, intent_rx, loop_socket);
     });
 
     // Give the server a moment to bind

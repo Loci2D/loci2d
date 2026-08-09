@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use super::entity::{Entity, EntityType};
 use super::session::{ClientSession, SessionState};
-use crate::network::packets::ClientIntent;
+use crate::network::packets::{ClientIntent, EntityState, WorldState, EntityType as ProtoEntityType};
 
 // Re-export Vector2 from network for now
 pub use crate::network::packets::Vector2;
@@ -72,7 +72,20 @@ impl Instance {
                 }
             }
 
-            // 4. Action Intent (requires active session)
+            // 4. Target Movement Intent (Phase 6 click-to-move reserved)
+            Intent::MoveToPos(move_to_pos_intent) => {
+                let Some(session) = self.sessions.get_mut(&addr) else {
+                    println!("[Drop] Ignoring MoveToPositionIntent from unjoined client: {}", addr);
+                    return;
+                };
+                session.refresh_activity();
+                if let Some(target) = move_to_pos_intent.target_position {
+                    println!("[Intent] Entity {} ({}) requested move to target ({:.1}, {:.1})",
+                        session.entity_id, session.player_name, target.x, target.y);
+                }
+            }
+
+            // 5. Action Intent (requires active session)
             Intent::Action(action_intent) => {
                 let Some(session) = self.sessions.get_mut(&addr) else {
                     println!("[Drop] Ignoring ActionIntent from unjoined client: {}", addr);
@@ -85,7 +98,7 @@ impl Instance {
                 }
             }
 
-            // 5. Ping / Heartbeat Intent (requires active session)
+            // 6. Ping / Heartbeat Intent (requires active session)
             Intent::Ping(_) => {
                 let Some(session) = self.sessions.get_mut(&addr) else {
                     println!("[Drop] Ignoring PingIntent from unjoined client: {}", addr);
@@ -194,6 +207,39 @@ impl Instance {
     #[allow(dead_code)]
     pub fn get_session(&self, addr: &SocketAddr) -> Option<&ClientSession> {
         self.sessions.get(addr)
+    }
+
+    /// Generates a complete WorldState snapshot representing all active entities.
+    pub fn create_snapshot(&self, tick: u64) -> WorldState {
+        let entities = self.entities.values().map(|e| {
+            EntityState {
+                id: e.id,
+                name: e.name.clone(),
+                position: Some(e.position),
+                velocity: Some(e.velocity),
+                entity_type: match e.entity_type {
+                    EntityType::Player => ProtoEntityType::Player as i32,
+                    EntityType::NPC => ProtoEntityType::Npc as i32,
+                    EntityType::Prop => ProtoEntityType::Prop as i32,
+                },
+            }
+        }).collect();
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        WorldState {
+            tick,
+            timestamp,
+            entities,
+        }
+    }
+
+    /// Returns a list of all active client destination addresses for broadcasting.
+    pub fn get_broadcast_addresses(&self) -> Vec<SocketAddr> {
+        self.sessions.keys().copied().collect()
     }
 }
 
@@ -382,5 +428,29 @@ mod tests {
             assert_eq!(entity.name, "NewName");
             assert_eq!(session.player_name, "NewName");
         }
+    }
+
+    #[test]
+    fn test_create_snapshot_and_broadcast_addresses() {
+        let mut instance = Instance::new(1, 30, 10);
+        let addr1: SocketAddr = "127.0.0.1:50001".parse().unwrap();
+        let addr2: SocketAddr = "127.0.0.1:50002".parse().unwrap();
+
+        instance.handle_join(addr1, "Alice".to_string());
+        instance.handle_join(addr2, "Bob".to_string());
+
+        let addrs = instance.get_broadcast_addresses();
+        assert_eq!(addrs.len(), 2);
+        assert!(addrs.contains(&addr1));
+        assert!(addrs.contains(&addr2));
+
+        let snapshot = instance.create_snapshot(42);
+        assert_eq!(snapshot.tick, 42);
+        assert!(snapshot.timestamp > 0);
+        assert_eq!(snapshot.entities.len(), 2);
+
+        let names: Vec<String> = snapshot.entities.iter().map(|e| e.name.clone()).collect();
+        assert!(names.contains(&"Alice".to_string()));
+        assert!(names.contains(&"Bob".to_string()));
     }
 }

@@ -1,15 +1,12 @@
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::mpsc;
+use std::sync::Arc;
 use chrono::Local;
 use prost::Message;
 use super::packets::{GamePacket, ClientIntent};
 
-pub fn run_server(intent_tx: mpsc::Sender<(SocketAddr, ClientIntent)>, bind_addr: &str) {
-    // Bind to UDP socket
-    let socket = UdpSocket::bind(bind_addr).expect("Failed to bind to address");
-    println!("[{}] UDP Server listening on {}", Local::now().format("%Y-%m-%d %H:%M:%S"), bind_addr);
-
-    let mut buf = [0u8; 1024];
+pub fn run_server(socket: Arc<UdpSocket>, intent_tx: mpsc::Sender<(SocketAddr, ClientIntent)>) {
+    let mut buf = [0u8; 2048];
 
     loop {
         // Receive data from any client
@@ -20,20 +17,12 @@ pub fn run_server(intent_tx: mpsc::Sender<(SocketAddr, ClientIntent)>, bind_addr
                 // Deserialize Protobuf GamePacket
                 match GamePacket::decode(received_data) {
                     Ok(packet) => {
-                        println!("[{}] Received {} bytes from {}: sequence_id={}, intent={:?}", 
-                            Local::now().format("%Y-%m-%d %H:%M:%S"),
-                            num_bytes,
-                            src_addr,
-                            packet.sequence_id,
-                            packet.intent
-                        );
-
                         if let Some(intent) = packet.intent {
                             let _ = intent_tx.send((src_addr, intent));
                         }
                     }
                     Err(e) => {
-                        println!("[{}] Failed to deserialize Protobuf packet from {}: {}", 
+                        println!("[{}] Failed to deserialize GamePacket from {}: {}", 
                             Local::now().format("%Y-%m-%d %H:%M:%S"),
                             src_addr,
                             e
