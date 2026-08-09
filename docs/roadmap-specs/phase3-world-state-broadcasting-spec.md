@@ -1,6 +1,6 @@
 # Implementation Spec — Phase 3: World State Broadcasting & Client Sync
 
-> **Status:** Draft / Ready for Review  
+> **Status:** Ready to Implement  
 > **Roadmap Phase:** Phase 3 — World State Broadcasting & Client Sync  
 > **Reference ADRs:** [ADR-0001](../adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](../adr/en/0002-instance-based-architecture.md) · [ADR-0003](../adr/en/0003-2d-map-only.md) · [ADR-0005](../adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0008](../adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0009](../adr/en/0009-simplified-authentication-and-auto-join-strategy.md)
 
