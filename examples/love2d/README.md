@@ -14,28 +14,18 @@ This example demonstrates how a **LÖVE2D / Lua** game client can communicate wi
 
 ## How It Works
 
-`lua-protobuf` can load `.pb` binary descriptors or raw `.proto` schema definitions at runtime:
+`lua-protobuf` loads binary `.pb` descriptors or dynamically parses `.proto` text definitions via `protoc.lua`:
 
 ```lua
 local pb = require("pb")
-local socket = require("socket")
+local protoc = require("protoc")
 
--- Load schema definition dynamically
-pb.loadfile("../../proto/game_packets.proto")
+-- Load raw text .proto schema at runtime:
+local p = protoc.new()
+p:loadfile("../../proto/game_packets.proto")
 
--- Prepare and send binary packet
-local packet = {
-    sequence_id = seq_id,
-    timestamp = os.time(),
-    intent = {
-        move = {
-            direction = { x = 1.0, y = 0.5 }
-        }
-    }
-}
-
-local data = pb.encode("loci2d.GamePacket", packet)
-udp:send(data)
+-- Or load precompiled binary .pb descriptor:
+-- pb.loadfile("game_packets.pb")
 ```
 
 ## Running the Example

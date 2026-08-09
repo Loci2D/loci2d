@@ -14,8 +14,26 @@ except ImportError:
 
 SERVER_ADDR = ("127.0.0.1", 8080)
 
+latest_world_state = None
+latest_lock = threading.Lock()
+stream_enabled = False
+
+def print_world_state(ws):
+    print(f"\n--- [World State Snapshot | Tick {ws.tick} | Timestamp: {ws.timestamp}] ---")
+    if not ws.entities:
+        print("  (No active entities in instance)")
+    else:
+        print(f"  Active Entities ({len(ws.entities)}):")
+        for e in ws.entities:
+            type_name = game_packets_pb2.EntityType.Name(e.entity_type)
+            print(f"    - Entity {e.id} (\"{e.name}\", {type_name}) @ ({e.position.x:.1f}, {e.position.y:.1f}), vel=({e.velocity.x:.1f}, {e.velocity.y:.1f})")
+    print("---------------------------------------------------------")
+
 def listen_server(sock, stop_event):
+    global latest_world_state, stream_enabled
     sock.settimeout(0.5)
+    last_stream_print = 0.0
+
     while not stop_event.is_set():
         try:
             data, _ = sock.recvfrom(2048)
@@ -24,11 +42,12 @@ def listen_server(sock, stop_event):
 
             if server_packet.HasField("world_state"):
                 ws = server_packet.world_state
-                entity_strs = []
-                for e in ws.entities:
-                    type_name = game_packets_pb2.EntityType.Name(e.entity_type)
-                    entity_strs.append(f"{e.name} (id={e.id}, {type_name}) @ ({e.position.x:.1f}, {e.position.y:.1f})")
-                print(f"\n[Snapshot Tick {ws.tick}] {len(ws.entities)} entity/entities: " + ", ".join(entity_strs))
+                with latest_lock:
+                    latest_world_state = ws
+                now = time.time()
+                if stream_enabled and (now - last_stream_print >= 1.0):
+                    print_world_state(ws)
+                    last_stream_print = now
             elif server_packet.HasField("response"):
                 resp = server_packet.response
                 print(f"\n[Server Response] ACK seq={resp.sequence_id} status={resp.status}")
@@ -39,6 +58,7 @@ def listen_server(sock, stop_event):
                 print(f"\n[Error receiving packet] {e}")
 
 def main():
+    global stream_enabled
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
     stop_event = threading.Event()
@@ -47,7 +67,7 @@ def main():
 
     sequence_id = 0
     print("[Python Client] Ready to connect to loci2d server at 127.0.0.1:8080")
-    print("Commands: join <name> | leave [reason] | move <x> <y> | action <id> | ping | quit")
+    print("Commands: join <name> | status | move <x> <y> | stream <on|off> | leave [reason] | action <id> | ping | quit")
 
     while True:
         try:
@@ -56,6 +76,25 @@ def main():
             break
 
         if not cmd:
+            continue
+
+        if cmd == "status" or cmd == "state" or cmd == "entities":
+            with latest_lock:
+                ws = latest_world_state
+            if ws:
+                print_world_state(ws)
+            else:
+                print("[Status] No world state snapshot received yet from server.")
+            continue
+
+        if cmd == "stream on":
+            stream_enabled = True
+            print("[Stream] Live snapshot logging ENABLED (throttled to 1s).")
+            continue
+
+        if cmd == "stream off":
+            stream_enabled = False
+            print("[Stream] Live snapshot logging DISABLED. Use 'status' to inspect world state.")
             continue
 
         packet = game_packets_pb2.GamePacket()
@@ -91,7 +130,7 @@ def main():
             ability_id = int(parts[1]) if len(parts) > 1 else 1
             packet.intent.action.ability_id = ability_id
         else:
-            print("Unknown command. Available: join <name>, leave [reason], move <x> <y>, action <id>, ping, quit")
+            print("Unknown command. Available: join <name>, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit")
             continue
 
         # Serialize packet to binary bytes

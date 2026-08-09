@@ -3,11 +3,16 @@
 
 local socket = require("socket")
 local pb = nil
+local protoc = nil
 
--- Attempt to load lua-protobuf library
-local ok, res = pcall(require, "pb")
-if ok then
-    pb = res
+-- Attempt to load lua-protobuf library and protoc parser
+local ok_pb, res_pb = pcall(require, "pb")
+if ok_pb then
+    pb = res_pb
+    local ok_protoc, res_protoc = pcall(require, "protoc")
+    if ok_protoc then
+        protoc = res_protoc
+    end
 else
     print("[Warning] 'lua-protobuf' module not found.")
     print("Install lua-protobuf (e.g. via luarocks install lua-protobuf) to run full binary Protobuf encoding.")
@@ -20,6 +25,9 @@ local server_ip = "127.0.0.1"
 local server_port = 8080
 local current_entities = {}
 local current_tick = 0
+local schema_loaded = false
+local last_terminal_print = 0
+local last_sent_dir = { x = 0, y = 0 }
 
 function love.load()
     love.window.setTitle("loci2d - Love2D Client (Phase 3)")
@@ -31,13 +39,41 @@ function love.load()
     udp:setpeername(server_ip, server_port)
 
     if pb then
-        -- Load proto file dynamically
-        local loaded = pb.loadfile("../../proto/game_packets.proto")
-        if not loaded then
-            print("[Warning] Could not load ../../proto/game_packets.proto")
-        else
-            -- Automatically join instance on startup
+        -- 1. Try dynamic text parsing with protoc.lua
+        if protoc then
+            local p = protoc.new()
+            p.include_dirs = { "../../proto", "proto", "." }
+
+            local ok, res = pcall(function() return p:loadfile("../../proto/game_packets.proto") end)
+            if ok and res then
+                schema_loaded = true
+            else
+                -- Fallback: read file text directly via io.open
+                local f = io.open("../../proto/game_packets.proto", "r")
+                if f then
+                    local content = f:read("*a")
+                    f:close()
+                    if content and p:load(content, "game_packets.proto") then
+                        schema_loaded = true
+                    end
+                end
+            end
+        end
+
+        -- 2. Fallback: try loading compiled .pb descriptor file
+        if not schema_loaded then
+            local ok, res = pcall(function() return pb.loadfile("game_packets.pb") or pb.loadfile("../../proto/game_packets.pb") end)
+            if ok and res then
+                schema_loaded = true
+            end
+        end
+
+        if schema_loaded then
+            print("[Protobuf] Successfully loaded game_packets schema.")
             send_intent({ join = { player_name = "Love2DPlayer" } })
+        else
+            print("[Warning] Could not load game_packets schema definition.")
+            last_status = "Error: game_packets.proto schema not loaded"
         end
     end
 end
@@ -47,8 +83,8 @@ function love.quit()
 end
 
 function send_intent(intent_table)
-    if not pb then
-        last_status = "Error: lua-protobuf not installed"
+    if not pb or not schema_loaded then
+        last_status = "Error: Protobuf schema not loaded"
         return
     end
 
@@ -63,22 +99,53 @@ function send_intent(intent_table)
     if data then
         udp:send(data)
         last_status = "Sent intent seq=" .. sequence_id
+        if intent_table.move then
+            local dir = intent_table.move.direction or { x = 0, y = 0 }
+            print(string.format("[Love2D Client] Sent Move Intent (seq=%d) -> dir=(%.1f, %.1f)", sequence_id, dir.x, dir.y))
+        elseif intent_table.join then
+            print(string.format("[Love2D Client] Sent Join Intent (seq=%d) -> name='%s'", sequence_id, intent_table.join.player_name))
+        elseif intent_table.disconnect then
+            print(string.format("[Love2D Client] Sent Disconnect Intent (seq=%d) -> reason='%s'", sequence_id, intent_table.disconnect.reason))
+        else
+            print(string.format("[Love2D Client] Sent Intent (seq=%d)", sequence_id))
+        end
+    end
+end
+
+function get_held_direction()
+    local dx, dy = 0, 0
+    if love.keyboard.isDown("w") or love.keyboard.isDown("up") then dy = dy - 1 end
+    if love.keyboard.isDown("s") or love.keyboard.isDown("down") then dy = dy + 1 end
+    if love.keyboard.isDown("a") or love.keyboard.isDown("left") then dx = dx - 1 end
+    if love.keyboard.isDown("d") or love.keyboard.isDown("right") then dx = dx + 1 end
+    return dx, dy
+end
+
+function update_movement()
+    local dx, dy = get_held_direction()
+    if dx ~= last_sent_dir.x or dy ~= last_sent_dir.y then
+        last_sent_dir = { x = dx, y = dy }
+        send_intent({ move = { direction = { x = dx, y = dy } } })
     end
 end
 
 function love.keypressed(key)
-    if key == "w" or key == "up" then
-        send_intent({ move = { direction = { x = 0, y = -1 } } })
-    elseif key == "s" or key == "down" then
-        send_intent({ move = { direction = { x = 0, y = 1 } } })
-    elseif key == "a" or key == "left" then
-        send_intent({ move = { direction = { x = -1, y = 0 } } })
-    elseif key == "d" or key == "right" then
-        send_intent({ move = { direction = { x = 1, y = 0 } } })
+    if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
+        update_movement()
+    elseif key == "x" or key == "k" then
+        -- Explicit stop movement
+        last_sent_dir = { x = 0, y = 0 }
+        send_intent({ move = { direction = { x = 0, y = 0 } } })
     elseif key == "space" then
         send_intent({ action = { ability_id = 1 } })
     elseif key == "p" then
         send_intent({ ping = {} })
+    end
+end
+
+function love.keyreleased(key)
+    if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
+        update_movement()
     end
 end
 
@@ -97,8 +164,23 @@ function love.update(dt)
                     current_tick = server_packet.world_state.tick or 0
                     current_entities = server_packet.world_state.entities or {}
                     last_status = string.format("WorldState Tick %d (%d entities)", current_tick, #current_entities)
+
+                    -- Periodic terminal output for developers (throttled to ~1 second)
+                    local now = love.timer.getTime()
+                    if now - last_terminal_print >= 1.0 then
+                        last_terminal_print = now
+                        local entity_strs = {}
+                        for _, e in ipairs(current_entities) do
+                            local pos = e.position or { x = 0, y = 0 }
+                            local vel = e.velocity or { x = 0, y = 0 }
+                            table.insert(entity_strs, string.format("%s (id=%d) @ (%.1f, %.1f) vel=(%.1f, %.1f)", e.name or "Entity", e.id or 0, pos.x, pos.y, vel.x, vel.y))
+                        end
+                        print(string.format("[Love2D Client] [Snapshot Tick %d] %d entities: %s", current_tick, #current_entities, table.concat(entity_strs, " | ")))
+                    end
+
                 elseif server_packet.response then
                     last_status = string.format("ACK seq=%d status=%s", server_packet.response.sequence_id, server_packet.response.status)
+                    print(string.format("[Love2D Client] Received ACK seq=%d status=%s", server_packet.response.sequence_id, server_packet.response.status))
                 end
             end
         end
@@ -147,15 +229,15 @@ function love.draw()
 
     -- HUD / UI Overlay
     love.graphics.setColor(0.12, 0.14, 0.2, 0.85)
-    love.graphics.rectangle("fill", 10, 10, 360, 140, 6, 6)
+    love.graphics.rectangle("fill", 10, 10, 420, 140, 6, 6)
     love.graphics.setColor(0.3, 0.4, 0.6)
-    love.graphics.rectangle("line", 10, 10, 360, 140, 6, 6)
+    love.graphics.rectangle("line", 10, 10, 420, 140, 6, 6)
 
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("loci2d - Love2D Client (Phase 3)", 20, 20)
     love.graphics.setColor(0.8, 0.8, 0.8)
-    love.graphics.print("Controls: WASD / Arrow Keys -> Move | Space -> Action", 20, 45)
-    love.graphics.print("          P -> Ping", 20, 65)
+    love.graphics.print("Controls: WASD / Arrows -> Move (Release to Stop)", 20, 45)
+    love.graphics.print("          X / K -> Explicit Stop | Space -> Action | P -> Ping", 20, 65)
 
     love.graphics.setColor(0.4, 0.9, 1.0)
     love.graphics.print("Tick: " .. tostring(current_tick) .. " | Active Entities: " .. tostring(#current_entities), 20, 95)

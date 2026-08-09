@@ -83,10 +83,12 @@ cargo run --bin client
 
 ### 3. Client Commands / Comandos do Cliente
 - `join <name>` — Send join handshake with player name (e.g., `join Alice`) / Envia handshake de entrada com nome do jogador (ex: `join Alice`)
-- `leave [reason]` — Send disconnect intent (e.g., `leave quitting`) / Envia intenção de desconexão (ex: `leave quitting`)
-- `ping` — Send ping intent / Envia intenção de ping
+- `status` — Inspect latest world state snapshot and active entities / Inspeciona o snapshot mais recente do estado do mundo e entidades ativas
 - `move <x> <y>` — Send 2D movement intent (e.g., `move 1.0 0.5`) / Envia intenção de movimento 2D (ex: `move 1.0 0.5`)
+- `stream <on|off>` — Toggle live background snapshot logging (default: off) / Alterna o log contínuo de snapshots em segundo plano (padrão: desativado)
+- `leave [reason]` — Send disconnect intent (e.g., `leave quitting`) / Envia intenção de desconexão (ex: `leave quitting`)
 - `action <id>` — Send action intent with ability ID (e.g., `action 42`) / Envia intenção de ação com ID de habilidade (ex: `action 42`)
+- `ping` — Send ping intent / Envia intenção de ping
 - `quit` — Gracefully disconnect and exit client / Desconecta graciosamente e sai do cliente
 
 ### Example Session / Sessão de Exemplo
@@ -94,14 +96,20 @@ cargo run --bin client
 Enter command: join Alice
 [2026-08-08 17:30:00] Sent 16 bytes to server: sequence_id=0
 
-[2026-08-08 17:30:00] [Snapshot Tick 1] 1 entity/entities in world:
-  - Entity 1 ("Alice", Player) @ (0.0, 0.0), vel=(0.0, 0.0)
+Enter command: status
+--- [World State Snapshot | Tick 30 | Timestamp: 1723140000000] ---
+  Active Entities (1):
+    - Entity 1 ("Alice", Player) @ (0.0, 0.0), vel=(0.0, 0.0)
+---------------------------------------------------------
 
 Enter command: move 1.0 0.5
 [2026-08-08 17:30:05] Sent 22 bytes to server: sequence_id=1
 
-[2026-08-08 17:30:05] [Snapshot Tick 150] 1 entity/entities in world:
-  - Entity 1 ("Alice", Player) @ (1.0, 0.5), vel=(1.0, 0.5)
+Enter command: status
+--- [World State Snapshot | Tick 150 | Timestamp: 1723140005000] ---
+  Active Entities (1):
+    - Entity 1 ("Alice", Player) @ (4.0, 2.0), vel=(1.0, 0.5)
+---------------------------------------------------------
 
 Enter command: quit
 [2026-08-08 17:30:10] Sending disconnect and shutting down...
