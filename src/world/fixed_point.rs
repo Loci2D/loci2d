@@ -41,11 +41,21 @@ impl DeterministicVector2 {
     }
 
     /// Quantizes an incoming float (e.g. from network MoveIntent) into fixed-point representation.
+    /// Safely handles NaN (mapped to 0.0) and saturates ±Infinity / out-of-range floats without panicking.
     #[inline]
     pub fn from_f32(x: f32, y: f32) -> Self {
+        #[inline]
+        fn quantize(val: f32) -> I16F16 {
+            if val.is_nan() {
+                I16F16::ZERO
+            } else {
+                I16F16::saturating_from_num(val)
+            }
+        }
+
         Self {
-            x: I16F16::from_num(x),
-            y: I16F16::from_num(y),
+            x: quantize(x),
+            y: quantize(y),
         }
     }
 
@@ -233,5 +243,16 @@ mod tests {
         assert_eq!(bits_x, 98304);
         // -2.5 in I16F16 is -(2 * 65536 + 32768) = -163840
         assert_eq!(bits_y, -163840);
+    }
+
+    #[test]
+    fn test_from_f32_malformed_inputs() {
+        let nan_vec = DeterministicVector2::from_f32(f32::NAN, f32::INFINITY);
+        assert_eq!(nan_vec.x, I16F16::ZERO);
+        assert_eq!(nan_vec.y, I16F16::MAX);
+
+        let neg_inf_vec = DeterministicVector2::from_f32(f32::NEG_INFINITY, 100000.0);
+        assert_eq!(neg_inf_vec.x, I16F16::MIN);
+        assert_eq!(neg_inf_vec.y, I16F16::MAX);
     }
 }

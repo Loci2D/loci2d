@@ -37,13 +37,10 @@ impl GameLoop {
 
         while self.running {
             let now = Instant::now();
-            let mut delta = now.duration_since(last_time);
+            let delta = now.duration_since(last_time);
             last_time = now;
 
-            if delta > max_accumulator {
-                delta = max_accumulator;
-            }
-            accumulator += delta;
+            accumulator = (accumulator + delta).min(max_accumulator);
 
             while accumulator >= tick_duration {
                 // 1. Drain the intent queue (non-blocking) for this fixed tick

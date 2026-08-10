@@ -155,7 +155,7 @@ impl Instance {
     /// Advance physics using deterministic fixed-point addition and sweep for timed-out sessions
     pub fn tick(&mut self, tick_count: u64) {
         for entity in self.entities.values_mut() {
-            entity.position += entity.velocity;
+            entity.position = entity.position.saturating_add(entity.velocity);
         }
 
         // Check for timed out clients
