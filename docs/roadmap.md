@@ -88,27 +88,35 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 ---
 
 ### Phase 4: Event Logging & Deterministic Replay System
-> **Spec:** [Phase 4 Spec](roadmap-specs/phase4-deterministic-replay-spec.md) · **Reference ADR:** [ADR-0007](adr/en/0007-deterministic-simulation-and-fixed-point.md)
+> **Spec:** [Phase 4 Spec](roadmap-specs/phase4-deterministic-replay-spec.md) · **Reference ADRs:** [ADR-0001](adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](adr/en/0002-instance-based-architecture.md) · [ADR-0003](adr/en/0003-2d-map-only.md) · [ADR-0005](adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0007](adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0008](adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0009](adr/en/0009-simplified-authentication-and-auto-join-strategy.md)
 ### Fase 4: Registro de Eventos & Sistema de Replay Determinístico
 
 #### English
 
-* [ ] **Event Sourcing Architecture**:
-  - Log all incoming client intents, timestamp/tick numbers, and system inputs sequentially into an event log buffer.
-* [ ] **Deterministic Execution Guarantee**:
-  - Ensure fixed-point math / deterministic tick updates so that replaying an intent log reproduces exact world state frame-by-frame.
-* [ ] **Replay Storage & Playback Tooling**:
-  - Implement serialization for input logs (e.g., binary file or Protobuf log).
-  - Add CLI / server replay execution mode for debugging, testing, and spectator replays.
+* [ ] **Deterministic Engine Core & Fixed-Point Refactoring**:
+  - Replace `f32` physics simulation with fixed-point math (`I16F16`) to guarantee cross-CPU/OS arithmetic determinism.
+  - Convert entity/session storage to strictly ordered collections (`BTreeMap`).
+  - Upgrade game loop to a sub-millisecond Fixed-Timestep Accumulator.
+* [ ] **Event Sourcing Architecture & Replay Serialization**:
+  - Log all incoming client intents sequentially at fixed tick boundaries into `.loci` Protobuf replay files.
+  - Implement periodic canonical `WorldState` SHA-256 checkpoints for desync detection.
+* [ ] **Headless Replay & Desync Verification Tooling**:
+  - Add CLI execution mode to replay match files offline as fast as possible, asserting bit-exact checksum matches across Linux, macOS ARM64, and Windows.
+* [ ] **Live Spectator Broadcast & Multi-Client Playback**:
+  - Stream replay snapshots over UDP at real-time tick rates (with speed controls: 0.5x, 1x, 2x, 4x) to existing client engines (Godot, Love2D, Python, CLI) with zero client modifications.
 
 #### Português
-* [ ] **Arquitetura de Event Sourcing**:
-  - Registrar sequencialmente todas as intenções de clientes recebidas, números de tick/timestamp e inputs de sistema em um buffer de log de eventos.
-* [ ] **Garantia de Execução Determinística**:
-  - Garantir matemática/atualizações de tick determinísticas para que a reexecução de um log de intenções reproduza o estado exato do mundo quadro a quadro.
-* [ ] **Armazenamento e Ferramental de Replay**:
-  - Implementar serialização para logs de input (ex: arquivo binário ou log Protobuf).
-  - Adicionar modo de execução de replay via CLI / servidor para depuração, testes e replays de espectadores.
+* [ ] **Núcleo de Motor Determinístico & Refatoração de Ponto Fixo**:
+  - Substituir a simulação física em `f32` por matemática de ponto fixo (`I16F16`) para garantir determinismo aritmético entre CPUs/SO.
+  - Converter coleções de entidades/sessões para coleções estritamente ordenadas (`BTreeMap`).
+  - Atualizar o game loop para um Acumulador de Timestep Fixo com precisão sub-milissegundo.
+* [ ] **Arquitetura de Event Sourcing & Serialização de Replay**:
+  - Registrar sequencialmente todas as intenções de clientes nos limites de tick fixos em arquivos de replay Protobuf `.loci`.
+  - Implementar checkpoints periódicos de hash SHA-256 do `WorldState` canônico para detecção de dessincronização.
+* [ ] **Replay Headless & Ferramental de Verificação de Dessincronização**:
+  - Adicionar modo de execução CLI para reproduzir arquivos de partida offline na velocidade máxima, garantindo correspondência exata de checksums no Linux, macOS ARM64 e Windows.
+* [ ] **Transmissão para Espectadores & Reprodução Multi-Cliente**:
+  - Transmitir snapshots de replay via UDP em taxa de tick em tempo real (com controles de velocidade: 0.5x, 1x, 2x, 4x) para os motores de cliente existentes (Godot, Love2D, Python, CLI) sem alterações no código do cliente.
 
 ---
 

@@ -296,21 +296,21 @@ fn main() {
 
 ## 4. Implementation Checklist
 
-- [ ] **`Cargo.toml`** — Add dependency `dotenvy = "0.15"`
-- [ ] **`.env`** — Create at project root with `BIND_ADDR=127.0.0.1:8080` and `TICK_RATE=30`
-- [ ] **`.gitignore`** — Ensure `.env` is ignored (future secrets); add `.env.example` with documented defaults (committed)
-- [ ] **`src/config.rs`** — New module with `ServerConfig::from_env()` reading `BIND_ADDR` and `TICK_RATE`
-- [ ] **`network/server.rs`** — Refactor `run_server` to receive `intent_tx: Sender<(SocketAddr, ClientIntent)>` and `bind_addr: &str`
-- [ ] **`network/server.rs`** — Remove synchronous `ServerResponse` send (no ACK for now)
-- [ ] **`world/entity.rs`** — Add `velocity: Vector2` field and `Entity::new()` constructor
-- [ ] **`world/instance.rs`** — Add `client_map: HashMap<SocketAddr, u64>` and `next_entity_id`
-- [ ] **`world/instance.rs`** — Implement `get_or_create_entity(addr) -> u64`
-- [ ] **`world/instance.rs`** — Implement `apply_intent(addr, intent)`
-- [ ] **`world/instance.rs`** — Implement `tick(tick_count)`
-- [ ] **`game_loop/tick.rs`** — Refactor `GameLoop::start` to receive `Instance` + `intent_rx`
-- [ ] **`main.rs`** — Read `ServerConfig`, create `mpsc` channel, spawn both threads
-- [ ] **Build** — `cargo build` with no errors or warnings
-- [ ] **Manual test** — Send `MoveIntent` via example client and verify tick log with position updating
+- [x] **`Cargo.toml`** — Add dependency `dotenvy = "0.15"`
+- [x] **`.env`** — Create at project root with `BIND_ADDR=127.0.0.1:8080` and `TICK_RATE=30`
+- [x] **`.gitignore`** — Ensure `.env` is ignored (future secrets); add `.env.example` with documented defaults (committed)
+- [x] **`src/config.rs`** — New module with `ServerConfig::from_env()` reading `BIND_ADDR` and `TICK_RATE`
+- [x] **`network/server.rs`** — Refactor `run_server` to receive `intent_tx: Sender<(SocketAddr, ClientIntent)>` and `bind_addr: &str`
+- [x] **`network/server.rs`** — Remove synchronous `ServerResponse` send (no ACK for now)
+- [x] **`world/entity.rs`** — Add `velocity: Vector2` field and `Entity::new()` constructor
+- [x] **`world/instance.rs`** — Add `client_map: HashMap<SocketAddr, u64>` and `next_entity_id`
+- [x] **`world/instance.rs`** — Implement `get_or_create_entity(addr) -> u64`
+- [x] **`world/instance.rs`** — Implement `apply_intent(addr, intent)`
+- [x] **`world/instance.rs`** — Implement `tick(tick_count)`
+- [x] **`game_loop/tick.rs`** — Refactor `GameLoop::start` to receive `Instance` + `intent_rx`
+- [x] **`main.rs`** — Read `ServerConfig`, create `mpsc` channel, spawn both threads
+- [x] **Build** — `cargo build` with no errors or warnings
+- [x] **Manual test** — Send `MoveIntent` via example client and verify tick log with position updating
 
 ---
 

@@ -448,20 +448,20 @@ Update `src/bin/client.rs` to run a background listener thread that decodes inco
 
 ## 5. Implementation Checklist
 
-- [ ] **`proto/game_packets.proto`** — Add `EntityType`, `EntityState`, `WorldState`, and `ServerPacket` envelope definitions.
-- [ ] **`src/network/packets.rs`** — Add unit tests for encoding and decoding `ServerPacket` and `WorldState`.
-- [ ] **`src/network/server.rs`** — Update `run_server` to accept `Arc<UdpSocket>`.
-- [ ] **`src/world/instance.rs`** — Implement `create_snapshot(tick)` and `get_broadcast_addresses()`.
-- [ ] **`src/game_loop/tick.rs`** — Update `GameLoop::start` to accept `Arc<UdpSocket>` and broadcast snapshots to active sessions every tick.
-- [ ] **`src/main.rs`** — Initialize `Arc<UdpSocket>` and wire it into `net_thread` and `loop_thread`.
-- [ ] **`src/bin/client.rs`** — Add background UDP listener thread to receive and format `WorldState` snapshots in real time.
-- [ ] **Integration Tests (`tests/broadcasting_integration_test.rs`)** — Verify that:
+- [x] **`proto/game_packets.proto`** — Add `EntityType`, `EntityState`, `WorldState`, and `ServerPacket` envelope definitions.
+- [x] **`src/network/packets.rs`** — Add unit tests for encoding and decoding `ServerPacket` and `WorldState`.
+- [x] **`src/network/server.rs`** — Update `run_server` to accept `Arc<UdpSocket>`.
+- [x] **`src/world/instance.rs`** — Implement `create_snapshot(tick)` and `get_broadcast_addresses()`.
+- [x] **`src/game_loop/tick.rs`** — Update `GameLoop::start` to accept `Arc<UdpSocket>` and broadcast snapshots to active sessions every tick.
+- [x] **`src/main.rs`** — Initialize `Arc<UdpSocket>` and wire it into `net_thread` and `loop_thread`.
+- [x] **`src/bin/client.rs`** — Add background UDP listener thread to receive and format `WorldState` snapshots in real time.
+- [x] **Integration Tests (`tests/broadcasting_integration_test.rs`)** — Verify that:
   - Connecting client receives `WorldState` containing its entity on the very next tick.
   - Applying `MoveIntent` changes position in subsequent received snapshots.
   - Multiple connected clients receive snapshots containing all peers' entities.
   - Disconnected or timed-out clients disappear from subsequent snapshots.
-- [ ] **Client Examples** — Update `examples/python/client.py`, `examples/love2d/main.lua`, and `examples/godot/NetworkClient.gd` to consume and render snapshots.
-- [ ] **Documentation** — Update `docs/roadmap.md` and `README.md`.
+- [x] **Client Examples** — Update `examples/python/client.py`, `examples/love2d/main.lua`, and `examples/godot/NetworkClient.gd` to consume and render snapshots.
+- [x] **Documentation** — Update `docs/roadmap.md` and `README.md`.
 
 ---
 
