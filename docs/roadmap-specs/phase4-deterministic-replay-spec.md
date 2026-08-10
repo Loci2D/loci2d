@@ -679,12 +679,12 @@ Support CLI flags via `clap`:
 ## 5. Implementation Checklist for Phase 4
 
 ### Milestone 4.1: Deterministic Engine Core & Fixed-Point Refactoring
-- [ ] **`Cargo.toml`** — Add `fixed = { version = "1.28", features = ["serde"] }` and `sha2 = "0.10"`.
-- [ ] **`src/world/fixed_point.rs`** — Implement `DeterministicVector2` (`I16F16`) with unit tests for math operations and saturating arithmetic.
-- [ ] **`src/world/entity.rs`** — Update `Entity` fields (`position`, `velocity`) to `DeterministicVector2`.
-- [ ] **`src/world/instance.rs`** — Migrate all `HashMap` collections to `BTreeMap`.
-- [ ] **`src/world/instance.rs`** — Add input quantization in `apply_intent` and float conversion in `create_snapshot`.
-- [ ] **`src/game_loop/tick.rs`** — Upgrade to Sub-Millisecond Fixed-Timestep Accumulator loop.
+- [x] **`Cargo.toml`** — Add `fixed = { version = "1.28", features = ["serde"] }` and `sha2 = "0.10"`.
+- [x] **`src/world/fixed_point.rs`** — Implement `DeterministicVector2` (`I16F16`) with unit tests for math operations and saturating arithmetic.
+- [x] **`src/world/entity.rs`** — Update `Entity` fields (`position`, `velocity`) to `DeterministicVector2`.
+- [x] **`src/world/instance.rs`** — Migrate all `HashMap` collections to `BTreeMap`.
+- [x] **`src/world/instance.rs`** — Add input quantization in `apply_intent` and float conversion in `create_snapshot`.
+- [x] **`src/game_loop/tick.rs`** — Upgrade to Sub-Millisecond Fixed-Timestep Accumulator loop.
 
 ### Milestone 4.2: Event Sourcing & Protobuf Replay Serialization
 - [ ] **`proto/replay.proto`** — Formalize `ReplayHeader`, `ReplayIntentEntry`, `ReplayTickFrame`, `ReplayCheckpoint`, `ReplayFile`.

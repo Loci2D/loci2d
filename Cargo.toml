@@ -1,6 +1,6 @@
 [package]
 name = "loci2d"
-version = "0.3.0"
+version = "0.4.1"
 edition = "2024"
 default-run = "loci2d"
 
@@ -9,6 +9,8 @@ chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 prost = "0.13"
 dotenvy = "0.15"
+fixed = { version = "1.28", features = ["serde"] }
+sha2 = "0.10"
 
 
 [build-dependencies]

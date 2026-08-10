@@ -1,22 +1,23 @@
 // Instance module - Logic for a specific room/instance (tick rate, entity list, session mapping)
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use super::entity::{Entity, EntityType};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::{ClientIntent, EntityState, WorldState, EntityType as ProtoEntityType};
 
-// Re-export Vector2 from network for now
+// Re-export Vector2 from network and DeterministicVector2 from fixed_point
 pub use crate::network::packets::Vector2;
+pub use super::fixed_point::DeterministicVector2;
 
 // [2026-08-08] Allowed dead_code: fields like id and tick_rate are essential metadata for multi-room management (Phase 5).
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Instance {
     pub id: u64,
-    pub entities: HashMap<u64, Entity>,
-    pub sessions: HashMap<SocketAddr, ClientSession>,
-    pub entity_to_addr: HashMap<u64, SocketAddr>,
+    pub entities: BTreeMap<u64, Entity>,
+    pub sessions: BTreeMap<SocketAddr, ClientSession>,
+    pub entity_to_addr: BTreeMap<u64, SocketAddr>,
     pub tick_rate: u32, // ticks per second
     pub client_timeout_secs: u64,
     next_entity_id: u64,
@@ -27,9 +28,9 @@ impl Instance {
     pub fn new(id: u64, tick_rate: u32, client_timeout_secs: u64) -> Self {
         Self {
             id,
-            entities: HashMap::new(),
-            sessions: HashMap::new(),
-            entity_to_addr: HashMap::new(),
+            entities: BTreeMap::new(),
+            sessions: BTreeMap::new(),
+            entity_to_addr: BTreeMap::new(),
             tick_rate,
             client_timeout_secs,
             next_entity_id: 1,
@@ -68,7 +69,7 @@ impl Instance {
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let (Some(dir), Some(entity)) = (move_intent.direction, self.entities.get_mut(&entity_id)) {
-                    entity.velocity = Vector2 { x: dir.x, y: dir.y };
+                    entity.velocity = DeterministicVector2::from_f32(dir.x, dir.y);
                 }
             }
 
@@ -151,17 +152,10 @@ impl Instance {
         }
     }
 
-    /// Advance physics and sweep for timed-out sessions
+    /// Advance physics using deterministic fixed-point addition and sweep for timed-out sessions
     pub fn tick(&mut self, tick_count: u64) {
-        // [2026-08-08] NOTE: The position calculation currently performs a simple additive step (position += velocity)
-        // assuming velocity is given in units per tick.
-        // FUTURE ADJUSTMENT REQUIRED: In Phase 4 (Deterministic Replay) and Phase 6 (Physics & Collisions),
-        // this calculation will need to be upgraded to use fixed-point arithmetic (to prevent floating-point drift)
-        // and incorporate explicit delta_time scaling (units/second * dt) or fixed-step integration
-        // so that simulation speed remains constant regardless of tick_rate changes.
         for entity in self.entities.values_mut() {
-            entity.position.x += entity.velocity.x;
-            entity.position.y += entity.velocity.y;
+            entity.position += entity.velocity;
         }
 
         // Check for timed out clients
@@ -215,8 +209,8 @@ impl Instance {
             EntityState {
                 id: e.id,
                 name: e.name.clone(),
-                position: Some(e.position),
-                velocity: Some(e.velocity),
+                position: Some(e.position.to_proto()),
+                velocity: Some(e.velocity.to_proto()),
                 entity_type: match e.entity_type {
                     EntityType::Player => ProtoEntityType::Player as i32,
                     EntityType::NPC => ProtoEntityType::Npc as i32,
@@ -275,8 +269,7 @@ mod tests {
 
         let entity = instance.get_entity(entity_id).expect("Entity should exist");
         assert_eq!(entity.name, "Alice");
-        assert_eq!(entity.position.x, 0.0);
-        assert_eq!(entity.position.y, 0.0);
+        assert_eq!(entity.position, DeterministicVector2::ZERO);
 
         // 2. Move Intent
         let move_intent = ClientIntent {
@@ -287,15 +280,13 @@ mod tests {
         instance.apply_intent(addr, move_intent);
 
         let entity = instance.get_entity(entity_id).unwrap();
-        assert_eq!(entity.velocity.x, 2.5);
-        assert_eq!(entity.velocity.y, -1.0);
+        assert_eq!(entity.velocity.to_f32(), (2.5, -1.0));
 
         // 3. Tick
         instance.tick(1);
 
         let updated_entity = instance.get_entity(entity_id).unwrap();
-        assert_eq!(updated_entity.position.x, 2.5);
-        assert_eq!(updated_entity.position.y, -1.0);
+        assert_eq!(updated_entity.position.to_f32(), (2.5, -1.0));
     }
 
     #[test]
