@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceito — **Adiado para a Fase 4**
+Aceito (Ativo na Fase 4)
 
 ## Contexto
 

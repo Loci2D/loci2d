@@ -2,7 +2,7 @@
 
 > **Status:** Ready to Implement  
 > **Roadmap Phase:** Phase 4 — Event Logging & Deterministic Replay System  
-> **Reference ADRs:** [ADR-0001](../adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](../adr/en/0002-instance-based-architecture.md) · [ADR-0003](../adr/en/0003-2d-map-only.md) · [ADR-0005](../adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0008](../adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0009](../adr/en/0009-simplified-authentication-and-auto-join-strategy.md)
+> **Reference ADRs:** [ADR-0001](../adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](../adr/en/0002-instance-based-architecture.md) · [ADR-0003](../adr/en/0003-2d-map-only.md) · [ADR-0005](../adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0008](../adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0009](../adr/en/0009-simplified-authentication-and-auto-join-strategy.md) · [ADR-0010](../adr/en/0010-event-sourced-replay-format.md) · [ADR-0011](../adr/en/0011-authoritative-spectator-replay-broadcasting.md)
 
 ---
 
@@ -64,6 +64,7 @@ flowchart TD
 Floating-point math is replaced in the simulation domain by fixed-point numbers via the `fixed` crate (`fixed = "1.28"`).
 - We use `fixed::types::I16F16` (16 bits integer part: range -32,768 to +32,767; 16 bits fractional part: precision $\approx 0.000015$ units / 65,536 sub-steps per unit).
 - Pure integer arithmetic operations guarantee identical results across x86_64, ARM64 NEON, and WASM.
+- **Coordinate Boundary & Overflow Policy**: Map coordinates are constrained within `[-32,768, +32,767]` units (exceeding typical 2D arena dimensions). For numerical safety, `DeterministicVector2` provides saturating arithmetic (`saturating_add`, `saturating_sub`) to prevent integer overflow panics.
 
 ```rust
 use fixed::types::I16F16;
@@ -101,6 +102,14 @@ impl DeterministicVector2 {
     /// Calculates Manhattan distance using pure integer fixed-point math.
     pub fn manhattan_distance(self, other: Self) -> I16F16 {
         (self.x - other.x).abs() + (self.y - other.y).abs()
+    }
+
+    /// Saturating addition to prevent integer overflow at extreme map coordinates.
+    pub fn saturating_add(self, rhs: Self) -> Self {
+        Self {
+            x: self.x.saturating_add(rhs.x),
+            y: self.y.saturating_add(rhs.y),
+        }
     }
 }
 
@@ -216,7 +225,7 @@ impl GameLoop {
 ### Milestone 4.2: Event Sourcing & Protobuf Replay Serialization
 
 #### 1. Replay Schema (`proto/replay.proto`)
-Formalize the replay format using Protocol Buffers v3 ([ADR-0005](../adr/en/0005-cross-language-binary-serialization.md)):
+Formalize the replay format using Protocol Buffers v3 ([ADR-0005](../adr/en/0005-cross-language-binary-serialization.md), [ADR-0010](../adr/en/0010-event-sourced-replay-format.md)):
 
 ```protobuf
 syntax = "proto3";
@@ -232,14 +241,14 @@ message ReplayHeader {
   uint32 tick_rate = 3;         // Server tick rate (e.g. 30 Hz)
   uint64 start_timestamp = 4;   // Unix timestamp (ms) when match started
   uint64 instance_id = 5;       // Instance ID
-  uint64 random_seed = 6;       // Deterministic PRNG seed
+  uint64 random_seed = 6;       // Deterministic PRNG seed (used to initialize Instance RNG)
   string map_name = 7;          // Map / configuration identifier
 }
 
 // Single logged intent event stamped by entity_id
 message ReplayIntentEntry {
   uint64 entity_id = 1;
-  string player_name = 2;       // Preserved for joins
+  string player_name = 2;       // Populated on join events; empty string uses 0 bytes on wire in Proto3
   ClientIntent intent = 3;      // Concrete action (Move, Action, Join, Disconnect)
 }
 
@@ -264,7 +273,20 @@ message ReplayFile {
 }
 ```
 
-#### 2. Replay Recording Flow (Game Loop Integration)
+> [!NOTE]
+> **Wire Efficiency of `player_name`:** In Proto3, string fields with default values (empty string `""`) are completely omitted on the wire. Storing `player_name` in `ReplayIntentEntry` incurs ~10–20 bytes only once on the `JoinIntent` frame, and **0 bytes overhead** on all subsequent movement and action frames.
+
+#### 2. Replay File Storage Estimates
+Event sourcing drastically reduces storage overhead compared to full snapshot streaming:
+
+| Match Profile | Tick Rate | Duration & Frames | Event Sourcing File Size (`.loci`) | Full Snapshot Size Equivalent |
+|---|---|---|---|---|
+| **1 Player (Solo Walkthrough)** | 30 Hz | 1 min (1,800 ticks) | **~36 KB** | ~1.8 MB |
+| **10 Players (LAN Match)** | 30 Hz | 5 min (9,000 ticks) | **~350 KB** | ~18 MB |
+| **20 Players (Benchmark Match)** | 30 Hz | 10 min (18,000 ticks) | **~1.2 MB** | ~72 MB |
+| **Checkpoint Overhead** | 30 Hz | Checkpoint every 60 ticks (2.0s) | **~40 bytes / checkpoint** (~6.6 KB per 10k ticks) | N/A |
+
+#### 3. Replay Recording Flow (Game Loop Integration)
 Logging occurs **inside the Game Loop thread** at the beginning of each tick step. This decouples event logging from the non-deterministic arrival timing of the network thread ([ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md)).
 
 ```
@@ -281,7 +303,7 @@ Live Play with Event Sourcing:
                ▼                                                               ▼
   1. Drain intents for Tick N                                    2. Record to ReplayRecorder
      - Translate SocketAddr ──► entity_id                           - Stamp (Tick N, entity_id, intent)
-     - Apply to Instance entities                                   - Checkpoint SHA-256 every K ticks
+     - Apply to Instance entities                                   - Checkpoint SHA-256 every 60 ticks
                │                                                               │
                ▼                                                               ▼
   3. Advance Instance::tick(N)                                    4. Flush to match.loci file
@@ -291,6 +313,8 @@ Live Play with Event Sourcing:
 ```
 
 ```rust
+pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = 60; // 2.0 seconds at 30 Hz
+
 pub struct ReplayRecorder {
     header: ReplayHeader,
     frames: Vec<ReplayTickFrame>,
@@ -315,7 +339,11 @@ impl ReplayRecorder {
             },
             frames: Vec::new(),
             checkpoints: Vec::new(),
-            checkpoint_interval_ticks: checkpoint_interval,
+            checkpoint_interval_ticks: if checkpoint_interval == 0 {
+                DEFAULT_CHECKPOINT_INTERVAL_TICKS
+            } else {
+                checkpoint_interval
+            },
         }
     }
 
@@ -386,10 +414,20 @@ pub fn compute_canonical_state_hash(instance: &Instance, tick: u64) -> [u8; 32] 
 }
 ```
 
-#### 2. Replay Player Execution Engine (`src/replay/player.rs`)
-The replay player loads the `.loci` file, constructs a fresh `Instance`, and feeds input frames directly into `instance.apply_replay_intent()` without requiring network sockets:
+#### 2. Replay Player & Rich Desync Diagnostics (`src/replay/player.rs`)
+The replay player validates header magic bytes (`LOCI_REPLAY`) and format version (`version == 1`), constructs a fresh `Instance`, and feeds input frames directly into `instance.apply_replay_intent()`:
 
 ```rust
+#[derive(Debug)]
+pub struct DesyncReport {
+    pub tick: u64,
+    pub expected_hash: String,
+    pub actual_hash: String,
+    pub expected_entities: u32,
+    pub actual_entities: usize,
+    pub entity_summary: Vec<String>,
+}
+
 pub struct ReplayPlayer {
     replay: ReplayFile,
     current_frame_idx: usize,
@@ -399,18 +437,27 @@ impl ReplayPlayer {
     pub fn load_from_file(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let bytes = std::fs::read(path)?;
         let replay = ReplayFile::decode(&bytes[..])?;
+        
+        let header = replay.header.as_ref().ok_or("Missing replay header")?;
+        if header.magic != "LOCI_REPLAY" {
+            return Err(format!("Invalid magic bytes: '{}', expected 'LOCI_REPLAY'", header.magic).into());
+        }
+        if header.version != 1 {
+            return Err(format!("Unsupported replay version: {}, expected 1", header.version).into());
+        }
+
         Ok(Self { replay, current_frame_idx: 0 })
     }
 
     /// Runs headless verification against recorded state checksums as fast as possible.
-    pub fn verify_determinism(&mut self) -> Result<VerificationReport, DesyncError> {
-        let header = self.replay.header.as_ref().ok_or("Missing header")?;
+    pub fn verify_determinism(&mut self) -> Result<VerificationReport, DesyncReport> {
+        let header = self.replay.header.as_ref().unwrap();
         let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
         let total_ticks = self.replay.frames.last().map(|f| f.tick).unwrap_or(0);
         
-        let checkpoints_by_tick: std::collections::BTreeMap<u64, &[u8]> = self.replay.checkpoints
+        let checkpoints_by_tick: std::collections::BTreeMap<u64, &ReplayCheckpoint> = self.replay.checkpoints
             .iter()
-            .map(|c| (c.tick, c.state_sha256.as_slice()))
+            .map(|c| (c.tick, c))
             .collect();
 
         for tick in 0..=total_ticks {
@@ -424,14 +471,21 @@ impl ReplayPlayer {
             instance.tick(tick);
 
             // If checkpoint exists on this tick, assert bit-exact hash match
-            if let Some(&expected_hash) = checkpoints_by_tick.get(&tick) {
+            if let Some(checkpoint) = checkpoints_by_tick.get(&tick) {
                 let actual_hash = compute_canonical_state_hash(&instance, tick);
-                if actual_hash != expected_hash {
-                    return Err(DesyncError {
+                if actual_hash.as_slice() != checkpoint.state_sha256.as_slice() {
+                    let entity_summary = instance.entities.values().map(|e| {
+                        format!("Entity {} ('{}') @ ({}, {}) vel=({}, {})",
+                            e.id, e.name, e.position.x, e.position.y, e.velocity.x, e.velocity.y)
+                    }).collect();
+
+                    return Err(DesyncReport {
                         tick,
-                        expected_hash: hex::encode(expected_hash),
+                        expected_hash: hex::encode(&checkpoint.state_sha256),
                         actual_hash: hex::encode(actual_hash),
-                        active_entities: instance.entities.len(),
+                        expected_entities: checkpoint.active_entities,
+                        actual_entities: instance.entities.len(),
+                        entity_summary,
                     });
                 }
             }
@@ -440,7 +494,7 @@ impl ReplayPlayer {
         Ok(VerificationReport {
             total_ticks,
             verified_checkpoints: checkpoints_by_tick.len(),
-            final_hash: compute_canonical_state_hash(&instance, total_ticks),
+            final_hash: hex::encode(compute_canonical_state_hash(&instance, total_ticks)),
         })
     }
 }
@@ -451,7 +505,7 @@ impl ReplayPlayer {
 ### Milestone 4.4: Live Spectator Broadcast & Multi-Client Playback
 
 #### 1. Live Spectator Broadcast Mode
-The server runs the replay file in real-time (or at variable speed) and broadcasts standard `WorldState` snapshots over UDP to all connected spectator clients.
+The server runs the replay file in real-time (or at variable speed) and broadcasts standard `WorldState` snapshots over UDP to all connected spectator clients ([ADR-0011](../adr/en/0011-authoritative-spectator-replay-broadcasting.md)).
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -474,19 +528,27 @@ The server runs the replay file in real-time (or at variable speed) and broadcas
                         └────────────────────┴───────────────────┴───────────────┘
 ```
 
-#### 2. CLI Interface & Flags
+#### 2. Spectator Connection Lifecycle
+- **Connection Registration**: When a client (e.g. Love2D, Godot, Python) sends a UDP packet to the replay server (`JoinIntent` or `PingIntent`), the server registers the client's `SocketAddr` in its spectator broadcast map.
+- **Read-Only Observer**: Unlike live play, the spectator is **not spawned as an entity in the replaying `Instance`**. The simulation state reflects only the original recorded match participants.
+- **Inactivity Sweeping**: Spectator sessions that stop sending heartbeats for longer than `client_timeout_secs` (10s) are swept from the broadcast list to prevent sending UDP packets to dead sockets.
+
+#### 3. CLI Interface & Flags
 
 ```bash
 # 1. Normal Server Run with Live Match Recording
 cargo run --bin loci2d -- --record match_01.loci
 
-# 2. Headless Determinism Verification (Fastest Execution, CI-Ready)
+# 2. Custom Checkpoint Interval during Recording (e.g. every 120 ticks)
+cargo run --bin loci2d -- --record match_01.loci --checkpoint-interval 120
+
+# 3. Headless Determinism Verification (Fastest Execution, CI-Ready)
 cargo run --bin loci2d -- --replay match_01.loci --verify
 
-# 3. Real-Time Replay Spectator Server (Broadcasts to all clients)
+# 4. Real-Time Replay Spectator Server (Broadcasts to all clients)
 cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:4000 --speed 1.0
 
-# 4. Fast-Forward Replay Broadcast (2x or 4x speed)
+# 5. Fast-Forward Replay Broadcast (2x or 4x speed)
 cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:4000 --speed 2.0
 ```
 
@@ -512,13 +574,13 @@ clap = { version = "4.5", features = ["derive"] }
 ---
 
 ### 3.2 `proto/game_packets.proto` & `proto/replay.proto`
-1. Extend `proto/game_packets.proto` or add `proto/replay.proto` containing `ReplayHeader`, `ReplayIntentEntry`, `ReplayTickFrame`, `ReplayCheckpoint`, and `ReplayFile`.
-2. Update `build.rs` to compile all `.proto` schemas during build.
+1. Create `proto/replay.proto` containing `ReplayHeader`, `ReplayIntentEntry`, `ReplayTickFrame`, `ReplayCheckpoint`, and `ReplayFile`.
+2. Update `build.rs` to compile `proto/replay.proto` and `proto/game_packets.proto` during build.
 
 ---
 
 ### 3.3 `src/world/fixed_point.rs` — New Module `[NEW]`
-Implement `DeterministicVector2` with pure integer fixed-point arithmetic (`I16F16`), vector addition, subtraction, scalar multiplication, distance calculations, and conversion methods to/from `f32`.
+Implement `DeterministicVector2` with pure integer fixed-point arithmetic (`I16F16`), vector addition, subtraction, scalar multiplication, distance calculations, saturating bounds clamping, and conversion methods to/from `f32`.
 
 ---
 
@@ -590,6 +652,7 @@ Create the replay subsystem directory `src/replay/`:
 ### 3.8 `src/main.rs` & CLI Subcommands
 Support CLI flags via `clap`:
 - `--record <file>`: Enables live match recording.
+- `--checkpoint-interval <ticks>`: Custom checkpoint frequency (default: 60 ticks).
 - `--replay <file>`: Enables replay playback mode.
 - `--verify`: Runs headless replay verification.
 - `--broadcast <addr>`: Binds spectator UDP socket to broadcast replay snapshots.
@@ -608,6 +671,8 @@ Support CLI flags via `clap`:
 | **Thread Decoupling** | [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md) | Event logging occurs at fixed tick boundaries in the Game Loop after draining `mpsc`, isolating network jitter. |
 | **Fixed-Point Arithmetic** | [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) | Simulation uses `I16F16` integer ALU math and `BTreeMap` sorting for 100% bit-exact determinism. |
 | **Session Lifecycle Decoupling** | [ADR-0008](../adr/en/0008-session-lifecycle-and-client-identity.md), [ADR-0009](../adr/en/0009-simplified-authentication-and-auto-join-strategy.md) | Replay logs stamp events with `entity_id` and client slots, removing reliance on ephemeral `SocketAddr`s. |
+| **Event-Sourced Replay Format** | [ADR-0010](../adr/en/0010-event-sourced-replay-format.md) | Match history stored in `.loci` container with SHA-256 state hash checkpoints every 60 ticks. |
+| **Spectator Broadcasting** | [ADR-0011](../adr/en/0011-authoritative-spectator-replay-broadcasting.md) | Server streams authoritative `WorldState` snapshots over UDP to spectators with speed controls. |
 
 ---
 
@@ -615,7 +680,7 @@ Support CLI flags via `clap`:
 
 ### Milestone 4.1: Deterministic Engine Core & Fixed-Point Refactoring
 - [ ] **`Cargo.toml`** — Add `fixed = { version = "1.28", features = ["serde"] }` and `sha2 = "0.10"`.
-- [ ] **`src/world/fixed_point.rs`** — Implement `DeterministicVector2` (`I16F16`) with unit tests for math operations.
+- [ ] **`src/world/fixed_point.rs`** — Implement `DeterministicVector2` (`I16F16`) with unit tests for math operations and saturating arithmetic.
 - [ ] **`src/world/entity.rs`** — Update `Entity` fields (`position`, `velocity`) to `DeterministicVector2`.
 - [ ] **`src/world/instance.rs`** — Migrate all `HashMap` collections to `BTreeMap`.
 - [ ] **`src/world/instance.rs`** — Add input quantization in `apply_intent` and float conversion in `create_snapshot`.
@@ -628,12 +693,12 @@ Support CLI flags via `clap`:
 
 ### Milestone 4.3: Headless Replay Engine & Hash Verification Tooling
 - [ ] **`src/replay/hash.rs`** — Implement canonical `compute_canonical_state_hash` using SHA-256.
-- [ ] **`src/replay/player.rs`** — Implement `ReplayPlayer` to drive `Instance` directly from replay frames.
-- [ ] **`src/main.rs`** — Implement CLI flags (`--replay`, `--verify`, `--speed`, `--broadcast`).
+- [ ] **`src/replay/player.rs`** — Implement `ReplayPlayer` with magic header verification and rich `DesyncReport` diagnostics.
+- [ ] **`src/main.rs`** — Implement CLI flags (`--replay`, `--verify`, `--speed`, `--broadcast`, `--checkpoint-interval`).
 - [ ] **Automated Tests (`tests/replay_determinism_test.rs`)** — Cross-platform deterministic test asserting bit-exact checksums on 1,000+ tick recordings across test runs.
 
 ### Milestone 4.4: Live Spectator Broadcast & Multi-Client Playback
-- [ ] **`src/replay/player.rs`** — Implement live spectator broadcast loop streaming `WorldState` snapshots over UDP.
+- [ ] **`src/replay/player.rs`** — Implement live spectator broadcast loop streaming `WorldState` snapshots over UDP with observer session tracking.
 - [ ] **Multi-Client Verification** — Verify replay playback visually in Love2D, Godot, Python, and CLI client examples.
 - [ ] **Documentation** — Update `docs/roadmap.md` and `README.md` with replay commands and usage examples.
 
@@ -650,10 +715,12 @@ Phase 4 is considered complete when:
      - macOS ARM64 (Apple Silicon)
      - Windows x86_64
    - Assert that all checkpoints and final SHA-256 hashes match with **0 desync errors**.
-2. **Multi-Client Spectator Replay Playback**:
+2. **Performance Benchmark**:
+   - `Instance::tick()` with 100 active entities in `BTreeMap` executes in **$< 100 \ \mu\text{s}$** (consuming $< 0.3\%$ of the 33.3 ms tick budget).
+3. **Multi-Client Spectator Replay Playback**:
    - Start replay server: `cargo run --bin loci2d -- --replay benchmark.loci --broadcast 127.0.0.1:4000 --speed 1.0`.
    - Open Love2D client (`cd examples/love2d && love .`) or Godot client.
    - Client seamlessly renders the recorded match with exact entity movements and player name tags.
-3. **Clean Code & Test Suite**:
+4. **Clean Code & Test Suite**:
    - `cargo clippy --all-targets` passes with zero warnings.
    - `cargo test --all-targets` passes 100% of unit and integration tests.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — **Deferred to Phase 4**
+Accepted (Active in Phase 4)
 
 ## Context
 
