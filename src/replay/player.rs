@@ -174,9 +174,10 @@ impl ReplayPlayer {
         socket: Arc<UdpSocket>,
         intent_rx: mpsc::Receiver<(SocketAddr, ClientIntent)>,
         speed: f32,
+        max_spectators: usize,
         running: Arc<AtomicBool>,
     ) {
-        const MAX_SPECTATORS: usize = 128; //Should we add this to the .env?
+        let max_spectators = if max_spectators == 0 { 128 } else { max_spectators };
         const TERMINAL_FRAME_RETRIES: usize = 3;
         const TERMINAL_FRAME_DELAY_MS: u64 = 15;
 
@@ -233,13 +234,13 @@ impl ReplayPlayer {
                     let now = Instant::now();
                     if spectators.contains_key(&addr) {
                         spectators.insert(addr, now);
-                    } else if spectators.len() < MAX_SPECTATORS {
+                    } else if spectators.len() < max_spectators {
                         spectators.insert(addr, now);
                         println!("[Spectator] New spectator client registered: {} ({}/{} active)", 
-                            addr, spectators.len(), MAX_SPECTATORS);
+                            addr, spectators.len(), max_spectators);
                     } else {
                         println!("[Spectator] Rejected spectator client {}: maximum capacity ({} spectators) reached", 
-                            addr, MAX_SPECTATORS);
+                            addr, max_spectators);
                     }
 
                     if let Some(client_intent::Intent::Disconnect(_)) = intent.intent {

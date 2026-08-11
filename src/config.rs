@@ -4,6 +4,7 @@ pub struct ServerConfig {
     pub bind_addr: String,
     pub tick_rate: u32,
     pub client_timeout_secs: u64,
+    pub max_spectators: usize,
 }
 
 impl ServerConfig {
@@ -22,6 +23,10 @@ impl ServerConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
+            max_spectators: std::env::var("MAX_SPECTATORS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(128),
         }
     }
 }

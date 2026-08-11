@@ -100,7 +100,7 @@ fn test_live_spectator_replay_broadcasting() {
 
     const TEST_REPLAY_SPEED: f32 = 2.0;
     let player_handle = thread::spawn(move || {
-        player.broadcast_live(socket, intent_rx, TEST_REPLAY_SPEED, running_clone);
+        player.broadcast_live(socket, intent_rx, TEST_REPLAY_SPEED, 128, running_clone);
     });
 
     // 3. Connect Spectator 1 (Godot-like) sending JoinIntent

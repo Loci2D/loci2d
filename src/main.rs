@@ -243,7 +243,7 @@ fn main() {
             spawn_console_listener(Arc::clone(&running));
 
             println!("[Spectator] Type 'stop' or 'quit' (or press Ctrl+C) to shut down the spectator server.\n");
-            player.broadcast_live(socket, intent_rx, replay_speed, running);
+            player.broadcast_live(socket, intent_rx, replay_speed, cfg.max_spectators, running);
             println!("[Spectator] Replay broadcast completed.");
             process::exit(0);
         }
