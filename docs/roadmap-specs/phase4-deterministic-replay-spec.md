@@ -687,9 +687,9 @@ Support CLI flags via `clap`:
 - [x] **`src/game_loop/tick.rs`** — Upgrade to Sub-Millisecond Fixed-Timestep Accumulator loop.
 
 ### Milestone 4.2: Event Sourcing & Protobuf Replay Serialization
-- [ ] **`proto/replay.proto`** — Formalize `ReplayHeader`, `ReplayIntentEntry`, `ReplayTickFrame`, `ReplayCheckpoint`, `ReplayFile`.
-- [ ] **`src/replay/recorder.rs`** — Implement `ReplayRecorder` to capture tick inputs and serialize `.loci` files.
-- [ ] **`src/game_loop/tick.rs`** — Hook `ReplayRecorder` into `GameLoop` for live match recording (`--record`).
+- [x] **`proto/replay.proto`** — Formalize `ReplayHeader`, `ReplayIntentEntry`, `ReplayTickFrame`, `ReplayCheckpoint`, `ReplayFile`.
+- [x] **`src/replay/recorder.rs`** — Implement `ReplayRecorder` to capture tick inputs and serialize `.loci` files.
+- [x] **`src/game_loop/tick.rs`** — Hook `ReplayRecorder` into `GameLoop` for live match recording (`--record`).
 
 ### Milestone 4.3: Headless Replay Engine & Hash Verification Tooling
 - [ ] **`src/replay/hash.rs`** — Implement canonical `compute_canonical_state_hash` using SHA-256.

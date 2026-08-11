@@ -4,6 +4,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe {
         std::env::set_var("PROTOC", protoc_path);
     }
-    prost_build::compile_protos(&["proto/game_packets.proto"], &["proto/"])?;
+    prost_build::compile_protos(
+        &["proto/game_packets.proto", "proto/replay.proto"],
+        &["proto/"],
+    )?;
     Ok(())
 }

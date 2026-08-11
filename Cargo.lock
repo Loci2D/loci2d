@@ -336,7 +336,7 @@ checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
 name = "loci2d"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "chrono",
  "dotenvy",
@@ -346,6 +346,7 @@ dependencies = [
  "protoc-bin-vendored",
  "serde",
  "sha2",
+ "tempfile",
 ]
 
 [[package]]

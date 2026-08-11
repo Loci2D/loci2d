@@ -5,11 +5,14 @@ use std::time::{Duration, Instant};
 use std::thread;
 use prost::Message;
 use crate::network::packets::{ClientIntent, ServerPacket, server_packet};
+use crate::replay::ReplayRecorder;
 use crate::world::instance::Instance;
 
 pub struct GameLoop {
     tick_rate: u32,
     running: bool,
+    recorder: Option<ReplayRecorder>,
+    record_path: Option<String>,
 }
 
 impl GameLoop {
@@ -17,7 +20,20 @@ impl GameLoop {
         Self {
             tick_rate,
             running: false,
+            recorder: None,
+            record_path: None,
         }
+    }
+
+    /// Enables match recording to an event-sourced `.loci` replay file.
+    pub fn enable_recording(&mut self, instance_id: u64, seed: u64, checkpoint_interval: u64, file_path: String) {
+        self.recorder = Some(ReplayRecorder::new(instance_id, self.tick_rate, seed, checkpoint_interval));
+        self.record_path = Some(file_path);
+    }
+
+    /// Returns a reference to the active replay recorder, if recording is enabled.
+    pub fn recorder(&self) -> Option<&ReplayRecorder> {
+        self.recorder.as_ref()
     }
 
     #[allow(clippy::while_immutable_condition)]
@@ -43,25 +59,40 @@ impl GameLoop {
             accumulator = (accumulator + delta).min(max_accumulator);
 
             while accumulator >= tick_duration {
+                let mut tick_entries = Vec::new();
+
                 // 1. Drain the intent queue (non-blocking) for this fixed tick
                 while let Ok((addr, intent)) = intent_rx.try_recv() {
-                    instance.apply_intent(addr, intent);
+                    if let Some(entry) = instance.apply_intent(addr, intent)
+                        && self.recorder.is_some()
+                    {
+                        tick_entries.push(entry);
+                    }
                 }
 
-                // 2. Advance deterministic simulation physics & sweep timeouts
+                // 2. Record tick inputs if recording is enabled
+                if let Some(ref mut recorder) = self.recorder {
+                    recorder.record_tick(tick_count, tick_entries);
+                }
+
+                // 3. Advance deterministic simulation physics & sweep timeouts
                 instance.tick(tick_count);
 
-                // 3. Generate WorldState snapshot
+                // 4. Record state checkpoint if on checkpoint interval
+                if let Some(ref mut recorder) = self.recorder {
+                    recorder.maybe_record_checkpoint(tick_count, &instance);
+                }
+
+                // 5. Generate WorldState snapshot
                 let world_state = instance.create_snapshot(tick_count);
                 let packet = ServerPacket {
                     sequence_id: tick_count,
                     payload: Some(server_packet::Payload::WorldState(world_state)),
                 };
 
-                // 4. Encode packet
+                // 6. Encode packet and broadcast
                 out_buf.clear();
                 if let Ok(()) = packet.encode(&mut out_buf) {
-                    // 5. Broadcast to all active sessions
                     for client_addr in instance.get_broadcast_addresses() {
                         let _ = socket.send_to(&out_buf, client_addr);
                     }
@@ -73,6 +104,16 @@ impl GameLoop {
 
             // Sleep briefly to yield CPU time without missing sub-ms tick boundaries
             thread::sleep(Duration::from_micros(500));
+        }
+
+        // Flush recorded replay file on shutdown
+        if let (Some(recorder), Some(path)) = (&self.recorder, &self.record_path) {
+            if let Err(e) = recorder.save_to_file(path) {
+                eprintln!("[Replay] Failed to save replay file '{}': {}", path, e);
+            } else {
+                println!("[Replay] Successfully saved replay file '{}' ({} frames, {} checkpoints)", 
+                    path, recorder.frame_count(), recorder.checkpoint_count());
+            }
         }
     }
 

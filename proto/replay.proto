@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package loci2d;
+
+import "game_packets.proto";
+
+// Match recording metadata header
+message ReplayHeader {
+  string magic = 1;             // "LOCI_REPLAY"
+  uint32 version = 2;           // Replay format version (e.g. 1)
+  uint32 tick_rate = 3;         // Server tick rate (e.g. 30 Hz)
+  uint64 start_timestamp = 4;   // Unix timestamp (ms) when match started
+  uint64 instance_id = 5;       // Instance ID
+  uint64 random_seed = 6;       // Deterministic PRNG seed (used to initialize Instance RNG)
+  string map_name = 7;          // Map / configuration identifier
+}
+
+// Single logged intent event stamped by entity_id
+message ReplayIntentEntry {
+  uint64 entity_id = 1;
+  string player_name = 2;       // Populated on join events; empty string uses 0 bytes on wire in Proto3
+  ClientIntent intent = 3;      // Concrete action (Move, Action, Join, Disconnect)
+}
+
+// All inputs executed on a single fixed tick
+message ReplayTickFrame {
+  uint64 tick = 1;
+  repeated ReplayIntentEntry entries = 2;
+}
+
+// Periodic state checksum checkpoint for desync detection
+message ReplayCheckpoint {
+  uint64 tick = 1;
+  bytes state_sha256 = 2;       // 32-byte SHA-256 digest of canonical WorldState
+  uint32 active_entities = 3;
+}
+
+// Complete Replay Container
+message ReplayFile {
+  ReplayHeader header = 1;
+  repeated ReplayTickFrame frames = 2;
+  repeated ReplayCheckpoint checkpoints = 3;
+}

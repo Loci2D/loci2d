@@ -93,11 +93,11 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 
 #### English
 
-* [ ] **Deterministic Engine Core & Fixed-Point Refactoring**:
+* [x] **Deterministic Engine Core & Fixed-Point Refactoring**:
   - Replace `f32` physics simulation with fixed-point math (`I16F16`) to guarantee cross-CPU/OS arithmetic determinism.
   - Convert entity/session storage to strictly ordered collections (`BTreeMap`).
   - Upgrade game loop to a sub-millisecond Fixed-Timestep Accumulator.
-* [ ] **Event Sourcing Architecture & Replay Serialization**:
+* [x] **Event Sourcing Architecture & Replay Serialization**:
   - Log all incoming client intents sequentially at fixed tick boundaries into `.loci` Protobuf replay files.
   - Implement periodic canonical `WorldState` SHA-256 checkpoints for desync detection.
 * [ ] **Headless Replay & Desync Verification Tooling**:
@@ -106,11 +106,11 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Stream replay snapshots over UDP at real-time tick rates (with speed controls: 0.5x, 1x, 2x, 4x) to existing client engines (Godot, Love2D, Python, CLI) with zero client modifications.
 
 #### Português
-* [ ] **Núcleo de Motor Determinístico & Refatoração de Ponto Fixo**:
+* [x] **Núcleo de Motor Determinístico & Refatoração de Ponto Fixo**:
   - Substituir a simulação física em `f32` por matemática de ponto fixo (`I16F16`) para garantir determinismo aritmético entre CPUs/SO.
   - Converter coleções de entidades/sessões para coleções estritamente ordenadas (`BTreeMap`).
   - Atualizar o game loop para um Acumulador de Timestep Fixo com precisão sub-milissegundo.
-* [ ] **Arquitetura de Event Sourcing & Serialização de Replay**:
+* [x] **Arquitetura de Event Sourcing & Serialização de Replay**:
   - Registrar sequencialmente todas as intenções de clientes nos limites de tick fixos em arquivos de replay Protobuf `.loci`.
   - Implementar checkpoints periódicos de hash SHA-256 do `WorldState` canônico para detecção de dessincronização.
 * [ ] **Replay Headless & Ferramental de Verificação de Dessincronização**:

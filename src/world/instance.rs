@@ -4,7 +4,9 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use super::entity::{Entity, EntityType};
 use super::session::{ClientSession, SessionState};
-use crate::network::packets::{ClientIntent, EntityState, WorldState, EntityType as ProtoEntityType};
+use crate::network::packets::{
+    ClientIntent, EntityState, ReplayIntentEntry, WorldState, EntityType as ProtoEntityType,
+};
 
 // Re-export Vector2 from network and DeterministicVector2 from fixed_point
 pub use crate::network::packets::Vector2;
@@ -38,11 +40,11 @@ impl Instance {
         }
     }
 
-    /// Handles an incoming client intent.
-    pub fn apply_intent(&mut self, addr: SocketAddr, intent: ClientIntent) {
+    /// Handles an incoming client intent and returns an optional replay entry for match logging.
+    pub fn apply_intent(&mut self, addr: SocketAddr, intent: ClientIntent) -> Option<ReplayIntentEntry> {
         use crate::network::packets::client_intent::Intent;
 
-        let Some(inner_intent) = intent.intent else { return; };
+        let inner_intent = intent.intent.as_ref()?;
 
         match inner_intent {
             // 1. Explicit Join Handshake
@@ -50,63 +52,82 @@ impl Instance {
                 let player_name = if join_intent.player_name.trim().is_empty() {
                     format!("Player_{}", self.next_entity_id)
                 } else {
-                    join_intent.player_name
+                    join_intent.player_name.clone()
                 };
-                self.handle_join(addr, player_name);
+                let entity_id = self.handle_join(addr, player_name.clone());
+                Some(ReplayIntentEntry {
+                    entity_id,
+                    player_name,
+                    intent: Some(intent),
+                })
             }
 
             // 2. Explicit Disconnect
             Intent::Disconnect(disconnect_intent) => {
+                let session = self.sessions.get(&addr)?;
+                let entity_id = session.entity_id;
+                let player_name = session.player_name.clone();
                 self.handle_disconnect(addr, &disconnect_intent.reason);
+                Some(ReplayIntentEntry {
+                    entity_id,
+                    player_name,
+                    intent: Some(intent),
+                })
             }
 
             // 3. Movement Intent (requires active session)
             Intent::Move(move_intent) => {
-                let Some(session) = self.sessions.get_mut(&addr) else {
-                    println!("[Drop] Ignoring MoveIntent from unjoined client: {}", addr);
-                    return;
-                };
+                let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let (Some(dir), Some(entity)) = (move_intent.direction, self.entities.get_mut(&entity_id)) {
                     entity.velocity = DeterministicVector2::from_f32(dir.x, dir.y);
                 }
+                Some(ReplayIntentEntry {
+                    entity_id,
+                    player_name: String::new(),
+                    intent: Some(intent),
+                })
             }
 
             // 4. Target Movement Intent (Phase 6 click-to-move reserved)
             Intent::MoveToPos(move_to_pos_intent) => {
-                let Some(session) = self.sessions.get_mut(&addr) else {
-                    println!("[Drop] Ignoring MoveToPositionIntent from unjoined client: {}", addr);
-                    return;
-                };
+                let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
+                let entity_id = session.entity_id;
                 if let Some(target) = move_to_pos_intent.target_position {
                     println!("[Intent] Entity {} ({}) requested move to target ({:.1}, {:.1})",
                         session.entity_id, session.player_name, target.x, target.y);
                 }
+                Some(ReplayIntentEntry {
+                    entity_id,
+                    player_name: String::new(),
+                    intent: Some(intent),
+                })
             }
 
             // 5. Action Intent (requires active session)
             Intent::Action(action_intent) => {
-                let Some(session) = self.sessions.get_mut(&addr) else {
-                    println!("[Drop] Ignoring ActionIntent from unjoined client: {}", addr);
-                    return;
-                };
+                let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let Some(entity) = self.entities.get_mut(&entity_id) {
                     println!("[Intent] Entity {} ({}) executed action {}", entity_id, entity.name, action_intent.ability_id);
                 }
+                Some(ReplayIntentEntry {
+                    entity_id,
+                    player_name: String::new(),
+                    intent: Some(intent),
+                })
             }
 
             // 6. Ping / Heartbeat Intent (requires active session)
             Intent::Ping(_) => {
-                let Some(session) = self.sessions.get_mut(&addr) else {
-                    println!("[Drop] Ignoring PingIntent from unjoined client: {}", addr);
-                    return;
-                };
+                let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
                 println!("[Intent] Entity {} ({}) sent ping", session.entity_id, session.player_name);
+                // Pings are heartbeats and do not mutate simulation state
+                None
             }
         }
     }
@@ -234,6 +255,40 @@ impl Instance {
     /// Returns a list of all active client destination addresses for broadcasting.
     pub fn get_broadcast_addresses(&self) -> Vec<SocketAddr> {
         self.sessions.keys().copied().collect()
+    }
+
+    /// Applies a recorded replay intent entry directly by entity_id without requiring network sockets.
+    pub fn apply_replay_entry(&mut self, entry: &ReplayIntentEntry) {
+        use crate::network::packets::client_intent::Intent;
+
+        let Some(ClientIntent { intent: Some(ref inner_intent) }) = entry.intent else { return; };
+
+        match inner_intent {
+            Intent::Join(join_intent) => {
+                let player_name = if join_intent.player_name.trim().is_empty() {
+                    entry.player_name.clone()
+                } else {
+                    join_intent.player_name.clone()
+                };
+                let entity = Entity::new(entry.entity_id, player_name, EntityType::Player);
+                self.entities.insert(entry.entity_id, entity);
+            }
+            Intent::Disconnect(_) => {
+                self.entities.remove(&entry.entity_id);
+            }
+            Intent::Move(move_intent) => {
+                if let (Some(dir), Some(entity)) = (move_intent.direction, self.entities.get_mut(&entry.entity_id)) {
+                    entity.velocity = DeterministicVector2::from_f32(dir.x, dir.y);
+                }
+            }
+            Intent::MoveToPos(_) => {}
+            Intent::Action(action_intent) => {
+                if let Some(entity) = self.entities.get_mut(&entry.entity_id) {
+                    println!("[Replay] Entity {} ({}) executed action {}", entry.entity_id, entity.name, action_intent.ability_id);
+                }
+            }
+            Intent::Ping(_) => {}
+        }
     }
 }
 
