@@ -100,7 +100,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 * [x] **Event Sourcing Architecture & Replay Serialization**:
   - Log all incoming client intents sequentially at fixed tick boundaries into `.loci` Protobuf replay files.
   - Implement periodic canonical `WorldState` SHA-256 checkpoints for desync detection.
-* [ ] **Headless Replay & Desync Verification Tooling**:
+* [x] **Headless Replay & Desync Verification Tooling**:
   - Add CLI execution mode to replay match files offline as fast as possible, asserting bit-exact checksum matches across Linux, macOS ARM64, and Windows.
 * [ ] **Live Spectator Broadcast & Multi-Client Playback**:
   - Stream replay snapshots over UDP at real-time tick rates (with speed controls: 0.5x, 1x, 2x, 4x) to existing client engines (Godot, Love2D, Python, CLI) with zero client modifications.
@@ -113,7 +113,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 * [x] **Arquitetura de Event Sourcing & Serialização de Replay**:
   - Registrar sequencialmente todas as intenções de clientes nos limites de tick fixos em arquivos de replay Protobuf `.loci`.
   - Implementar checkpoints periódicos de hash SHA-256 do `WorldState` canônico para detecção de dessincronização.
-* [ ] **Replay Headless & Ferramental de Verificação de Dessincronização**:
+* [x] **Replay Headless & Ferramental de Verificação de Dessincronização**:
   - Adicionar modo de execução CLI para reproduzir arquivos de partida offline na velocidade máxima, garantindo correspondência exata de checksums no Linux, macOS ARM64 e Windows.
 * [ ] **Transmissão para Espectadores & Reprodução Multi-Cliente**:
   - Transmitir snapshots de replay via UDP em taxa de tick em tempo real (com controles de velocidade: 0.5x, 1x, 2x, 4x) para os motores de cliente existentes (Godot, Love2D, Python, CLI) sem alterações no código do cliente.

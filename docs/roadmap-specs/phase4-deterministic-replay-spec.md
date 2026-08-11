@@ -692,10 +692,10 @@ Support CLI flags via `clap`:
 - [x] **`src/game_loop/tick.rs`** — Hook `ReplayRecorder` into `GameLoop` for live match recording (`--record`).
 
 ### Milestone 4.3: Headless Replay Engine & Hash Verification Tooling
-- [ ] **`src/replay/hash.rs`** — Implement canonical `compute_canonical_state_hash` using SHA-256.
-- [ ] **`src/replay/player.rs`** — Implement `ReplayPlayer` with magic header verification and rich `DesyncReport` diagnostics.
-- [ ] **`src/main.rs`** — Implement CLI flags (`--replay`, `--verify`, `--speed`, `--broadcast`, `--checkpoint-interval`).
-- [ ] **Automated Tests (`tests/replay_determinism_test.rs`)** — Cross-platform deterministic test asserting bit-exact checksums on 1,000+ tick recordings across test runs.
+- [x] **`src/replay/hash.rs`** — Implement canonical `compute_canonical_state_hash` using SHA-256.
+- [x] **`src/replay/player.rs`** — Implement `ReplayPlayer` with magic header verification and rich `DesyncReport` diagnostics.
+- [x] **`src/main.rs`** — Implement CLI flags (`--replay`, `--verify`, `--speed`, `--broadcast`, `--checkpoint-interval`).
+- [x] **Automated Tests (`tests/replay_determinism_test.rs`)** — Cross-platform deterministic test asserting bit-exact checksums on 1,000+ tick recordings across test runs.
 
 ### Milestone 4.4: Live Spectator Broadcast & Multi-Client Playback
 - [ ] **`src/replay/player.rs`** — Implement live spectator broadcast loop streaming `WorldState` snapshots over UDP with observer session tracking.
