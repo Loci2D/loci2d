@@ -29,21 +29,32 @@ Decidimos implementar um **motor de colisão 2D leve, integrado e 100% determin�
 A detecção de colisão é restrita a formas geométricas 2D implementadas inteiramente com aritmética de ponto fixo `I16F16`:
 - **`DeterministicAABB`**: Caixa Delimitadora Alinhada aos Eixos para paredes, obstáculos, áreas retangulares de gatilho e consultas espaciais.
 - **`DeterministicCircle`**: Colisor circular para jogadores, NPCs, projéteis e gatilhos radiais.
+- **Colisores Compostos**: Skillshots direcionais, arcos de ataque corpo a corpo e hitboxes rotacionados são aproximados utilizando agrupamentos de círculos/caixas sobrepostos em vez de algoritmos complexos para polígonos rotacionados (SAT), mantendo a simplicidade da arquitetura apenas 2D ([ADR-0003](0003-arquitetura-apenas-mapas-2d.md)).
 
 ### 2. Raiz Quadrada Inteira Determinística (`fixed_sqrt`)
 Cálculos de distância circular e normalização evitam o uso do `f32::sqrt` padrão. Em vez disso, utilizamos um algoritmo de raiz quadrada inteira bitwise operando diretamente sobre os bits brutos de `I16F16`, garantindo resultados idênticos em todas as arquiteturas de CPU e plataformas.
 
-### 3. Empurrão Cinemático por MTV & Deslizamento em Paredes
+### 3. Filtragem de Colisão & Camadas de Interação
+Entidades e obstáculos estáticos utilizam uma máscara de bits de 16 bits `CollisionFilter` (`layer` e `mask`) para especificar explicitamente quais categorias interagem (ex: `SOLID_WALL`, `PLAYER`, `TRIGGER_ZONE`, `PROJECTILE`), evitando cálculos desnecessários de interseção.
+
+### 4. Empurrão Cinemático por MTV & Deslizamento em Paredes
 Em vez de simular forças, impulsos de massa ou restituição:
 - Colisões sólidas calculam o **Vetor de Translação Mínima (MTV)** e o vetor normal $\vec{n}$.
 - A entidade penetrante é empurrada para fora ao longo de $\vec{n}$ pela profundidade de penetração.
 - A velocidade da entidade é projetada ao longo da tangente da superfície ($\vec{v}_{\text{slide}} = \vec{v} - (\vec{v} \cdot \vec{n})\vec{n}$), evitando que o jogador fique preso em cantos e produzindo um deslizamento suave e responsivo contra paredes.
 
-### 4. Volumes de Gatilho / Sensores Não-Sólidos
-Zonas de gatilho usam as mesmas primitivas de colisão em ponto fixo, mas não aplicam empurrão físico. Elas mantêm o rastreamento determinístico de entidades sobrepostas e disparam eventos de ciclo de vida `Enter`, `Stay` e `Exit` (que alimentarão diretamente os hooks de scripting em Lua na Fase 6).
+### 5. Resolução Determinística & Ordenação de Eventos de Gatilho
+- Pares de colisão dinâmica são normalizados com `entity_a.id < entity_b.id` e armazenados em um `BTreeSet<(u64, u64)>`, garantindo ordem de processamento idêntica em qualquer máquina.
+- Obstáculos estáticos são processados em ordem estritamente crescente de `obstacle.id` (`BTreeMap<u64, StaticObstacle>`).
+- Eventos de zonas de gatilho disparam eventos de ciclo de vida `Enter`, `Stay` e `Exit` na ordem estrita da tupla `(trigger_id, entity_id)`.
 
-### 5. Fase Ampla (Broadphase) Espacial Determinística
-Para cenários com maior contagem de entidades, a poda de pares candidatos na fase ampla utiliza um spatial hash grid uniforme. Para garantir o determinismo, os pares candidatos são desduplicados e ordenados usando coleções estritamente ordenadas (`BTreeSet<(u64, u64)>`).
+### 6. Prevenção de Tunelamento (Mitigação de CCD)
+Para evitar que entidades rápidas atravessem obstáculos finos:
+- Os deslocamentos cinemáticos por tick são limitados a $\le \frac{1}{2} \min(\text{largura}, \text{altura})$ do colisor delimitador.
+- Projéteis rápidos utilizam raycasting determinístico de segmento de linha em ponto fixo (`fixed_raycast`) em vez de múltiplos passos espaciais discretos por tick.
+
+### 7. Fase Ampla (Broadphase) Espacial Determinística
+Para cenários com maior contagem de entidades, a poda de pares candidatos na fase ampla utiliza um spatial hash grid uniforme com tamanho de célula configurável. Os pares candidatos são desduplicados e ordenados usando coleções estritamente ordenadas (`BTreeSet<(u64, u64)>`).
 
 ## Consequências
 
@@ -55,4 +66,4 @@ Para cenários com maior contagem de entidades, a poda de pares candidatos na fa
 
 **Negativas:**
 - **Sem Dinâmica Complexa de Corpos Rígidos**: Não suporta física de juntas/articulações, inércia rotacional, empilhamento físico ou ragdolls (desnecessários para jogabilidade autoritativa 2D top-down).
-- **Simplificação Geométrica**: Restrito a AABBs e Círculos (polígonos rotacionados arbitrários exigiriam decomposição em caixas/círculos ou adição do Teorema dos Eixos Separadores - SAT em revisões futuras, se necessário).
+- **Simplificação Geométrica**: Restrito a AABBs e Círculos; polígonos rotacionados arbitrários estão fora do escopo e são substituídos por composições de círculos/caixas.

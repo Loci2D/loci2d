@@ -39,7 +39,7 @@ Entities can move infinitely into empty space, pass through each other without r
 │               [Map Boundary Constraint] (Clamp to Arena Limits)                                  │
 │                         │                                                                        │
 │                         ▼                                                                        │
-│               [Broadphase Query] (Spatial Hash Grid / Bounded Pairs)                             │
+│               [Broadphase Query] (Spatial Hash Grid / BTree-Ordered Candidate Pairs)             │
 │                         │                                                                        │
 │                         ▼                                                                        │
 │               [Narrowphase Detection] (Fixed-Point AABB / Circle Intersections)                  │
@@ -70,7 +70,7 @@ Phase 5 is divided into **5 sequential milestones**:
 flowchart TD
     M1["Milestone 5.1<br>Deterministic 2D Collision Primitives (I16F16)"] --> M2["Milestone 5.2<br>Static Map Geometry & World Boundaries"]
     M2 --> M3["Milestone 5.3<br>Collision Resolution, Pushback & Trigger Zones"]
-    M3 --> M4["Milestone 5.4<br>Click-to-Move Steering & Deterministic Navigation"]
+    M3 --> M4["Milestone 5.4<br>Click-to-Move Steering & Navigation"]
     M4 --> M5["Milestone 5.5<br>Spatial Partitioning Broadphase (Optimization)"]
 ```
 
@@ -78,7 +78,7 @@ flowchart TD
 
 ### Milestone 5.1: Deterministic 2D Collision Primitives (`I16F16`)
 
-All geometric shapes and intersection algorithms reside in a new module `src/world/physics/` (or `src/physics/`), operating purely on `I16F16` and `DeterministicVector2`.
+All geometric shapes and intersection algorithms reside in `src/world/physics/`, operating purely on `I16F16` and `DeterministicVector2`.
 
 #### 1. Geometric Primitive Definitions
 
@@ -95,7 +95,7 @@ pub struct DeterministicAABB {
 
 impl DeterministicAABB {
     pub fn new(min: DeterministicVector2, max: DeterministicVector2) -> Self {
-        debug_assert!(min.x <= max.x && min.y <= max.y, "Invalid AABB bounds");
+        assert!(min.x <= max.x && min.y <= max.y, "Invalid AABB bounds: min must be <= max");
         Self { min, max }
     }
 
@@ -128,6 +128,7 @@ pub struct DeterministicCircle {
 
 impl DeterministicCircle {
     pub fn new(center: DeterministicVector2, radius: I16F16) -> Self {
+        assert!(radius >= I16F16::ZERO, "Collider radius must be non-negative");
         Self { center, radius }
     }
 
@@ -144,20 +145,23 @@ pub enum ColliderShape {
 }
 ```
 
-#### 2. Deterministic Integer Math Utilities (`fixed_sqrt`)
+#### 2. Composite Colliders & Directional Hitboxes
+As established in [ADR-0003](../adr/en/0003-2d-map-only.md) and [ADR-0012](../adr/en/0012-deterministic-2d-collision-and-kinematic-resolution.md), arbitrary rotated polygon collision via the Separating Axis Theorem (SAT) is explicitly out-of-scope for 2D top-down gameplay simplicity. 
 
-Circle intersection and distance queries require square roots. To avoid floating-point non-determinism (`f32::sqrt`), we implement a deterministic integer-based square root for `I16F16`:
+For directional skillshots, swinging melee arcs, or non-axis-aligned hitboxes, developers can attach **composite shapes** (a cluster of overlapping `DeterministicCircle` or `DeterministicAABB` sub-colliders offset from entity center) to cleanly approximate complex shapes without introducing complex polygonal intersection solvers.
+
+#### 3. Deterministic Integer Square Root (`fixed_sqrt`)
+
+Circle intersection and distance queries require square roots. To avoid floating-point non-determinism (`f32::sqrt`), we implement a deterministic digit-by-digit binary square root for `I16F16`:
 
 ```rust
-/// Deterministic fixed-point square root using integer bitwise method
+/// Deterministic fixed-point square root using integer bitwise restoring method
 pub fn fixed_sqrt(val: I16F16) -> I16F16 {
     if val <= I16F16::ZERO {
         return I16F16::ZERO;
     }
-    // Convert I16F16 raw representation (scaled by 2^16) to 64-bit integer
-    // sqrt(x * 2^16) = sqrt(x * 2^32) / 2^8 -> We scale raw by 2^16 to compute fixed sqrt
-    let raw = val.to_bits() as u64;
-    let scaled = raw << 16;
+    // Scale raw representation (scaled by 2^16) by 2^16 so integer sqrt returns raw fixed-point bits
+    let mut scaled = (val.to_bits() as u64) << 16;
     let mut root = 0u64;
     let mut bit = 1u64 << 46; // Highest power of 4 fitting in u64
 
@@ -167,9 +171,8 @@ pub fn fixed_sqrt(val: I16F16) -> I16F16 {
 
     while bit != 0 {
         if scaled >= root + bit {
-            let temp = root + bit;
+            scaled -= root + bit;
             root = (root >> 1) + bit;
-            // Subtract using intermediate to satisfy integer algorithm
         } else {
             root >>= 1;
         }
@@ -180,7 +183,7 @@ pub fn fixed_sqrt(val: I16F16) -> I16F16 {
 }
 ```
 
-#### 3. Intersection Tests & Manifold (MTV) Calculation
+#### 4. Intersection Tests & Manifold (MTV) Calculation
 
 We define a `ContactManifold` that describes whether two shapes collide and the **Minimum Translation Vector (MTV)** required to separate them:
 
@@ -205,19 +208,23 @@ impl ContactManifold {
   Calculate overlap on X and Y axes:
   $$\text{overlap}_x = \min(A.\text{max.x}, B.\text{max.x}) - \max(A.\text{min.x}, B.\text{min.x})$$
   $$\text{overlap}_y = \min(A.\text{max.y}, B.\text{max.y}) - \max(A.\text{min.y}, B.\text{min.y})$$
-  If both $\text{overlap}_x > 0$ and $\text{overlap}_y > 0$, the shapes intersect. The minimum penetration axis determines the normal.
+  If both $\text{overlap}_x > 0$ and $\text{overlap}_y > 0$, the shapes intersect. The minimum penetration axis determines the normal:
+  - If $\text{overlap}_x < \text{overlap}_y$: normal is $(\text{sign}(A.\text{center.x} - B.\text{center.x}), 0)$, depth is $\text{overlap}_x$.
+  - Else: normal is $(0, \text{sign}(A.\text{center.y} - B.\text{center.y}))$, depth is $\text{overlap}_y$.
 
 * **Circle vs Circle**:
   $$\Delta = A.\text{center} - B.\text{center}$$
   $$\text{dist\_sq} = \Delta_x^2 + \Delta_y^2$$
   $$\text{radii\_sum} = A.\text{radius} + B.\text{radius}$$
-  Intersection occurs when $\text{dist\_sq} < \text{radii\_sum}^2$. Separation normal is $\Delta / \text{dist}$.
+  Intersection occurs when $\text{dist\_sq} < \text{radii\_sum}^2$.
+  - **Zero-Distance Fallback**: If $\text{dist\_sq} == 0$ (circles share identical centers), division by zero is prevented by using a deterministic fallback normal $\vec{n} = (1, 0)$ and penetration depth $\text{radii\_sum}$.
+  - **Normal Distance**: When $\text{dist\_sq} > 0$, $\text{dist} = \text{fixed\_sqrt}(\text{dist\_sq})$, normal is $\Delta / \text{dist}$, and penetration depth is $\text{radii\_sum} - \text{dist}$.
 
 * **AABB vs Circle**:
   Clamp the circle's center to the AABB's bounds to find the closest point $P$:
   $$P_x = \text{clamp}(\text{circle.x}, AABB.\text{min.x}, AABB.\text{max.x})$$
   $$P_y = \text{clamp}(\text{circle.y}, AABB.\text{min.y}, AABB.\text{max.y})$$
-  Test distance from circle center to point $P$.
+  Test distance from circle center to point $P$. If $P == \text{circle.center}$ (circle center is inside AABB), calculate pushback to the closest outer edge of the AABB.
 
 ---
 
@@ -255,7 +262,7 @@ impl MapBounds {
 }
 ```
 
-#### 2. Static Obstacle Definitions
+#### 2. Static Obstacle Definitions & Ordered Processing
 Static obstacles (walls, pillars, terrain blockers) are immutable colliders registered on map load:
 
 ```rust
@@ -266,6 +273,8 @@ pub struct StaticObstacle {
     pub is_solid: bool, // True for walls, False for trigger sensors
 }
 ```
+
+Static obstacles are stored in a `BTreeMap<u64, StaticObstacle>`, ensuring they are always tested against moving entities in strict ascending order of `obstacle.id`.
 
 ---
 
@@ -309,6 +318,10 @@ pub fn resolve_solid_collision(
     if !manifold.is_colliding || manifold.penetration_depth <= I16F16::ZERO {
         return;
     }
+    // Guard against zero-length normal
+    if manifold.normal.x == I16F16::ZERO && manifold.normal.y == I16F16::ZERO {
+        return;
+    }
 
     // 1. Position Separation: Push entity out along the normal by penetration depth
     pos.x += manifold.normal.x * manifold.penetration_depth;
@@ -323,18 +336,24 @@ pub fn resolve_solid_collision(
 }
 ```
 
-#### 3. Trigger & Sensor Zones
+#### 3. Deterministic Collision Pair Iteration Order
+To guarantee 100% replay determinism across multi-entity collisions within a single tick:
+- Dynamic entity pairs are always normalized so that $\text{entity\_id}_A < \text{entity\_id}_B$.
+- Pairs are inserted into a sorted `BTreeSet<(u64, u64)>`.
+- Collision resolution iterates over this `BTreeSet` in strict ascending order.
+
+#### 4. Trigger & Sensor Zones with Deterministic Event Ordering
 Non-solid volumes detect when entities enter, remain inside, or exit:
 
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TriggerEventType {
     Enter,
     Stay,
     Exit,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TriggerEvent {
     pub trigger_id: u64,
     pub entity_id: u64,
@@ -343,7 +362,18 @@ pub struct TriggerEvent {
 }
 ```
 
-On every tick, `Instance` maintains a `BTreeSet<(u64, u64)>` of active `(trigger_id, entity_id)` overlaps to deterministically fire `Enter`, `Stay`, and `Exit` events.
+On every tick:
+1. Active overlaps are gathered in a `BTreeSet<(u64, u64)>` of `(trigger_id, entity_id)`.
+2. Transitions from the previous tick are evaluated:
+   - In current set but not previous $\rightarrow$ `TriggerEventType::Enter`.
+   - In both current and previous $\rightarrow$ `TriggerEventType::Stay`.
+   - In previous but not current $\rightarrow$ `TriggerEventType::Exit`.
+3. Trigger events are fired in strict `(trigger_id, entity_id)` tuple order, ensuring identical execution order on every machine.
+
+#### 5. Tunneling Prevention (High-Speed Projectiles)
+Without continuous collision detection (CCD), fast-moving entities moving more than their collider width in a single tick can pass through thin walls (tunneling).
+- **Speed Cap**: By default, entity movement speed per tick is clamped to $\le \frac{1}{2} \min(\text{width}, \text{height})$ of its bounding shape.
+- **Fixed-Point Raycasting**: For ultra-fast projectiles (e.g. bullets or beam skillshots), a deterministic fixed-point raycast query (`fixed_raycast(origin, dir, max_distance)`) tests line-segment intersections against obstacles directly within a single tick rather than stepping position incrementally.
 
 ---
 
@@ -364,9 +394,22 @@ Each `Entity` receives an optional navigation target:
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationComponent {
     pub target: Option<DeterministicVector2>,
-    pub arrival_tolerance: I16F16, // Distance at which entity stops
+    pub arrival_tolerance: I16F16, // Distance at which entity stops (recommended >= move_speed)
     pub move_speed: I16F16,         // Units per tick
-    pub waypoints: std::collections::VecDeque<DeterministicVector2>,
+    pub waypoints: Vec<DeterministicVector2>,
+    pub current_waypoint_index: usize,
+}
+
+impl NavigationComponent {
+    pub fn new(move_speed: I16F16, arrival_tolerance: I16F16) -> Self {
+        Self {
+            target: None,
+            arrival_tolerance,
+            move_speed,
+            waypoints: Vec::new(),
+            current_waypoint_index: 0,
+        }
+    }
 }
 ```
 
@@ -375,20 +418,27 @@ During each tick:
 1. If `target` is set, compute displacement $\vec{d} = \text{target} - \text{position}$.
 2. Compute distance $D = \text{fixed\_sqrt}(d_x^2 + d_y^2)$.
 3. If $D \le \text{arrival\_tolerance}$:
-   - If waypoints queue is not empty, pop next waypoint as new target.
-   - Else, set velocity to zero and clear target.
+   - If `current_waypoint_index + 1 < waypoints.len()`:
+     - `current_waypoint_index += 1;`
+     - `target = Some(waypoints[current_waypoint_index]);`
+   - Else:
+     - Set entity velocity to zero, clear `target`, and reset `waypoints`.
 4. If $D > \text{arrival\_tolerance}$:
    - Set velocity $\vec{v} = (\vec{d} / D) \times \text{move\_speed}$.
+
+#### 3. Intent Preemption & CPU Performance
+- **Preemption**: An incoming `MoveIntent` (e.g. WASD) immediately cancels active navigation and resets `NavigationComponent`. A new `MoveToPositionIntent` immediately replaces active destination and waypoint list.
+- **CPU Budget**: For 1,000 navigating entities, fixed-point distance and vector multiplication takes $< 0.15$ ms per tick on modern CPUs, consuming $< 0.5\%$ of a 30 Hz tick budget (33.3 ms).
 
 ---
 
 ### Milestone 5.5: Spatial Partitioning Broadphase (Optional Optimization)
 
 To prevent $O(N^2)$ collision checks as entity counts grow:
-1. Implement a **2D Uniform Spatial Hash Grid** with fixed-size cells (e.g. $64 \times 64$ units).
-2. Entities insert their AABB into grid cells.
-3. Candidate collision pairs are gathered and deduplicated into a sorted `BTreeSet<(u64, u64)>` (ensuring lower `entity_id` comes first).
-4. Deterministic narrowphase checks run exclusively on candidate pairs.
+1. Implement a **2D Uniform Spatial Hash Grid** with configurable cell size (stored in `InstanceConfig`, default $64 \times 64$ fixed-point units).
+2. Entities insert their AABB into overlapping grid cells.
+3. Candidate collision pairs are gathered and deduplicated into a sorted `BTreeSet<(u64, u64)>` with normalized `min_id < max_id`.
+4. Deterministic narrowphase checks run exclusively on candidate pairs in ascending `BTreeSet` order.
 
 ---
 
@@ -425,10 +475,10 @@ pub fn tick(&mut self, tick_count: u64) -> Vec<(u64, String)> {
     // 3. Resolve Map Boundaries (Clamp inside arena)
     self.resolve_boundaries();
 
-    // 4. Broadphase & Narrowphase Solid Collisions
+    // 4. Broadphase & Narrowphase Solid Collisions (BTree-ordered pair resolution)
     self.resolve_solid_collisions();
 
-    // 5. Update Trigger Zones & Collect Overlap Events
+    // 5. Update Trigger Zones & Collect Overlap Events (BTreeSet-ordered trigger dispatch)
     self.update_trigger_zones(tick_count);
 
     // 6. Sweep Inactive / Timed-out Sessions
@@ -452,10 +502,10 @@ Recorded match replay files (`.loci`) will continue to produce **100% bit-exact 
 
 | Test Suite | Focus Area | Verification Method |
 |---|---|---|
-| **Unit Tests** (`tests/physics_primitives_test.rs`) | Fixed-point math & primitive intersections | Test AABB-AABB, Circle-Circle, AABB-Circle across corner, edge, and overlapping cases |
+| **Unit Tests** (`tests/physics_primitives_test.rs`) | Fixed-point math & primitive intersections | Test AABB-AABB, Circle-Circle, AABB-Circle, zero-distance edge cases, and `fixed_sqrt` restoring algorithm |
 | **Edge-Case Tests** (`tests/physics_edge_cases_test.rs`) | Extreme coordinates & sub-unit overlaps | Assert zero panics on saturating arithmetic and exact symmetry ($A \cap B == B \cap A$) |
-| **Collision Resolution Tests** (`tests/collision_resolution_test.rs`) | Pushback & wall sliding | Verify entity does not penetrate static walls and slides smoothly along tangents |
-| **Navigation Tests** (`tests/navigation_steering_test.rs`) | Click-to-move arrival & waypoints | Verify entity reaches target coordinate within arrival tolerance without oscillation |
+| **Collision Resolution Tests** (`tests/physics_collision_resolution_test.rs`) | Pushback & wall sliding | Verify entity does not penetrate static walls and slides smoothly along tangents |
+| **Navigation Tests** (`tests/physics_navigation_test.rs`) | Click-to-move arrival & waypoints | Verify entity reaches target coordinate within arrival tolerance without oscillation |
 | **Cross-Platform Replay Verification** (`loci-replay`) | Bit-exact determinism with active physics | Run `loci-replay` on recorded match with collisions; assert identical SHA-256 checksums across runs |
 
 ---
@@ -484,9 +534,9 @@ src/
 
 ## 6. Definition of Done Checklist
 
-- [ ] **Milestone 5.1**: `DeterministicAABB`, `DeterministicCircle`, `fixed_sqrt`, and all 2D intersection queries implemented with 100% fixed-point math and passing unit tests.
-- [ ] **Milestone 5.2**: `MapBounds` arena clamping and `StaticObstacle` definitions integrated into `Instance`.
-- [ ] **Milestone 5.3**: Solid MTV pushback and wall sliding implemented; trigger zone `Enter`/`Stay`/`Exit` events functioning.
+- [ ] **Milestone 5.1**: `DeterministicAABB`, `DeterministicCircle`, restoring `fixed_sqrt`, and all 2D intersection queries implemented with 100% fixed-point math and passing unit tests.
+- [ ] **Milestone 5.2**: `MapBounds` arena clamping and `StaticObstacle` definitions integrated into `Instance` in `BTreeMap` order.
+- [ ] **Milestone 5.3**: Solid MTV pushback and wall sliding implemented; trigger zone `Enter`/`Stay`/`Exit` events functioning with deterministic `BTreeSet` order.
 - [ ] **Milestone 5.4**: `MoveToPositionIntent` click-to-move navigation and waypoint steering functioning without jitter.
 - [ ] **Milestone 5.5**: Broadphase spatial grid implemented and verified against brute-force baseline.
 - [ ] **Determinism Verified**: Replay CLI (`loci-replay`) validates identical SHA-256 state hashes for matches containing complex collisions and navigation paths.
