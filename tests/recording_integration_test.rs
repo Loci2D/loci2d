@@ -1,4 +1,5 @@
 use std::net::UdpSocket;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -10,7 +11,6 @@ use loci2d::network::{
 };
 use loci2d::world::instance::Instance;
 use loci2d::game_loop::tick::GameLoop;
-use loci2d::replay::ReplayRecorder;
 
 #[test]
 fn test_live_match_recording_flow() {
@@ -31,11 +31,12 @@ fn test_live_match_recording_flow() {
     let loop_socket = Arc::clone(&socket);
     let loop_path_str = replay_path_str.clone();
     
-    // Spawn game loop in a background thread
-    let _loop_handle = thread::spawn(move || {
+    let mut game_loop = GameLoop::new(60);
+    game_loop.enable_recording(1, 42, "arena_test".to_string(), 5, loop_path_str);
+    let running: Arc<AtomicBool> = game_loop.running_handle();
+
+    let loop_handle = thread::spawn(move || {
         let instance = Instance::new(1, 60, 5);
-        let mut game_loop = GameLoop::new(60);
-        game_loop.enable_recording(1, 42, 10, loop_path_str);
         game_loop.start(instance, intent_rx, loop_socket);
     });
 
@@ -85,36 +86,14 @@ fn test_live_match_recording_flow() {
     buf.clear();
     disc_packet.encode(&mut buf).unwrap();
     client_sock.send_to(&buf, server_addr).unwrap();
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(150));
 
-    // Also test standalone ReplayRecorder serialization to file
-    let mut recorder = ReplayRecorder::new(1, 60, 42, 10);
-    recorder.record_tick(1, vec![
-        loci2d::network::packets::ReplayIntentEntry {
-            entity_id: 1,
-            player_name: "Alice".to_string(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Join(JoinIntent {
-                    player_name: "Alice".to_string(),
-                })),
-            }),
-        }
-    ]);
-    recorder.record_tick(2, vec![
-        loci2d::network::packets::ReplayIntentEntry {
-            entity_id: 1,
-            player_name: String::new(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x: 3.0, y: -1.5 }),
-                })),
-            }),
-        }
-    ]);
-    recorder.record_checkpoint(10, [0xBE; 32], 1);
-    recorder.save_to_file(&replay_path).expect("Failed to save replay file");
+    // Stop game loop gracefully and wait for thread to join and flush replay file
+    running.store(false, Ordering::Relaxed);
+    loop_handle.join().expect("Game loop thread failed to join");
 
-    assert!(replay_path.exists());
+    // Assert that the replay file was generated directly by GameLoop upon shutdown
+    assert!(replay_path.exists(), "Replay file must exist after game loop shutdown");
     let bytes = std::fs::read(&replay_path).expect("Failed to read replay file");
     let replay = ReplayFile::decode(&bytes[..]).expect("Failed to decode ReplayFile");
 
@@ -123,10 +102,22 @@ fn test_live_match_recording_flow() {
     assert_eq!(header.version, 1);
     assert_eq!(header.tick_rate, 60);
     assert_eq!(header.random_seed, 42);
+    assert_eq!(header.map_name, "arena_test");
 
-    assert_eq!(replay.frames.len(), 2);
-    assert_eq!(replay.frames[0].entries[0].entity_id, 1);
-    assert_eq!(replay.frames[0].entries[0].player_name, "Alice");
-    assert_eq!(replay.checkpoints.len(), 1);
-    assert_eq!(replay.checkpoints[0].state_sha256, vec![0xBE; 32]);
+    assert!(!replay.frames.is_empty(), "Replay should contain recorded frames from GameLoop");
+
+    // Verify recorded intents were stamped with entity_id == 1
+    let join_frame = replay.frames.iter().find(|f| {
+        f.entries.iter().any(|e| matches!(&e.intent, Some(ClientIntent { intent: Some(client_intent::Intent::Join(_)) })))
+    }).expect("Join frame should be recorded in replay");
+    
+    let join_entry = &join_frame.entries[0];
+    assert_eq!(join_entry.entity_id, 1);
+    assert_eq!(join_entry.player_name, "Alice");
+
+    // Verify checkpoints were captured on intervals
+    assert!(!replay.checkpoints.is_empty(), "Checkpoints should be captured on interval");
+    for cp in &replay.checkpoints {
+        assert_eq!(cp.state_sha256.len(), 32, "Checkpoint state hash must be 32 bytes");
+    }
 }

@@ -19,11 +19,22 @@ pub struct ReplayRecorder {
 }
 
 impl ReplayRecorder {
-    pub fn new(instance_id: u64, tick_rate: u32, seed: u64, checkpoint_interval: u64) -> Self {
+    pub fn new(
+        instance_id: u64,
+        tick_rate: u32,
+        seed: u64,
+        map_name: String,
+        checkpoint_interval: u64,
+    ) -> Self {
         let interval = if checkpoint_interval == 0 {
             DEFAULT_CHECKPOINT_INTERVAL_TICKS
         } else {
             checkpoint_interval
+        };
+        let map = if map_name.trim().is_empty() {
+            "default_arena".to_string()
+        } else {
+            map_name
         };
 
         Self {
@@ -37,7 +48,7 @@ impl ReplayRecorder {
                     .as_millis() as u64,
                 instance_id,
                 random_seed: seed,
-                map_name: "default_arena".to_string(),
+                map_name: map,
             },
             frames: Vec::new(),
             checkpoints: Vec::new(),
@@ -53,8 +64,9 @@ impl ReplayRecorder {
     }
 
     /// Records a canonical state hash checkpoint if the current tick is on the checkpoint interval.
+    #[allow(clippy::manual_is_multiple_of)]
     pub fn maybe_record_checkpoint(&mut self, tick: u64, instance: &Instance) {
-        if tick > 0 && tick.is_multiple_of(self.checkpoint_interval_ticks) {
+        if tick > 0 && tick % self.checkpoint_interval_ticks == 0 {
             let state_hash = compute_canonical_state_hash(instance, tick);
             let active_entities = instance.entities.len() as u32;
             self.checkpoints.push(ReplayCheckpoint {
@@ -75,20 +87,20 @@ impl ReplayRecorder {
     }
 
     /// Encodes the replay data into a Proto3 binary payload.
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, prost::EncodeError> {
         let replay_file = ReplayFile {
             header: Some(self.header.clone()),
             frames: self.frames.clone(),
             checkpoints: self.checkpoints.clone(),
         };
         let mut buf = Vec::with_capacity(replay_file.encoded_len());
-        replay_file.encode(&mut buf).expect("Failed to encode ReplayFile");
-        buf
+        replay_file.encode(&mut buf)?;
+        Ok(buf)
     }
 
     /// Saves the replay file to disk (.loci).
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
-        let bytes = self.to_bytes();
+        let bytes = self.to_bytes().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         std::fs::write(path, bytes)
     }
 
@@ -122,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_replay_recorder_roundtrip() {
-        let mut recorder = ReplayRecorder::new(1, 30, 12345, 60);
+        let mut recorder = ReplayRecorder::new(1, 30, 12345, "custom_map".to_string(), 60);
 
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
@@ -151,10 +163,12 @@ mod tests {
         assert_eq!(recorder.frame_count(), 2);
         assert_eq!(recorder.checkpoint_count(), 1);
 
-        let bytes = recorder.to_bytes();
+        let bytes = recorder.to_bytes().expect("Failed to encode bytes");
         let decoded = ReplayFile::decode(&bytes[..]).expect("Failed to decode ReplayFile");
 
-        assert_eq!(decoded.header.unwrap().magic, "LOCI_REPLAY");
+        let header = decoded.header.unwrap();
+        assert_eq!(header.magic, "LOCI_REPLAY");
+        assert_eq!(header.map_name, "custom_map");
         assert_eq!(decoded.frames.len(), 2);
         assert_eq!(decoded.checkpoints.len(), 1);
         assert_eq!(decoded.checkpoints[0].state_sha256, vec![0xAA; 32]);

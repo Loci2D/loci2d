@@ -1,4 +1,5 @@
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -10,7 +11,7 @@ use crate::world::instance::Instance;
 
 pub struct GameLoop {
     tick_rate: u32,
-    running: bool,
+    running: Arc<AtomicBool>,
     recorder: Option<ReplayRecorder>,
     record_path: Option<String>,
 }
@@ -19,15 +20,28 @@ impl GameLoop {
     pub fn new(tick_rate: u32) -> Self {
         Self {
             tick_rate,
-            running: false,
+            running: Arc::new(AtomicBool::new(false)),
             recorder: None,
             record_path: None,
         }
     }
 
     /// Enables match recording to an event-sourced `.loci` replay file.
-    pub fn enable_recording(&mut self, instance_id: u64, seed: u64, checkpoint_interval: u64, file_path: String) {
-        self.recorder = Some(ReplayRecorder::new(instance_id, self.tick_rate, seed, checkpoint_interval));
+    pub fn enable_recording(
+        &mut self,
+        instance_id: u64,
+        seed: u64,
+        map_name: String,
+        checkpoint_interval: u64,
+        file_path: String,
+    ) {
+        self.recorder = Some(ReplayRecorder::new(
+            instance_id,
+            self.tick_rate,
+            seed,
+            map_name,
+            checkpoint_interval,
+        ));
         self.record_path = Some(file_path);
     }
 
@@ -36,14 +50,18 @@ impl GameLoop {
         self.recorder.as_ref()
     }
 
-    #[allow(clippy::while_immutable_condition)]
+    /// Returns a cloned handle to the running atomic flag for external shutdown coordination.
+    pub fn running_handle(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.running)
+    }
+
     pub fn start(
         &mut self,
         mut instance: Instance,
         intent_rx: mpsc::Receiver<(SocketAddr, ClientIntent)>,
         socket: Arc<UdpSocket>,
     ) {
-        self.running = true;
+        self.running.store(true, Ordering::Relaxed);
         let tick_duration = Duration::from_secs_f64(1.0 / self.tick_rate as f64);
         let max_accumulator = tick_duration * 5; // Spiral-of-death protection clamp
         let mut accumulator = Duration::ZERO;
@@ -51,7 +69,7 @@ impl GameLoop {
         let mut tick_count = 0u64;
         let mut out_buf = Vec::with_capacity(2048);
 
-        while self.running {
+        while self.running.load(Ordering::Relaxed) {
             let now = Instant::now();
             let delta = now.duration_since(last_time);
             last_time = now;
@@ -117,9 +135,8 @@ impl GameLoop {
         }
     }
 
-    // [2026-08-08] Allowed dead_code: graceful shutdown method to be hooked into OS signals / server lifecycle.
-    #[allow(dead_code)]
-    pub fn stop(&mut self) {
-        self.running = false;
+    /// Graceful shutdown method to be hooked into OS signals or test harnesses.
+    pub fn stop(&self) {
+        self.running.store(false, Ordering::Relaxed);
     }
 }
