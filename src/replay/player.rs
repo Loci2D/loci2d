@@ -167,6 +167,7 @@ impl ReplayPlayer {
     }
 
     /// Streams the replay match in real-time (or at scaled speed) and broadcasts
+    /// Streams the replay match in real-time (or at scaled speed) and broadcasts
     /// authoritative WorldState snapshots over UDP to all connected spectator clients.
     pub fn broadcast_live(
         &mut self,
@@ -175,10 +176,19 @@ impl ReplayPlayer {
         speed: f32,
         running: Arc<AtomicBool>,
     ) {
+        const MAX_SPECTATORS: usize = 128; //Should we add this to the .env?
+        const TERMINAL_FRAME_RETRIES: usize = 3;
+        const TERMINAL_FRAME_DELAY_MS: u64 = 15;
+
         let header = self.replay.header.as_ref().unwrap();
         let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
 
+        let original_speed = speed;
         let speed = if speed <= 0.0 { 1.0 } else { speed.clamp(0.1, 10.0) };
+        if (speed - original_speed).abs() > 0.001 {
+            println!("[Spectator] Playback speed clamped from {:.1}x to {:.1}x", original_speed, speed);
+        }
+
         let base_tick_hz = header.tick_rate as f64 * speed as f64;
         let tick_duration = Duration::from_secs_f64(1.0 / base_tick_hz);
         let max_accumulator = tick_duration * 5;
@@ -221,9 +231,17 @@ impl ReplayPlayer {
                 // 1. Drain incoming spectator intents & register/refresh spectator sessions
                 while let Ok((addr, intent)) = intent_rx.try_recv() {
                     let now = Instant::now();
-                    if spectators.insert(addr, now).is_none() {
-                        println!("[Spectator] New spectator client registered: {}", addr);
+                    if spectators.contains_key(&addr) {
+                        spectators.insert(addr, now);
+                    } else if spectators.len() < MAX_SPECTATORS {
+                        spectators.insert(addr, now);
+                        println!("[Spectator] New spectator client registered: {} ({}/{} active)", 
+                            addr, spectators.len(), MAX_SPECTATORS);
+                    } else {
+                        println!("[Spectator] Rejected spectator client {}: maximum capacity ({} spectators) reached", 
+                            addr, MAX_SPECTATORS);
                     }
+
                     if let Some(client_intent::Intent::Disconnect(_)) = intent.intent {
                         spectators.remove(&addr);
                         println!("[Spectator] Spectator client disconnected: {}", addr);
@@ -271,6 +289,22 @@ impl ReplayPlayer {
             }
 
             thread::sleep(Duration::from_micros(500));
+        }
+
+        // Send trailing terminal frames so connected spectator clients reliably receive the final state
+        let terminal_state = instance.create_snapshot(tick_count);
+        let terminal_packet = ServerPacket {
+            sequence_id: tick_count,
+            payload: Some(server_packet::Payload::WorldState(terminal_state)),
+        };
+        out_buf.clear();
+        if let Ok(()) = terminal_packet.encode(&mut out_buf) {
+            for spectator_addr in spectators.keys() {
+                for _ in 0..TERMINAL_FRAME_RETRIES {
+                    let _ = socket.send_to(&out_buf, spectator_addr);
+                    thread::sleep(Duration::from_millis(TERMINAL_FRAME_DELAY_MS));
+                }
+            }
         }
 
         println!("[Spectator] Replay broadcast finished at tick {}.", tick_count.saturating_sub(1));

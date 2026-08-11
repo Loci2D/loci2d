@@ -64,8 +64,9 @@ impl ReplayRecorder {
     }
 
     /// Records a canonical state hash checkpoint if the current tick is on the checkpoint interval.
+    /// Returns true if a checkpoint was recorded.
     #[allow(clippy::manual_is_multiple_of)]
-    pub fn maybe_record_checkpoint(&mut self, tick: u64, instance: &Instance) {
+    pub fn maybe_record_checkpoint(&mut self, tick: u64, instance: &Instance) -> bool {
         if tick > 0 && tick % self.checkpoint_interval_ticks == 0 {
             let state_hash = compute_canonical_state_hash(instance, tick);
             let active_entities = instance.entities.len() as u32;
@@ -74,6 +75,9 @@ impl ReplayRecorder {
                 state_sha256: state_hash.to_vec(),
                 active_entities,
             });
+            true
+        } else {
+            false
         }
     }
 

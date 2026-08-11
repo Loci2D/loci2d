@@ -1,5 +1,5 @@
 -- Love2D Client Example for loci2d
--- Demonstrates non-blocking UDP network intent streaming and live WorldState rendering
+-- Demonstrates non-blocking UDP network intent streaming, live WorldState rendering, and Spectator/Replay mode
 
 local socket = require("socket")
 local pb = nil
@@ -20,7 +20,7 @@ end
 
 local udp = nil
 local sequence_id = 0
-local last_status = "Press WASD/Space to send intents to server"
+local last_status = "Connecting to server..."
 local server_ip = "127.0.0.1"
 local server_port = 8080
 local current_entities = {}
@@ -28,9 +28,21 @@ local current_tick = 0
 local schema_loaded = false
 local last_terminal_print = 0
 local last_sent_dir = { x = 0, y = 0 }
+local last_packet_time = 0
+local is_spectator = false
+local last_heartbeat_time = 0
 
-function love.load()
-    love.window.setTitle("loci2d - Love2D Client (Phase 3)")
+function love.load(args)
+    -- Check if launched with --spectator or -s
+    if args then
+        for _, a in ipairs(args) do
+            if a == "--spectator" or a == "-s" or a == "--replay" then
+                is_spectator = true
+            end
+        end
+    end
+
+    love.window.setTitle("loci2d - Love2D Client & Replay Viewer")
     love.window.setMode(800, 600, { resizable = true })
 
     -- Create non-blocking UDP socket
@@ -70,7 +82,14 @@ function love.load()
 
         if schema_loaded then
             print("[Protobuf] Successfully loaded game_packets schema.")
-            send_intent({ join = { player_name = "Love2DPlayer" } })
+            if is_spectator then
+                print("[Spectator] Connecting in Spectator / Replay View mode...")
+                send_intent({ ping = {} })
+                last_status = "Spectator Mode: Watching match stream..."
+            else
+                send_intent({ join = { player_name = "Love2DPlayer" } })
+                last_status = "Player Mode: Joined as 'Love2DPlayer'"
+            end
         else
             print("[Warning] Could not load game_packets schema definition.")
             last_status = "Error: game_packets.proto schema not loaded"
@@ -79,7 +98,11 @@ function love.load()
 end
 
 function love.quit()
-    send_intent({ disconnect = { reason = "closing client" } })
+    if not is_spectator then
+        send_intent({ disconnect = { reason = "closing client" } })
+    else
+        send_intent({ disconnect = { reason = "spectator closing window" } })
+    end
 end
 
 function send_intent(intent_table)
@@ -98,7 +121,6 @@ function send_intent(intent_table)
     local data = pb.encode("loci2d.GamePacket", packet)
     if data then
         udp:send(data)
-        last_status = "Sent intent seq=" .. sequence_id
         if intent_table.move then
             local dir = intent_table.move.direction or { x = 0, y = 0 }
             print(string.format("[Love2D Client] Sent Move Intent (seq=%d) -> dir=(%.1f, %.1f)", sequence_id, dir.x, dir.y))
@@ -106,8 +128,6 @@ function send_intent(intent_table)
             print(string.format("[Love2D Client] Sent Join Intent (seq=%d) -> name='%s'", sequence_id, intent_table.join.player_name))
         elseif intent_table.disconnect then
             print(string.format("[Love2D Client] Sent Disconnect Intent (seq=%d) -> reason='%s'", sequence_id, intent_table.disconnect.reason))
-        else
-            print(string.format("[Love2D Client] Sent Intent (seq=%d)", sequence_id))
         end
     end
 end
@@ -122,6 +142,7 @@ function get_held_direction()
 end
 
 function update_movement()
+    if is_spectator then return end
     local dx, dy = get_held_direction()
     if dx ~= last_sent_dir.x or dy ~= last_sent_dir.y then
         last_sent_dir = { x = dx, y = dy }
@@ -130,32 +151,56 @@ function update_movement()
 end
 
 function love.keypressed(key)
-    if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
-        update_movement()
-    elseif key == "x" or key == "k" then
-        -- Explicit stop movement
-        last_sent_dir = { x = 0, y = 0 }
-        send_intent({ move = { direction = { x = 0, y = 0 } } })
-    elseif key == "space" then
-        send_intent({ action = { ability_id = 1 } })
-    elseif key == "p" then
-        send_intent({ ping = {} })
+    if key == "tab" or key == "m" then
+        -- Toggle Spectator Mode
+        is_spectator = not is_spectator
+        if is_spectator then
+            last_status = "Switched to Spectator Mode (Watching stream)"
+            send_intent({ ping = {} })
+        else
+            last_status = "Switched to Player Mode"
+            send_intent({ join = { player_name = "Love2DPlayer" } })
+        end
+    elseif not is_spectator then
+        if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
+            update_movement()
+        elseif key == "x" or key == "k" then
+            -- Explicit stop movement
+            last_sent_dir = { x = 0, y = 0 }
+            send_intent({ move = { direction = { x = 0, y = 0 } } })
+        elseif key == "space" then
+            send_intent({ action = { ability_id = 1 } })
+        elseif key == "p" then
+            send_intent({ ping = {} })
+        end
     end
 end
 
 function love.keyreleased(key)
-    if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
-        update_movement()
+    if not is_spectator then
+        if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
+            update_movement()
+        end
     end
 end
 
 function love.update(dt)
     if not udp then return end
 
+    local now = love.timer.getTime()
+
+    -- Send periodic heartbeat ping in spectator mode to maintain stream registration
+    if is_spectator and (now - last_heartbeat_time >= 1.0) then
+        last_heartbeat_time = now
+        send_intent({ ping = {} })
+    end
+
     -- Drain all incoming UDP server packets
     while true do
         local data, msg = udp:receive()
         if not data then break end
+
+        last_packet_time = now
 
         if pb then
             local server_packet = pb.decode("loci2d.ServerPacket", data)
@@ -163,27 +208,33 @@ function love.update(dt)
                 if server_packet.world_state then
                     current_tick = server_packet.world_state.tick or 0
                     current_entities = server_packet.world_state.entities or {}
-                    last_status = string.format("WorldState Tick %d (%d entities)", current_tick, #current_entities)
+                    last_status = string.format("Streaming Tick %d (%d entities active)", current_tick, #current_entities)
 
                     -- Periodic terminal output for developers (throttled to ~1 second)
-                    local now = love.timer.getTime()
                     if now - last_terminal_print >= 1.0 then
                         last_terminal_print = now
                         local entity_strs = {}
                         for _, e in ipairs(current_entities) do
                             local pos = e.position or { x = 0, y = 0 }
                             local vel = e.velocity or { x = 0, y = 0 }
-                            table.insert(entity_strs, string.format("%s (id=%d) @ (%.1f, %.1f) vel=(%.1f, %.1f)", e.name or "Entity", e.id or 0, pos.x, pos.y, vel.x, vel.y))
+                            table.insert(entity_strs, string.format("%s (id=%d) @ (%.1f, %.1f)", e.name or "Entity", e.id or 0, pos.x, pos.y))
                         end
-                        print(string.format("[Love2D Client] [Snapshot Tick %d] %d entities: %s", current_tick, #current_entities, table.concat(entity_strs, " | ")))
+                        print(string.format("[Love2D Client] [Tick %d] %d entities: %s", current_tick, #current_entities, table.concat(entity_strs, " | ")))
                     end
 
                 elseif server_packet.response then
                     last_status = string.format("ACK seq=%d status=%s", server_packet.response.sequence_id, server_packet.response.status)
-                    print(string.format("[Love2D Client] Received ACK seq=%d status=%s", server_packet.response.sequence_id, server_packet.response.status))
                 end
             end
         end
+    end
+
+    -- Connection timeout detection: if server stops sending packets (> 2.0s), clear entities and report status
+    if last_packet_time > 0 and (now - last_packet_time > 2.0) then
+        if #current_entities > 0 then
+            current_entities = {}
+        end
+        last_status = "Disconnected / Replay Finished (No packets from server)"
     end
 end
 
@@ -229,18 +280,25 @@ function love.draw()
 
     -- HUD / UI Overlay
     love.graphics.setColor(0.12, 0.14, 0.2, 0.85)
-    love.graphics.rectangle("fill", 10, 10, 420, 140, 6, 6)
+    love.graphics.rectangle("fill", 10, 10, 440, 155, 6, 6)
     love.graphics.setColor(0.3, 0.4, 0.6)
-    love.graphics.rectangle("line", 10, 10, 420, 140, 6, 6)
+    love.graphics.rectangle("line", 10, 10, 440, 155, 6, 6)
 
     love.graphics.setColor(1, 1, 1)
-    love.graphics.print("loci2d - Love2D Client (Phase 3)", 20, 20)
+    local mode_text = is_spectator and "SPECTATOR (Replay Viewer)" or "PLAYER (Live Match)"
+    love.graphics.print("loci2d - Love2D Client | Mode: " .. mode_text, 20, 20)
+
     love.graphics.setColor(0.8, 0.8, 0.8)
-    love.graphics.print("Controls: WASD / Arrows -> Move (Release to Stop)", 20, 45)
-    love.graphics.print("          X / K -> Explicit Stop | Space -> Action | P -> Ping", 20, 65)
+    if is_spectator then
+        love.graphics.print("Spectator Mode Active: Watching authoritative match stream.", 20, 45)
+        love.graphics.print("Press TAB or M to switch to Player Mode.", 20, 65)
+    else
+        love.graphics.print("Controls: WASD / Arrows -> Move | X -> Stop | Space -> Action", 20, 45)
+        love.graphics.print("Press TAB or M to switch to Spectator / Replay Mode.", 20, 65)
+    end
 
     love.graphics.setColor(0.4, 0.9, 1.0)
     love.graphics.print("Tick: " .. tostring(current_tick) .. " | Active Entities: " .. tostring(#current_entities), 20, 95)
     love.graphics.setColor(0.9, 0.9, 0.6)
-    love.graphics.print("Status: " .. last_status, 20, 115)
+    love.graphics.print("Status: " .. last_status, 20, 120)
 end

@@ -1,6 +1,6 @@
 use std::net::UdpSocket;
 use std::process;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -24,6 +24,32 @@ fn print_help() {
     println!("  --speed <FLOAT>              Replay playback speed multiplier (default: 1.0)");
     println!("  --broadcast <ADDR>           Spectator UDP broadcast destination (e.g. 127.0.0.1:4000)");
     println!("  --help, -h                   Show this help message");
+}
+
+fn spawn_console_listener(running: Arc<AtomicBool>) {
+    thread::spawn(move || {
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        while running.load(Ordering::Relaxed) {
+            line.clear();
+            if stdin.read_line(&mut line).is_ok() {
+                let trimmed = line.trim();
+                if trimmed.eq_ignore_ascii_case("quit")
+                    || trimmed.eq_ignore_ascii_case("stop")
+                    || trimmed.eq_ignore_ascii_case("exit")
+                    || trimmed.eq_ignore_ascii_case("q")
+                {
+                    println!("[Server] Shutdown command received ('{}'). Stopping gracefully...", trimmed);
+                    running.store(false, Ordering::Relaxed);
+                    break;
+                }
+            } else {
+                // EOF on stdin (e.g. piped input or Ctrl+D)
+                running.store(false, Ordering::Relaxed);
+                break;
+            }
+        }
+    });
 }
 
 fn main() {
@@ -174,7 +200,12 @@ fn main() {
         } else {
             // 2.2 Live Spectator Replay Broadcast Mode
             let cfg = ServerConfig::from_env();
-            let bind_target = broadcast_addr.unwrap_or(cfg.bind_addr);
+            let bind_target = if let Some(ref addr) = broadcast_addr {
+                addr.clone()
+            } else {
+                println!("[Spectator] No --broadcast specified, using server default: {}", cfg.bind_addr);
+                cfg.bind_addr
+            };
 
             println!("[Spectator] Starting Replay Broadcast Server for '{}' at {} ({:.1}x speed)",
                 path, bind_target, replay_speed);
@@ -202,6 +233,16 @@ fn main() {
             });
 
             let running = Arc::new(AtomicBool::new(true));
+
+            // Ctrl+C and console listener for graceful spectator server shutdown
+            let r_ctrlc = Arc::clone(&running);
+            let _ = ctrlc::set_handler(move || {
+                println!("\n[Spectator] Shutdown signal received (Ctrl+C). Stopping broadcast...");
+                r_ctrlc.store(false, Ordering::Relaxed);
+            });
+            spawn_console_listener(Arc::clone(&running));
+
+            println!("[Spectator] Type 'stop' or 'quit' (or press Ctrl+C) to shut down the spectator server.\n");
             player.broadcast_live(socket, intent_rx, replay_speed, running);
             println!("[Spectator] Replay broadcast completed.");
             process::exit(0);
@@ -222,24 +263,37 @@ fn main() {
     let client_timeout_secs = cfg.client_timeout_secs;
 
     let net_socket = Arc::clone(&socket);
-    let net_thread = thread::spawn(move || {
+    let _net_thread = thread::spawn(move || {
         run_server(net_socket, intent_tx);
     });
+
+    let mut game_loop = GameLoop::new(tick_rate);
+    let running = game_loop.running_handle();
+
+    if let Some(record_path) = record_file {
+        println!("[Replay] Live match recording enabled -> '{}' (checkpoint interval: {} ticks)", 
+            record_path, checkpoint_interval);
+        game_loop.enable_recording(1, seed, map_name, checkpoint_interval, record_path);
+    }
+
+    // Ctrl+C handler for graceful match saving
+    let r_ctrlc = Arc::clone(&running);
+    let _ = ctrlc::set_handler(move || {
+        println!("\n[Server] Shutdown signal received (Ctrl+C). Saving recording and stopping...");
+        r_ctrlc.store(false, Ordering::Relaxed);
+    });
+
+    // Console stdin listener for 'stop' / 'quit' command
+    spawn_console_listener(Arc::clone(&running));
+    println!("[Server] Server running. Type 'stop' or 'quit' (or press Ctrl+C) to shut down and save match recording.\n");
 
     let loop_socket = Arc::clone(&socket);
     let loop_thread = thread::spawn(move || {
         let instance = Instance::new(1, tick_rate, client_timeout_secs);
-        let mut game_loop = GameLoop::new(tick_rate);
-
-        if let Some(record_path) = record_file {
-            println!("[Replay] Live match recording enabled -> '{}' (checkpoint interval: {} ticks)", 
-                record_path, checkpoint_interval);
-            game_loop.enable_recording(1, seed, map_name, checkpoint_interval, record_path);
-        }
-
         game_loop.start(instance, intent_rx, loop_socket);
     });
 
-    let _ = net_thread.join();
     let _ = loop_thread.join();
+    println!("[Server] Shutdown complete.");
+    process::exit(0);
 }

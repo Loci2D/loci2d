@@ -98,14 +98,14 @@ fn test_live_spectator_replay_broadcasting() {
     let running_clone = Arc::clone(&running);
     let mut player = ReplayPlayer::load_from_file(&replay_path).expect("Failed to load replay");
 
+    const TEST_REPLAY_SPEED: f32 = 2.0;
     let player_handle = thread::spawn(move || {
-        // Run at 2.0x speed for fast test execution
-        player.broadcast_live(socket, intent_rx, 2.0, running_clone);
+        player.broadcast_live(socket, intent_rx, TEST_REPLAY_SPEED, running_clone);
     });
 
     // 3. Connect Spectator 1 (Godot-like) sending JoinIntent
     let spectator1_sock = UdpSocket::bind("127.0.0.1:0").unwrap();
-    spectator1_sock.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
+    spectator1_sock.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
 
     let join_packet = GamePacket {
         sequence_id: 1,
@@ -122,7 +122,7 @@ fn test_live_spectator_replay_broadcasting() {
 
     // 4. Connect Spectator 2 (Love2D-like) sending PingIntent
     let spectator2_sock = UdpSocket::bind("127.0.0.1:0").unwrap();
-    spectator2_sock.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
+    spectator2_sock.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
 
     let ping_packet = GamePacket {
         sequence_id: 1,

@@ -1,29 +1,59 @@
-# NetworkClient.gd - Godot 4 GDScript example for loci2d UDP server
+# NetworkClient.gd - Godot 4 GDScript example for loci2d UDP server & Replay Spectator
 extends Node
 
 signal world_state_updated(tick: int, entities: Array)
 signal server_response_received(sequence_id: int, status: String)
+signal stream_disconnected()
 
 @export var server_host: String = "127.0.0.1"
 @export var server_port: int = 8080
+@export var is_spectator: bool = false
 
 var _udp := PacketPeerUDP.new()
 var _sequence_id: int = 0
+var _last_packet_time: float = 0.0
+var _last_heartbeat_time: float = 0.0
 
 func _ready() -> void:
 	var err = _udp.connect_to_host(server_host, server_port)
 	if err == OK:
 		print("[loci2d NetworkClient] Connected UDP to ", server_host, ":", server_port)
+		if is_spectator:
+			print("[loci2d NetworkClient] Mode: SPECTATOR (Replay Viewer)")
+			send_ping()
+		else:
+			send_join("GodotPlayer")
 	else:
 		printerr("[loci2d NetworkClient] Failed to connect UDP to host, error code: ", err)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	var now = Time.get_ticks_msec() / 1000.0
+
+	# Maintain periodic heartbeat in spectator mode
+	if is_spectator and (now - _last_heartbeat_time >= 1.0):
+		_last_heartbeat_time = now
+		send_ping()
+
 	# Poll for incoming UDP responses/snapshots from loci2d server
+	var has_packets = false
 	while _udp.get_available_packet_count() > 0:
 		var raw_bytes: PackedByteArray = _udp.get_packet()
+		_last_packet_time = now
+		has_packets = true
 		_handle_server_packet(raw_bytes)
 
+	# Connection timeout detection (> 2.0s without packets)
+	if _last_packet_time > 0 and (now - _last_packet_time > 2.0):
+		stream_disconnected.emit()
+		_last_packet_time = 0
+
+func start_spectating() -> void:
+	is_spectator = true
+	send_ping()
+	print("[loci2d NetworkClient] Switched to Spectator / Replay Mode")
+
 func send_join(player_name: String = "GodotPlayer") -> void:
+	is_spectator = false
 	_sequence_id += 1
 	print("[loci2d NetworkClient] Sending Join name=", player_name, " (seq=", _sequence_id, ")")
 
@@ -36,10 +66,14 @@ func send_ping() -> void:
 	print("[loci2d NetworkClient] Sending Ping (seq=", _sequence_id, ")")
 
 func send_move(direction: Vector2) -> void:
+	if is_spectator:
+		return
 	_sequence_id += 1
 	print("[loci2d NetworkClient] Sending Move direction=", direction, " (seq=", _sequence_id, ")")
 
 func send_action(ability_id: int) -> void:
+	if is_spectator:
+		return
 	_sequence_id += 1
 	print("[loci2d NetworkClient] Sending Action ability_id=", ability_id, " (seq=", _sequence_id, ")")
 

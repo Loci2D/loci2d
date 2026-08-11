@@ -11,6 +11,7 @@ prost = "0.13"
 dotenvy = "0.15"
 fixed = { version = "1.28", features = ["serde"] }
 sha2 = "0.10"
+ctrlc = "3.4"
 
 
 [build-dependencies]

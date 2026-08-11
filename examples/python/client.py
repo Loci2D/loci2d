@@ -17,6 +17,8 @@ SERVER_ADDR = ("127.0.0.1", 8080)
 latest_world_state = None
 latest_lock = threading.Lock()
 stream_enabled = False
+is_spectator = False
+last_packet_time = 0.0
 
 def print_world_state(ws):
     print(f"\n--- [World State Snapshot | Tick {ws.tick} | Timestamp: {ws.timestamp}] ---")
@@ -30,13 +32,14 @@ def print_world_state(ws):
     print("---------------------------------------------------------")
 
 def listen_server(sock, stop_event):
-    global latest_world_state, stream_enabled
+    global latest_world_state, stream_enabled, last_packet_time
     sock.settimeout(0.5)
     last_stream_print = 0.0
 
     while not stop_event.is_set():
         try:
             data, _ = sock.recvfrom(2048)
+            last_packet_time = time.time()
             server_packet = game_packets_pb2.ServerPacket()
             server_packet.ParseFromString(data)
 
@@ -52,23 +55,56 @@ def listen_server(sock, stop_event):
                 resp = server_packet.response
                 print(f"\n[Server Response] ACK seq={resp.sequence_id} status={resp.status}")
         except socket.timeout:
+            now = time.time()
+            if last_packet_time > 0 and (now - last_packet_time > 2.0):
+                with latest_lock:
+                    if latest_world_state is not None and len(latest_world_state.entities) > 0:
+                        latest_world_state = None
+                        print("\n[Stream Status] Server disconnected or replay finished (stream silent).")
             continue
         except Exception as e:
             if not stop_event.is_set():
                 print(f"\n[Error receiving packet] {e}")
 
+def spectator_heartbeat(sock, stop_event):
+    """Periodically sends PingIntent to keep spectator registration active."""
+    seq = 100000
+    while not stop_event.is_set():
+        try:
+            packet = game_packets_pb2.GamePacket()
+            packet.sequence_id = seq
+            packet.timestamp = int(time.time() * 1000)
+            seq += 1
+            packet.intent.ping.CopyFrom(game_packets_pb2.PingIntent())
+            data = packet.SerializeToString()
+            sock.sendto(data, SERVER_ADDR)
+        except Exception:
+            pass
+        time.sleep(1.0)
+
 def main():
-    global stream_enabled
+    global stream_enabled, is_spectator
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
+    # Check if launched with --spectate or --replay
+    if len(sys.argv) > 1 and ("--spectate" in sys.argv or "--replay" in sys.argv or "-s" in sys.argv):
+        is_spectator = True
+        stream_enabled = True
+
     stop_event = threading.Event()
     listener_thread = threading.Thread(target=listen_server, args=(sock, stop_event), daemon=True)
     listener_thread.start()
 
-    sequence_id = 0
-    print("[Python Client] Ready to connect to loci2d server at 127.0.0.1:8080")
-    print("Commands: join <name> | status | move <x> <y> | stream <on|off> | leave [reason] | action <id> | ping | quit")
+    if is_spectator:
+        heartbeat_thread = threading.Thread(target=spectator_heartbeat, args=(sock, stop_event), daemon=True)
+        heartbeat_thread.start()
+        print("[Python Client] Started in SPECTATOR / REPLAY mode -> Watching match stream from 127.0.0.1:8080")
+    else:
+        print("[Python Client] Ready to connect to loci2d server at 127.0.0.1:8080")
 
+    print("Commands: join <name> | spectate | status | move <x> <y> | stream <on|off> | leave [reason] | action <id> | ping | quit")
+
+    sequence_id = 0
     while True:
         try:
             cmd = input("Enter command: ").strip()
@@ -78,13 +114,21 @@ def main():
         if not cmd:
             continue
 
+        if cmd == "spectate":
+            is_spectator = True
+            stream_enabled = True
+            heartbeat_thread = threading.Thread(target=spectator_heartbeat, args=(sock, stop_event), daemon=True)
+            heartbeat_thread.start()
+            print("[Spectator] Switched to Spectator mode -> Periodic heartbeats and stream logging enabled.")
+            continue
+
         if cmd == "status" or cmd == "state" or cmd == "entities":
             with latest_lock:
                 ws = latest_world_state
             if ws:
                 print_world_state(ws)
             else:
-                print("[Status] No world state snapshot received yet from server.")
+                print("[Status] No active world state snapshot (server idle or disconnected).")
             continue
 
         if cmd == "stream on":
@@ -103,10 +147,11 @@ def main():
         sequence_id += 1
 
         if cmd == "quit":
-            packet.intent.disconnect.reason = "normal quit"
-            data = packet.SerializeToString()
-            sock.sendto(data, SERVER_ADDR)
-            print(f"[Sent] Disconnect packet ({len(data)} bytes) | Shutting down...")
+            if not is_spectator:
+                packet.intent.disconnect.reason = "normal quit"
+                data = packet.SerializeToString()
+                sock.sendto(data, SERVER_ADDR)
+            print(f"[Quit] Shutting down client...")
             stop_event.set()
             break
         elif cmd.startswith("join"):
@@ -130,7 +175,7 @@ def main():
             ability_id = int(parts[1]) if len(parts) > 1 else 1
             packet.intent.action.ability_id = ability_id
         else:
-            print("Unknown command. Available: join <name>, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit")
+            print("Unknown command. Available: join <name>, spectate, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit")
             continue
 
         # Serialize packet to binary bytes

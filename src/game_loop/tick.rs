@@ -113,9 +113,12 @@ impl GameLoop {
                     }
                 }
 
-                // 4. Record state checkpoint if on checkpoint interval
-                if let Some(ref mut recorder) = self.recorder {
-                    recorder.maybe_record_checkpoint(tick_count, &instance);
+                // 4. Record state checkpoint if on checkpoint interval and auto-save incrementally
+                if let Some(ref mut recorder) = self.recorder
+                    && recorder.maybe_record_checkpoint(tick_count, &instance)
+                    && let Some(ref path) = self.record_path
+                {
+                    let _ = recorder.save_to_file(path);
                 }
 
                 // 5. Generate WorldState snapshot

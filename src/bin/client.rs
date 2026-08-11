@@ -69,16 +69,25 @@ fn print_world_state(ws: &WorldState) {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let is_spectator_init = args.iter().any(|a| a == "--spectate" || a == "--replay" || a == "-s");
+
     // Bind to any available port for the client
     let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind client socket");
     println!("[{}] UDP Client started on {}", Local::now().format("%Y-%m-%d %H:%M:%S"), socket.local_addr().unwrap());
 
     let server_addr = "127.0.0.1:8080";
     println!("[{}] Connecting to server at {}", Local::now().format("%Y-%m-%d %H:%M:%S"), server_addr);
-    println!("Commands: join <name> | status | move <x> <y> | stream <on|off> | leave [reason] | action <id> | ping | quit");
 
     let latest_state: Arc<Mutex<Option<WorldState>>> = Arc::new(Mutex::new(None));
-    let stream_enabled = Arc::new(AtomicBool::new(false)); // Stream off by default
+    let stream_enabled = Arc::new(AtomicBool::new(is_spectator_init));
+    let is_spectator = Arc::new(AtomicBool::new(is_spectator_init));
+
+    if is_spectator_init {
+        println!("[Spectator] Mode: SPECTATOR (Replay Viewer) -> Streaming snapshots enabled.");
+    }
+
+    println!("Commands: join <name> | spectate | status | move <x> <y> | stream <on|off> | leave [reason] | action <id> | ping | quit");
 
     // Spawn background listener thread to receive snapshots and keep latest state
     let recv_socket = socket.try_clone().expect("Failed to clone socket for receiver");
@@ -118,6 +127,30 @@ fn main() {
         }
     });
 
+    // Spawn heartbeat thread for spectator mode
+    let heartbeat_socket = socket.try_clone().expect("Failed to clone socket for heartbeat");
+    let is_spec_heartbeat = Arc::clone(&is_spectator);
+    thread::spawn(move || {
+        let mut seq: u64 = 50000;
+        loop {
+            if is_spec_heartbeat.load(Ordering::Relaxed) {
+                let packet = GamePacket {
+                    sequence_id: seq,
+                    timestamp: 0,
+                    intent: Some(ClientIntent {
+                        intent: Some(client_intent::Intent::Ping(PingIntent {})),
+                    }),
+                };
+                seq += 1;
+                let mut buf = Vec::new();
+                if packet.encode(&mut buf).is_ok() {
+                    let _ = heartbeat_socket.send_to(&buf, server_addr);
+                }
+            }
+            thread::sleep(Duration::from_millis(1000));
+        }
+    });
+
     let mut sequence_id: u64 = 0;
 
     loop {
@@ -136,11 +169,20 @@ fn main() {
         }
 
         if input == "quit" {
-            println!("[{}] Sending disconnect and shutting down...", Local::now().format("%Y-%m-%d %H:%M:%S"));
-            send_packet(&socket, server_addr, &mut sequence_id, client_intent::Intent::Disconnect(DisconnectIntent {
-                reason: "normal quit".to_string(),
-            }));
+            if !is_spectator.load(Ordering::Relaxed) {
+                println!("[{}] Sending disconnect and shutting down...", Local::now().format("%Y-%m-%d %H:%M:%S"));
+                send_packet(&socket, server_addr, &mut sequence_id, client_intent::Intent::Disconnect(DisconnectIntent {
+                    reason: "normal quit".to_string(),
+                }));
+            }
             break;
+        }
+
+        if input == "spectate" {
+            is_spectator.store(true, Ordering::Relaxed);
+            stream_enabled.store(true, Ordering::Relaxed);
+            println!("[Spectator] Mode: SPECTATOR (Replay Viewer) -> Periodic heartbeat pings & live snapshot streaming ENABLED.");
+            continue;
         }
 
         if input == "status" || input == "state" || input == "entities" {
@@ -166,6 +208,7 @@ fn main() {
 
         let intent_inner = match input {
             cmd if cmd.starts_with("join") => {
+                is_spectator.store(false, Ordering::Relaxed);
                 let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
                 let player_name = if parts.len() > 1 && !parts[1].trim().is_empty() {
                     parts[1].trim().to_string()
@@ -179,33 +222,35 @@ fn main() {
                 let reason = if parts.len() > 1 {
                     parts[1].trim().to_string()
                 } else {
-                    "leaving session".to_string()
+                    "leaving".to_string()
                 };
                 client_intent::Intent::Disconnect(DisconnectIntent { reason })
             }
             "ping" => client_intent::Intent::Ping(PingIntent {}),
             cmd if cmd.starts_with("move") => {
                 let parts: Vec<&str> = cmd.split_whitespace().collect();
-                let (x, y) = if parts.len() >= 3 {
-                    (parts[1].parse::<f32>().unwrap_or(0.0), parts[2].parse::<f32>().unwrap_or(0.0))
+                if parts.len() >= 3 {
+                    let x: f32 = parts[1].parse().unwrap_or(0.0);
+                    let y: f32 = parts[2].parse().unwrap_or(0.0);
+                    client_intent::Intent::Move(MoveIntent {
+                        direction: Some(Vector2 { x, y }),
+                    })
                 } else {
-                    (1.0, 0.0)
-                };
-                client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x, y }),
-                })
+                    println!("[Usage] move <x> <y> (e.g. move 1.0 0.0)");
+                    continue;
+                }
             }
             cmd if cmd.starts_with("action") => {
                 let parts: Vec<&str> = cmd.split_whitespace().collect();
-                let ability_id = if parts.len() >= 2 {
-                    parts[1].parse::<u32>().unwrap_or(0)
+                let ability_id: u32 = if parts.len() >= 2 {
+                    parts[1].parse().unwrap_or(1)
                 } else {
-                    0
+                    1
                 };
                 client_intent::Intent::Action(ActionIntent { ability_id })
             }
             _ => {
-                println!("Unknown command. Available: join <name>, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit");
+                println!("Unknown command: '{}'. Available: join <name>, spectate, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit", input);
                 continue;
             }
         };
