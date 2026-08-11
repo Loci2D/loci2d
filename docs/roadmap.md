@@ -120,51 +120,109 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 
 ---
 
-### Phase 5: Future Enhancements (Post-Validation)
-### Fase 5: Melhorias Futuras (Pós-Validação)
-
-#### English
-* [ ] **Embedded Scripting (Lua Engine)**:
-  - Integrate `mlua` for hot-swappable custom server logic and event callbacks.
-* [ ] **Multi-Instance Room Manager**:
-  - Dynamic allocation, creation, and teardown of game instances / rooms.
-* [ ] **Authentication & Security**:
-  - Add session tokens, security validation, and anti-tamper intent validation.
-* [ ] **Client-Side Helpers**:
-  - Client-side prediction and interpolation utilities for smoother rendering under latency.
-
-#### Português
-* [ ] **Scripting Embutido (Motor Lua)**:
-  - Integrar `mlua` para lógica de servidor customizada e callbacks de eventos recarregáveis em tempo de execução.
-* [ ] **Gerenciador de Múltiplas Instâncias / Salas**:
-  - Alocação, criação e destruição dinâmica de instâncias de jogo / salas.
-* [ ] **Autenticação & Segurança**:
-  - Adicionar tokens de sessão, validação de segurança e validação de intenções contra adulteração.
-* [ ] **Utilitários para Clientes**:
-  - Predição no lado do cliente e utilitários de interpolação para renderização suave sob latência.
-
----
-
-### Phase 6: Physics & Collision Engine
-### Fase 6: Motor de Física e Colisão
+### Phase 5: Deterministic Physics & Collision Engine
+> **Spec:** [Phase 5 Spec](roadmap-specs/phase5-physics-and-collision-spec.md) · **Reference ADRs:** [ADR-0001](adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](adr/en/0002-instance-based-architecture.md) · [ADR-0003](adr/en/0003-2d-map-only.md) · [ADR-0005](adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0007](adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0008](adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0010](adr/en/0010-event-sourced-replay-format.md) · [ADR-0011](adr/en/0011-authoritative-spectator-replay-broadcasting.md) · [ADR-0012](adr/en/0012-deterministic-2d-collision-and-kinematic-resolution.md) · [ADR-0013](adr/en/0013-server-authoritative-destination-steering-and-navigation.md)
+### Fase 5: Motor de Física e Colisão Determinístico
 
 #### English
 * [ ] **Deterministic Collision Detection**:
-  - Implement AABB (Axis-Aligned Bounding Box) and circle collision using fixed-point math.
-* [ ] **Map Boundaries & Static Geometry**:
-  - Define map boundaries and static colliders (e.g., walls, obstacles) loaded from configuration or Lua scripts.
+  - Implement fixed-point AABB (Axis-Aligned Bounding Box) and Circle colliders using `I16F16`.
+* [ ] **Static Map Geometry & Boundaries**:
+  - Define world boundaries and static colliders (walls, obstacles) loaded from map files/configuration.
+* [ ] **Collision Resolution & Trigger Zones**:
+  - Implement solid obstacle pushback and trigger/sensor zones (`on_overlap_enter` / `on_overlap_exit`).
 * [ ] **Click-to-Move Steering & Navigation**:
-  - Implement destination-based steering (`MoveToPositionIntent`) and obstacle pathfinding for RTS/MOBA mouse controls.
-* [ ] **Spatial Partitioning (Optional)**:
-  - Add a simple grid or QuadTree for efficient collision queries if entity count grows.
+  - Implement destination-based steering (`MoveToPositionIntent`) with basic obstacle navigation for RTS/MOBA controls.
+* [ ] **Spatial Partitioning (Optional Optimization)**:
+  - Add a fixed spatial hash grid for efficient broadphase collision queries.
 
 #### Português
 * [ ] **Detecção de Colisão Determinística**:
-  - Implementar colisão AABB (Caixa Delimitadora Alinhada aos Eixos) e de círculos usando matemática de ponto fixo.
-* [ ] **Limites do Mapa e Geometria Estática**:
-  - Definir limites do mapa e colisores estáticos (ex: paredes, obstáculos) carregados a partir de configurações ou scripts Lua.
+  - Implementar colisores AABB (Caixa Delimitadora) e de Círculos usando ponto fixo `I16F16`.
+* [ ] **Geometria Estática do Mapa & Limites**:
+  - Definir limites do mundo e colisores estáticos (paredes, obstáculos) carregados de arquivos de mapa/configuração.
+* [ ] **Resolução de Colisão & Zonas de Gatilho (Triggers)**:
+  - Implementar desvio/bloqueio de obstáculos sólidos e zonas de sensores/gatilhos (`on_overlap_enter` / `on_overlap_exit`).
 * [ ] **Navegação & Movimento por Clique (Click-to-Move)**:
-  - Implementar movimentação baseada em destino (`MoveToPositionIntent`) e desvio de obstáculos para controles de mouse estilo RTS/MOBA.
-* [ ] **Particionamento Espacial (Opcional)**:
-  - Adicionar um grid simples ou QuadTree para consultas de colisão eficientes caso o número de entidades cresça.
+  - Implementar movimentação baseada em destino (`MoveToPositionIntent`) com navegação básica por obstáculos para controles RTS/MOBA.
+* [ ] **Particionamento Espacial (Otimização Opcional)**:
+  - Adicionar um spatial hash grid fixo para consultas eficientes de colisão em fase ampla (broadphase).
 
+---
+
+### Phase 6: Embedded Scripting & Game Logic (Lua Engine)
+### Fase 6: Scripting Embutido & Lógica de Jogo (Motor Lua)
+
+#### English
+* [ ] **Lua VM Integration (`mlua`)**:
+  - Embed a sandboxed, deterministic Lua runtime into the game instance.
+* [ ] **Rust-to-Lua Engine API**:
+  - Expose entity manipulation, fixed-point vectors, intent hooks, and collision/trigger callbacks to Lua.
+* [ ] **Event-Driven Gameplay Callbacks**:
+  - Implement lifecycle hooks: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
+* [ ] **Hot-Reloadable Game Rules**:
+  - Support reloading script files at runtime without restarting the server binary.
+* [ ] **Deterministic Script Execution**:
+  - Ensure Lua callbacks execute strictly at deterministic tick boundaries to preserve `.loci` replay parity.
+
+#### Português
+* [ ] **Integração com Máquina Virtual Lua (`mlua`)**:
+  - Embutir um ambiente de execução Lua seguro e determinístico dentro da instância do jogo.
+* [ ] **API de Engine Rust-para-Lua**:
+  - Expor manipulação de entidades, vetores de ponto fixo, ganchos de intenção e callbacks de colisão/gatilho para Lua.
+* [ ] **Callbacks de Jogabilidade Orientados a Eventos**:
+  - Implementar ganchos de ciclo de vida: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
+* [ ] **Regras de Jogo com Recarregamento Dinâmico (Hot-Reload)**:
+  - Suportar recarregamento de scripts em tempo de execução sem reiniciar o executável do servidor.
+* [ ] **Execução Determinística de Scripts**:
+  - Garantir que callbacks Lua sejam executados estritamente nos limites determinísticos de ticks para preservar a paridade de replays `.loci`.
+
+---
+
+### Phase 7: Multi-Instance & Room Management
+### Fase 7: Gerenciador de Múltiplas Instâncias e Salas
+
+#### English
+* [ ] **Dynamic Room Lifecycle**:
+  - Allocate, configure (map, scripts, tick rate, max players), and teardown game rooms dynamically.
+* [ ] **Packet Demultiplexing & Room Routing**:
+  - Route incoming client UDP packets to target instances via Room ID headers or port allocation.
+* [ ] **Concurrent Room Execution**:
+  - Execute multiple room loops in parallel across a threadpool / async worker tasks with memory isolation.
+* [ ] **Per-Room Replay Logging**:
+  - Isolate `.loci` match replay recordings per room instance.
+* [ ] **Server Room Administration & Metrics**:
+  - CLI commands and metrics to monitor active rooms, player counts, and tick health.
+
+#### Português
+* [ ] **Ciclo de Vida Dinâmico de Salas**:
+  - Alocar, configurar (mapa, scripts, tick rate, limite de jogadores) e destruir salas de jogo dinamicamente.
+* [ ] **Demultiplexação de Pacotes & Roteamento de Salas**:
+  - Encaminhar pacotes UDP dos clientes para as instâncias corretas via cabeçalho de ID de Sala ou alocação de portas.
+* [ ] **Execução Concorrente de Salas**:
+  - Executar múltiplos loops de salas em paralelo através de um threadpool / workers assíncronos com isolamento de memória.
+* [ ] **Gravação de Replays por Sala**:
+  - Isolar gravações de replay de partidas `.loci` por instância de sala.
+* [ ] **Administração & Métricas de Salas do Servidor**:
+  - Comandos CLI e métricas para monitorar salas ativas, contagem de jogadores e integridade dos ticks.
+
+---
+
+### Phase 8: Production Hardening, Security & Authentication
+### Fase 8: Endurecimento de Produção, Segurança & Autenticação
+
+#### English
+* [ ] **Session Authentication & Tokens**:
+  - Implement secure handshake validation, session tokens, and optional external auth webhooks.
+* [ ] **Intent Validation & Anti-Tamper**:
+  - Enforce server-side intent rate-limiting, packet sequence integrity, and velocity/teleportation sanity checks.
+* [ ] **Production Observability & Deployment**:
+  - Structured logging, Prometheus metrics, and production containerization.
+
+#### Português
+* [ ] **Autenticação de Sessão & Tokens**:
+  - Implementar validação de handshake seguro, tokens de sessão e webhooks opcionais de autenticação externa.
+* [ ] **Validação de Intenções & Anti-Adulteração**:
+  - Aplicar limitação de taxa (rate-limiting) de intenções, integridade de sequência de pacotes e checagens de sanidade de velocidade/teletransporte.
+* [ ] **Observabilidade de Produção & Implantação**:
+  - Logs estruturados, métricas Prometheus e conteinerização para produção.
