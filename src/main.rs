@@ -34,6 +34,8 @@ fn main() {
     let mut checkpoint_interval: u64 = 60;
     let mut seed: u64 = 42;
     let mut map_name = "default_arena".to_string();
+
+    // Placeholders for Milestone 4.4: Live Spectator Broadcast & Multi-Client Playback
     let mut _replay_speed = 1.0f32;
     let mut _broadcast_addr: Option<String> = None;
 
@@ -64,7 +66,13 @@ fn main() {
             }
             "--checkpoint-interval" => {
                 if i + 1 < args.len() {
-                    checkpoint_interval = args[i + 1].parse().unwrap_or(60);
+                    match args[i + 1].parse::<u64>() {
+                        Ok(v) => checkpoint_interval = v,
+                        Err(_) => {
+                            eprintln!("Error: --checkpoint-interval requires a valid integer value (e.g. 60)");
+                            process::exit(1);
+                        }
+                    }
                     i += 2;
                 } else {
                     eprintln!("Error: --checkpoint-interval requires an integer value");
@@ -73,7 +81,13 @@ fn main() {
             }
             "--seed" => {
                 if i + 1 < args.len() {
-                    seed = args[i + 1].parse().unwrap_or(42);
+                    match args[i + 1].parse::<u64>() {
+                        Ok(v) => seed = v,
+                        Err(_) => {
+                            eprintln!("Error: --seed requires a valid integer value (e.g. 42)");
+                            process::exit(1);
+                        }
+                    }
                     i += 2;
                 } else {
                     eprintln!("Error: --seed requires an integer value");
@@ -91,7 +105,13 @@ fn main() {
             }
             "--speed" => {
                 if i + 1 < args.len() {
-                    _replay_speed = args[i + 1].parse().unwrap_or(1.0);
+                    match args[i + 1].parse::<f32>() {
+                        Ok(v) => _replay_speed = v,
+                        Err(_) => {
+                            eprintln!("Error: --speed requires a valid float value (e.g. 1.0, 2.0)");
+                            process::exit(1);
+                        }
+                    }
                     i += 2;
                 } else {
                     eprintln!("Error: --speed requires a float value");

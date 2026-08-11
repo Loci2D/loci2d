@@ -428,9 +428,16 @@ pub struct DesyncReport {
     pub entity_summary: Vec<String>,
 }
 
+#[derive(Debug)]
+pub struct VerificationReport {
+    pub total_ticks: u64,
+    pub total_frames: usize,
+    pub verified_checkpoints: usize,
+    pub final_hash: String,
+}
+
 pub struct ReplayPlayer {
     replay: ReplayFile,
-    current_frame_idx: usize,
 }
 
 impl ReplayPlayer {

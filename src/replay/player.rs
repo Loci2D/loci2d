@@ -57,7 +57,6 @@ impl std::fmt::Display for VerificationReport {
 
 pub struct ReplayPlayer {
     replay: ReplayFile,
-    current_tick: u64,
 }
 
 impl ReplayPlayer {
@@ -79,10 +78,7 @@ impl ReplayPlayer {
             return Err(format!("Unsupported replay version: {}, expected 1", header.version).into());
         }
 
-        Ok(Self {
-            replay,
-            current_tick: 0,
-        })
+        Ok(Self { replay })
     }
 
     /// Runs headless verification against recorded state checksums as fast as possible.
@@ -168,10 +164,6 @@ impl ReplayPlayer {
 
     pub fn checkpoints(&self) -> &[ReplayCheckpoint] {
         &self.replay.checkpoints
-    }
-
-    pub fn current_tick(&self) -> u64 {
-        self.current_tick
     }
 }
 
@@ -266,5 +258,17 @@ mod tests {
         assert_ne!(err.actual_hash, err.expected_hash);
         assert_eq!(err.expected_entities, 1);
         assert_eq!(err.actual_entities, 1);
+    }
+
+    #[test]
+    fn test_replay_player_accessors() {
+        let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10);
+        let bytes = recorder.to_bytes().unwrap();
+        let player = ReplayPlayer::from_bytes(&bytes).unwrap();
+
+        assert_eq!(player.header().magic, "LOCI_REPLAY");
+        assert_eq!(player.header().map_name, "test_arena");
+        assert_eq!(player.frames().len(), 0);
+        assert_eq!(player.checkpoints().len(), 0);
     }
 }
