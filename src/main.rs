@@ -139,6 +139,11 @@ fn main() {
     }
 
     // 1. Headless Replay Verification Mode
+    if verify_mode && replay_file.is_none() {
+        eprintln!("Error: --verify requires a replay file specified via --replay <FILE>");
+        process::exit(1);
+    }
+
     if let Some(ref path) = replay_file
         && verify_mode
     {
@@ -151,21 +156,21 @@ fn main() {
             }
         };
 
-            let header = player.header();
-            println!("[Replay] Header: magic={} version={} tick_rate={}Hz seed={} map='{}'",
-                header.magic, header.version, header.tick_rate, header.random_seed, header.map_name);
-            println!("[Replay] Loaded {} frames and {} checkpoints.", player.frames().len(), player.checkpoints().len());
+        let header = player.header();
+        println!("[Replay] Header: magic={} version={} tick_rate={}Hz seed={} map='{}'",
+            header.magic, header.version, header.tick_rate, header.random_seed, header.map_name);
+        println!("[Replay] Loaded {} frames and {} checkpoints.", player.frames().len(), player.checkpoints().len());
 
-            match player.verify_determinism() {
-                Ok(report) => {
-                    println!("\n✅ {}", report);
-                    process::exit(0);
-                }
-                Err(desync) => {
-                    eprintln!("\n❌ {}", desync);
-                    process::exit(1);
-                }
+        match player.verify_determinism() {
+            Ok(report) => {
+                println!("\n✅ {}", report);
+                process::exit(0);
             }
+            Err(desync) => {
+                eprintln!("\n❌ {}", desync);
+                process::exit(1);
+            }
+        }
     }
 
     // 2. Standard Server Mode (with optional live recording)

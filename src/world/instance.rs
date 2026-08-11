@@ -173,20 +173,22 @@ impl Instance {
         }
     }
 
-    /// Advance physics using deterministic fixed-point addition and sweep for timed-out sessions
-    pub fn tick(&mut self, tick_count: u64) {
+    /// Advance physics using deterministic fixed-point addition and sweep for timed-out sessions.
+    /// Returns a list of (entity_id, player_name) for any sessions that timed out during this tick.
+    pub fn tick(&mut self, tick_count: u64) -> Vec<(u64, String)> {
         for entity in self.entities.values_mut() {
             entity.position = entity.position.saturating_add(entity.velocity);
         }
 
         // Check for timed out clients
-        self.check_timeouts();
+        let timed_out = self.check_timeouts();
 
         println!("[Tick {}] {} active entities, {} active sessions", tick_count, self.entities.len(), self.sessions.len());
+        timed_out
     }
 
-    /// Sweep and remove inactive sessions
-    pub fn check_timeouts(&mut self) {
+    /// Sweep and remove inactive sessions, returning the removed (entity_id, player_name) pairs.
+    pub fn check_timeouts(&mut self) -> Vec<(u64, String)> {
         let timeout_secs = self.client_timeout_secs;
         let mut timed_out_addrs = Vec::new();
 
@@ -196,12 +198,15 @@ impl Instance {
             }
         }
 
+        let mut timed_out_entities = Vec::new();
         for (addr, entity_id, player_name) in timed_out_addrs {
             self.sessions.remove(&addr);
             self.entity_to_addr.remove(&entity_id);
             self.entities.remove(&entity_id);
+            timed_out_entities.push((entity_id, player_name.clone()));
             println!("[Timeout] Client {} ('{}', EntityId {}) timed out after {}s of inactivity", addr, player_name, entity_id, timeout_secs);
         }
+        timed_out_entities
     }
 
     // [2026-08-08] Allowed dead_code: entity/session lifecycle helper methods for upcoming phases.
@@ -270,8 +275,12 @@ impl Instance {
                 } else {
                     join_intent.player_name.clone()
                 };
-                let entity = Entity::new(entry.entity_id, player_name, EntityType::Player);
-                self.entities.insert(entry.entity_id, entity);
+                if let Some(existing) = self.entities.get_mut(&entry.entity_id) {
+                    existing.name = player_name;
+                } else {
+                    let entity = Entity::new(entry.entity_id, player_name, EntityType::Player);
+                    self.entities.insert(entry.entity_id, entity);
+                }
             }
             Intent::Disconnect(_) => {
                 self.entities.remove(&entry.entity_id);

@@ -86,10 +86,6 @@ impl ReplayPlayer {
         let header = self.replay.header.as_ref().unwrap();
         let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
 
-        let total_ticks = self.replay.frames.last().map(|f| f.tick).unwrap_or(0);
-        let max_checkpoint_tick = self.replay.checkpoints.last().map(|c| c.tick).unwrap_or(0);
-        let end_tick = total_ticks.max(max_checkpoint_tick);
-
         let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> = self
             .replay
             .frames
@@ -103,6 +99,13 @@ impl ReplayPlayer {
             .iter()
             .map(|c| (c.tick, c))
             .collect();
+
+        let end_tick = frames_by_tick
+            .keys()
+            .next_back()
+            .copied()
+            .unwrap_or(0)
+            .max(checkpoints_by_tick.keys().next_back().copied().unwrap_or(0));
 
         for tick in 0..=end_tick {
             // 1. Apply recorded intents for this fixed tick

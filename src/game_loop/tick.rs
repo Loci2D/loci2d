@@ -94,7 +94,24 @@ impl GameLoop {
                 }
 
                 // 3. Advance deterministic simulation physics & sweep timeouts
-                instance.tick(tick_count);
+                let timed_out = instance.tick(tick_count);
+
+                // If any sessions timed out, record synthetic disconnects in the replay stream
+                if let Some(ref mut recorder) = self.recorder {
+                    for (entity_id, player_name) in timed_out {
+                        recorder.record_tick(tick_count, vec![crate::network::packets::ReplayIntentEntry {
+                            entity_id,
+                            player_name,
+                            intent: Some(crate::network::packets::ClientIntent {
+                                intent: Some(crate::network::packets::client_intent::Intent::Disconnect(
+                                    crate::network::packets::DisconnectIntent {
+                                        reason: "Inactivity timeout".to_string(),
+                                    }
+                                )),
+                            }),
+                        }]);
+                    }
+                }
 
                 // 4. Record state checkpoint if on checkpoint interval
                 if let Some(ref mut recorder) = self.recorder {
