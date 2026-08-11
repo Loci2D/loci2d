@@ -705,9 +705,9 @@ Support CLI flags via `clap`:
 - [x] **Automated Tests (`tests/replay_determinism_test.rs`)** — Cross-platform deterministic test asserting bit-exact checksums on 1,000+ tick recordings across test runs.
 
 ### Milestone 4.4: Live Spectator Broadcast & Multi-Client Playback
-- [ ] **`src/replay/player.rs`** — Implement live spectator broadcast loop streaming `WorldState` snapshots over UDP with observer session tracking.
-- [ ] **Multi-Client Verification** — Verify replay playback visually in Love2D, Godot, Python, and CLI client examples.
-- [ ] **Documentation** — Update `docs/roadmap.md` and `README.md` with replay commands and usage examples.
+- [x] **`src/replay/player.rs`** — Implement live spectator broadcast loop streaming `WorldState` snapshots over UDP with observer session tracking.
+- [x] **Multi-Client Verification** — Verify replay playback in Love2D, Godot, Python, and CLI client integration tests.
+- [x] **Documentation** — Update `docs/roadmap.md` and `README.md` with replay commands and usage examples.
 
 ---
 

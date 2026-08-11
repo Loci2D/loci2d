@@ -1,9 +1,18 @@
 // Replay player for deterministic match playback and offline verification (ADR-0010, ADR-0011).
 
 use std::collections::BTreeMap;
+use std::net::{SocketAddr, UdpSocket};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 use prost::Message;
-use crate::network::packets::{ReplayCheckpoint, ReplayFile, ReplayHeader, ReplayTickFrame};
+use crate::network::packets::{
+    client_intent, ClientIntent, ReplayCheckpoint, ReplayFile, ReplayHeader, ReplayTickFrame,
+    ServerPacket, server_packet,
+};
 use crate::world::instance::Instance;
 use super::hash::compute_canonical_state_hash;
 
@@ -155,6 +164,116 @@ impl ReplayPlayer {
             verified_checkpoints: checkpoints_by_tick.len(),
             final_hash,
         })
+    }
+
+    /// Streams the replay match in real-time (or at scaled speed) and broadcasts
+    /// authoritative WorldState snapshots over UDP to all connected spectator clients.
+    pub fn broadcast_live(
+        &mut self,
+        socket: Arc<UdpSocket>,
+        intent_rx: mpsc::Receiver<(SocketAddr, ClientIntent)>,
+        speed: f32,
+        running: Arc<AtomicBool>,
+    ) {
+        let header = self.replay.header.as_ref().unwrap();
+        let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
+
+        let speed = if speed <= 0.0 { 1.0 } else { speed.clamp(0.1, 10.0) };
+        let base_tick_hz = header.tick_rate as f64 * speed as f64;
+        let tick_duration = Duration::from_secs_f64(1.0 / base_tick_hz);
+        let max_accumulator = tick_duration * 5;
+
+        let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> = self
+            .replay
+            .frames
+            .iter()
+            .map(|f| (f.tick, f))
+            .collect();
+
+        let end_tick = frames_by_tick
+            .keys()
+            .next_back()
+            .copied()
+            .unwrap_or(0)
+            .max(self.replay.checkpoints.iter().map(|c| c.tick).max().unwrap_or(0));
+
+        // Track connected spectator clients (SocketAddr -> last activity timestamp)
+        let mut spectators: BTreeMap<SocketAddr, Instant> = BTreeMap::new();
+        let spectator_timeout = Duration::from_secs(10);
+
+        let mut accumulator = Duration::ZERO;
+        let mut last_time = Instant::now();
+        let mut tick_count = 0u64;
+        let mut out_buf = Vec::with_capacity(2048);
+
+        running.store(true, Ordering::Relaxed);
+        println!("[Spectator] Replay broadcast started ({} Hz at {:.1}x speed, total ticks: {})", 
+            header.tick_rate, speed, end_tick);
+
+        while running.load(Ordering::Relaxed) && tick_count <= end_tick {
+            let now = Instant::now();
+            let delta = now.duration_since(last_time);
+            last_time = now;
+
+            accumulator = (accumulator + delta).min(max_accumulator);
+
+            while accumulator >= tick_duration && tick_count <= end_tick {
+                // 1. Drain incoming spectator intents & register/refresh spectator sessions
+                while let Ok((addr, intent)) = intent_rx.try_recv() {
+                    let now = Instant::now();
+                    if spectators.insert(addr, now).is_none() {
+                        println!("[Spectator] New spectator client registered: {}", addr);
+                    }
+                    if let Some(client_intent::Intent::Disconnect(_)) = intent.intent {
+                        spectators.remove(&addr);
+                        println!("[Spectator] Spectator client disconnected: {}", addr);
+                    }
+                }
+
+                // 2. Sweep timed-out spectators (> 10s inactivity)
+                let now = Instant::now();
+                spectators.retain(|addr, last_seen| {
+                    if now.duration_since(*last_seen) > spectator_timeout {
+                        println!("[Spectator] Spectator client {} timed out", addr);
+                        false
+                    } else {
+                        true
+                    }
+                });
+
+                // 3. Apply recorded match intents for this fixed tick
+                if let Some(frame) = frames_by_tick.get(&tick_count) {
+                    for entry in &frame.entries {
+                        instance.apply_replay_entry(entry);
+                    }
+                }
+
+                // 4. Advance deterministic simulation physics
+                instance.tick(tick_count);
+
+                // 5. Generate WorldState snapshot
+                let world_state = instance.create_snapshot(tick_count);
+                let packet = ServerPacket {
+                    sequence_id: tick_count,
+                    payload: Some(server_packet::Payload::WorldState(world_state)),
+                };
+
+                // 6. Encode and broadcast to all active spectators
+                out_buf.clear();
+                if let Ok(()) = packet.encode(&mut out_buf) {
+                    for spectator_addr in spectators.keys() {
+                        let _ = socket.send_to(&out_buf, spectator_addr);
+                    }
+                }
+
+                tick_count += 1;
+                accumulator -= tick_duration;
+            }
+
+            thread::sleep(Duration::from_micros(500));
+        }
+
+        println!("[Spectator] Replay broadcast finished at tick {}.", tick_count.saturating_sub(1));
     }
 
     pub fn header(&self) -> &ReplayHeader {

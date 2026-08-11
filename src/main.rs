@@ -1,5 +1,6 @@
 use std::net::UdpSocket;
 use std::process;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -34,10 +35,8 @@ fn main() {
     let mut checkpoint_interval: u64 = 60;
     let mut seed: u64 = 42;
     let mut map_name = "default_arena".to_string();
-
-    // Placeholders for Milestone 4.4: Live Spectator Broadcast & Multi-Client Playback
-    let mut _replay_speed = 1.0f32;
-    let mut _broadcast_addr: Option<String> = None;
+    let mut replay_speed = 1.0f32;
+    let mut broadcast_addr: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -106,7 +105,7 @@ fn main() {
             "--speed" => {
                 if i + 1 < args.len() {
                     match args[i + 1].parse::<f32>() {
-                        Ok(v) => _replay_speed = v,
+                        Ok(v) => replay_speed = v,
                         Err(_) => {
                             eprintln!("Error: --speed requires a valid float value (e.g. 1.0, 2.0)");
                             process::exit(1);
@@ -120,7 +119,7 @@ fn main() {
             }
             "--broadcast" => {
                 if i + 1 < args.len() {
-                    _broadcast_addr = Some(args[i + 1].clone());
+                    broadcast_addr = Some(args[i + 1].clone());
                     i += 2;
                 } else {
                     eprintln!("Error: --broadcast requires an IP:PORT address");
@@ -138,42 +137,78 @@ fn main() {
         }
     }
 
-    // 1. Headless Replay Verification Mode
+    // 1. Validation for --verify
     if verify_mode && replay_file.is_none() {
         eprintln!("Error: --verify requires a replay file specified via --replay <FILE>");
         process::exit(1);
     }
 
-    if let Some(ref path) = replay_file
-        && verify_mode
-    {
-        println!("[Replay] Loading replay file '{}' for headless verification...", path);
-        let mut player = match ReplayPlayer::load_from_file(path) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("[Replay] Failed to load replay file: {}", e);
-                process::exit(1);
-            }
-        };
+    // 2. Replay Modes (Headless Verification vs Live Spectator Broadcast)
+    if let Some(ref path) = replay_file {
+        if verify_mode {
+            // 2.1 Headless Replay Verification Mode
+            println!("[Replay] Loading replay file '{}' for headless verification...", path);
+            let mut player = match ReplayPlayer::load_from_file(path) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("[Replay] Failed to load replay file: {}", e);
+                    process::exit(1);
+                }
+            };
 
-        let header = player.header();
-        println!("[Replay] Header: magic={} version={} tick_rate={}Hz seed={} map='{}'",
-            header.magic, header.version, header.tick_rate, header.random_seed, header.map_name);
-        println!("[Replay] Loaded {} frames and {} checkpoints.", player.frames().len(), player.checkpoints().len());
+            let header = player.header();
+            println!("[Replay] Header: magic={} version={} tick_rate={}Hz seed={} map='{}'",
+                header.magic, header.version, header.tick_rate, header.random_seed, header.map_name);
+            println!("[Replay] Loaded {} frames and {} checkpoints.", player.frames().len(), player.checkpoints().len());
 
-        match player.verify_determinism() {
-            Ok(report) => {
-                println!("\n✅ {}", report);
-                process::exit(0);
+            match player.verify_determinism() {
+                Ok(report) => {
+                    println!("\n✅ {}", report);
+                    process::exit(0);
+                }
+                Err(desync) => {
+                    eprintln!("\n❌ {}", desync);
+                    process::exit(1);
+                }
             }
-            Err(desync) => {
-                eprintln!("\n❌ {}", desync);
-                process::exit(1);
-            }
+        } else {
+            // 2.2 Live Spectator Replay Broadcast Mode
+            let cfg = ServerConfig::from_env();
+            let bind_target = broadcast_addr.unwrap_or(cfg.bind_addr);
+
+            println!("[Spectator] Starting Replay Broadcast Server for '{}' at {} ({:.1}x speed)",
+                path, bind_target, replay_speed);
+
+            let mut player = match ReplayPlayer::load_from_file(path) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("[Spectator] Failed to load replay file: {}", e);
+                    process::exit(1);
+                }
+            };
+
+            let socket = match UdpSocket::bind(&bind_target) {
+                Ok(s) => Arc::new(s),
+                Err(e) => {
+                    eprintln!("[Spectator] Failed to bind UDP socket to '{}': {}", bind_target, e);
+                    process::exit(1);
+                }
+            };
+
+            let (intent_tx, intent_rx) = mpsc::channel();
+            let net_socket = Arc::clone(&socket);
+            thread::spawn(move || {
+                run_server(net_socket, intent_tx);
+            });
+
+            let running = Arc::new(AtomicBool::new(true));
+            player.broadcast_live(socket, intent_rx, replay_speed, running);
+            println!("[Spectator] Replay broadcast completed.");
+            process::exit(0);
         }
     }
 
-    // 2. Standard Server Mode (with optional live recording)
+    // 3. Standard Authoritative Server Mode (with optional live match recording)
     let cfg = ServerConfig::from_env();
     println!("[Config] bind_addr={} tick_rate={} Hz client_timeout={}s", 
         cfg.bind_addr, cfg.tick_rate, cfg.client_timeout_secs);

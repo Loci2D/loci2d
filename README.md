@@ -116,3 +116,47 @@ Enter command: quit
 [2026-08-08 17:30:10] Sent 22 bytes to server: sequence_id=2
 ```
 
+---
+
+## Deterministic Replay & Spectator System / Sistema de Replay Determinístico & Espectador
+
+### English
+`loci2d` includes an event-sourced deterministic match recording, verification, and live spectator broadcast engine:
+
+```bash
+# 1. Start Server with Live Match Recording
+cargo run --bin loci2d -- --record match_01.loci
+
+# 2. Custom Checkpoint Frequency (e.g. every 120 ticks)
+cargo run --bin loci2d -- --record match_01.loci --checkpoint-interval 120
+
+# 3. Headless Determinism Verification (CI-Ready, max CPU speed)
+cargo run --bin loci2d -- --replay match_01.loci --verify
+
+# 4. Live Spectator Broadcast Server (Broadcasts to Godot, Love2D, Python, CLI)
+cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 1.0
+
+# 5. Fast-Forward Replay Broadcast (2x or 4x speed)
+cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 2.0
+```
+
+### Português
+O `loci2d` inclui um motor de gravação de partidas baseado em event sourcing, verificação determinística e transmissão para espectadores ao vivo:
+
+```bash
+# 1. Iniciar Servidor com Gravação de Partida
+cargo run --bin loci2d -- --record match_01.loci
+
+# 2. Frequência Personalizada de Checkpoints (ex: a cada 120 ticks)
+cargo run --bin loci2d -- --record match_01.loci --checkpoint-interval 120
+
+# 3. Verificação Determinística Headless (Ideal para CI, velocidade máxima)
+cargo run --bin loci2d -- --replay match_01.loci --verify
+
+# 4. Servidor de Transmissão para Espectadores (Transmite para Godot, Love2D, Python, CLI)
+cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 1.0
+
+# 5. Transmissão Acelerada de Replay (velocidade 2x ou 4x)
+cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 2.0
+```
+
