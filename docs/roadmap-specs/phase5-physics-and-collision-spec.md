@@ -393,11 +393,16 @@ pub fn resolve_dynamic_collision(
         return;
     }
 
+    // Fixing LSB (Least Significant Bit) loss in division
     let half_depth = manifold.penetration_depth / 2;
-    pos_a.x += manifold.normal.x * half_depth;
-    pos_a.y += manifold.normal.y * half_depth;
-    pos_b.x -= manifold.normal.x * half_depth;
-    pos_b.y -= manifold.normal.y * half_depth;
+    let remainder = manifold.penetration_depth - (half_depth * I16F16::from_num(2));
+    let push_a = half_depth + remainder; // Ensuring 100% separation
+    let push_b = half_depth;
+
+    pos_a.x += manifold.normal.x * push_a;
+    pos_a.y += manifold.normal.y * push_a;
+    pos_b.x -= manifold.normal.x * push_b;
+    pos_b.y -= manifold.normal.y * push_b;
 
     let dot_a = vel_a.dot(manifold.normal);
     if dot_a < I16F16::ZERO {
@@ -493,13 +498,18 @@ impl NavigationComponent {
 
 > [!IMPORTANT]
 > **Replay Engine Integration**: `ReplayPlayer` must process `Intent::MoveToPos` just like live network packets to preserve match reproducibility across replays.
+> **Fixed-Point Strictness**: The `.proto` must use integer values (e.g. `int32 x_bits` and `int32 y_bits`) rather than `float`. Converting `f32` inside the logic breaks cross-platform determinism (ADR-0007).
 
 ```rust
 // Inside ReplayPlayer::apply_replay_entry / Instance::apply_replay_intent:
 Intent::MoveToPos(move_to_pos_intent) => {
     if let Some(target) = move_to_pos_intent.target_position {
         if let Some(entity) = self.entities.get_mut(&entity_id) {
-            let target_vec = DeterministicVector2::from_f32(target.x, target.y);
+            // Direct bit-construction avoids float conversions from FPU entirely
+            let target_vec = DeterministicVector2::new(
+                I16F16::from_bits(target.x_bits),
+                I16F16::from_bits(target.y_bits)
+            );
             if let Some(ref mut nav) = entity.navigation {
                 nav.target = Some(target_vec);
                 nav.waypoints.clear();
@@ -515,8 +525,8 @@ Intent::MoveToPos(move_to_pos_intent) => {
 ### Milestone 5.5: Spatial Partitioning Broadphase (Optional Optimization)
 
 1. **2D Uniform Spatial Hash Grid**: Configurable cell size in `InstanceConfig` (default $64 \times 64$ units).
-2. **Candidate Pair Deduplication**: Normalizes entity IDs (`min_id < max_id`) into `BTreeSet<(u64, u64)>`.
-3. **Execution**: Narrowphase tests run strictly on sorted broadphase candidate pairs.
+2. **Candidate Pair Deduplication (Cache-Friendly)**: Normalizes entity IDs (`min_id < max_id`) into a flat `Vec<(u64, u64)>`. To avoid allocation bottlenecks on the single Game-Loop thread, pairs are sorted via `.sort_unstable()` and deduplicated with `.dedup()`, completely replacing `BTreeSet` for performance.
+3. **Execution**: Narrowphase tests run strictly on the sorted vector of candidate pairs.
 
 ---
 
