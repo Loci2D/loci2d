@@ -77,14 +77,19 @@ impl DeterministicVector2 {
     /// Converts into a protobuf `Vector2` struct for network transmission.
     #[inline]
     pub fn to_proto(self) -> ProtoVector2 {
-        let (x, y) = self.to_f32();
-        ProtoVector2 { x, y }
+        ProtoVector2 {
+            x_bits: self.x.to_bits(),
+            y_bits: self.y.to_bits(),
+        }
     }
 
     /// Converts from a protobuf `Vector2` reference with quantization.
     #[inline]
     pub fn from_proto(proto: &ProtoVector2) -> Self {
-        Self::from_f32(proto.x, proto.y)
+        Self {
+            x: I16F16::from_bits(proto.x_bits),
+            y: I16F16::from_bits(proto.y_bits),
+        }
     }
 
     /// Calculates Manhattan distance using pure integer fixed-point math.
@@ -303,8 +308,8 @@ mod tests {
     fn test_proto_roundtrip() {
         let original = DeterministicVector2::from_f32(12.75, -8.25);
         let proto = original.to_proto();
-        assert_eq!(proto.x, 12.75);
-        assert_eq!(proto.y, -8.25);
+        assert_eq!(proto.x_bits, original.x.to_bits());
+        assert_eq!(proto.y_bits, original.y.to_bits());
 
         let restored = DeterministicVector2::from_proto(&proto);
         assert_eq!(restored, original);

@@ -362,7 +362,7 @@ mod tests {
             player_name: String::new(),
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x: 2.0, y: 1.0 }),
+                    direction: Some(Vector2 { x_bits: (2.0f32 * 65536.0) as i32, y_bits: (1.0f32 * 65536.0) as i32 }),
                 })),
             }),
         }]);

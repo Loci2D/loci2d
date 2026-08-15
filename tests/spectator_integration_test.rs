@@ -59,7 +59,7 @@ fn test_live_spectator_replay_broadcasting() {
             player_name: String::new(),
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x: 1.0, y: 0.0 }),
+                    direction: Some(Vector2 { x_bits: (1.0f32 * 65536.0) as i32, y_bits: 0 }),
                 })),
             }),
         },
@@ -68,7 +68,7 @@ fn test_live_spectator_replay_broadcasting() {
             player_name: String::new(),
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x: 0.0, y: 1.0 }),
+                    direction: Some(Vector2 { x_bits: 0, y_bits: (1.0f32 * 65536.0) as i32 }),
                 })),
             }),
         },

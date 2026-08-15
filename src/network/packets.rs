@@ -16,7 +16,7 @@ mod tests {
             timestamp: 1000,
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x: 1.0, y: -2.5 }),
+                    direction: Some(Vector2 { x_bits: (1.0f32 * 65536.0) as i32, y_bits: (-2.5f32 * 65536.0) as i32 }),
                 })),
             }),
         };
@@ -31,8 +31,8 @@ mod tests {
         match decoded.intent {
             Some(ClientIntent { intent: Some(client_intent::Intent::Move(m)) }) => {
                 let dir = m.direction.expect("Missing direction");
-                assert_eq!(dir.x, 1.0);
-                assert_eq!(dir.y, -2.5);
+                assert_eq!(dir.x_bits, (1.0f32 * 65536.0) as i32);
+                assert_eq!(dir.y_bits, (-2.5f32 * 65536.0) as i32);
             }
             _ => panic!("Expected Move intent"),
         }
@@ -92,15 +92,15 @@ mod tests {
                     EntityState {
                         id: 1,
                         name: "Arthur".to_string(),
-                        position: Some(Vector2 { x: 10.5, y: -20.0 }),
-                        velocity: Some(Vector2 { x: 1.0, y: 0.0 }),
+                        position: Some(Vector2 { x_bits: (10.5f32 * 65536.0) as i32, y_bits: (-20.0f32 * 65536.0) as i32 }),
+                        velocity: Some(Vector2 { x_bits: (1.0f32 * 65536.0) as i32, y_bits: 0 }),
                         entity_type: EntityType::Player as i32,
                     },
                     EntityState {
                         id: 2,
                         name: "Goblin".to_string(),
-                        position: Some(Vector2 { x: 50.0, y: 30.0 }),
-                        velocity: Some(Vector2 { x: 0.0, y: 0.0 }),
+                        position: Some(Vector2 { x_bits: (50.0f32 * 65536.0) as i32, y_bits: (30.0f32 * 65536.0) as i32 }),
+                        velocity: Some(Vector2 { x_bits: 0, y_bits: 0 }),
                         entity_type: EntityType::Npc as i32,
                     },
                 ],
@@ -124,8 +124,8 @@ mod tests {
                 assert_eq!(e1.name, "Arthur");
                 assert_eq!(e1.entity_type, EntityType::Player as i32);
                 let pos1 = e1.position.as_ref().unwrap();
-                assert_eq!(pos1.x, 10.5);
-                assert_eq!(pos1.y, -20.0);
+                assert_eq!(pos1.x_bits, (10.5f32 * 65536.0) as i32);
+                assert_eq!(pos1.y_bits, (-20.0f32 * 65536.0) as i32);
 
                 let e2 = &ws.entities[1];
                 assert_eq!(e2.id, 2);

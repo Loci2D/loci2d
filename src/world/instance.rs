@@ -81,7 +81,7 @@ impl Instance {
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let (Some(dir), Some(entity)) = (move_intent.direction, self.entities.get_mut(&entity_id)) {
-                    entity.velocity = DeterministicVector2::from_f32(dir.x, dir.y);
+                    entity.velocity = DeterministicVector2::from_proto(&dir);
                 }
                 Some(ReplayIntentEntry {
                     entity_id,
@@ -96,8 +96,10 @@ impl Instance {
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let Some(target) = move_to_pos_intent.target_position {
+                    let target_vec = DeterministicVector2::from_proto(&target);
+                    let (tx, ty) = target_vec.to_f32();
                     println!("[Intent] Entity {} ({}) requested move to target ({:.1}, {:.1})",
-                        session.entity_id, session.player_name, target.x, target.y);
+                        session.entity_id, session.player_name, tx, ty);
                 }
                 Some(ReplayIntentEntry {
                     entity_id,
@@ -287,7 +289,7 @@ impl Instance {
             }
             Intent::Move(move_intent) => {
                 if let (Some(dir), Some(entity)) = (move_intent.direction, self.entities.get_mut(&entry.entity_id)) {
-                    entity.velocity = DeterministicVector2::from_f32(dir.x, dir.y);
+                    entity.velocity = DeterministicVector2::from_proto(&dir);
                 }
             }
             Intent::MoveToPos(_) => {}
@@ -338,7 +340,7 @@ mod tests {
         // 2. Move Intent
         let move_intent = ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x: 2.5, y: -1.0 }),
+                direction: Some(DeterministicVector2::from_f32(2.5, -1.0).to_proto()),
             })),
         };
         instance.apply_intent(addr, move_intent);
@@ -389,7 +391,7 @@ mod tests {
         // Send move intent without prior join — should be dropped
         let move_intent = ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x: 1.0, y: 1.0 }),
+                direction: Some(DeterministicVector2::from_f32(1.0, 1.0).to_proto()),
             })),
         };
         instance.apply_intent(addr, move_intent);

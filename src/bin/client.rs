@@ -57,8 +57,8 @@ fn print_world_state(ws: &WorldState) {
                 2 => "Prop",
                 _ => "Unknown",
             };
-            let pos = entity.position.as_ref().map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0));
-            let vel = entity.velocity.as_ref().map(|v| (v.x, v.y)).unwrap_or((0.0, 0.0));
+            let pos = entity.position.as_ref().map(|p| (p.x_bits as f32 / 65536.0, p.y_bits as f32 / 65536.0)).unwrap_or((0.0, 0.0));
+            let vel = entity.velocity.as_ref().map(|v| (v.x_bits as f32 / 65536.0, v.y_bits as f32 / 65536.0)).unwrap_or((0.0, 0.0));
             println!(
                 "    - Entity {} (\"{}\", {}) @ ({:.1}, {:.1}), vel=({:.1}, {:.1})",
                 entity.id, entity.name, type_str, pos.0, pos.1, vel.0, vel.1
@@ -233,7 +233,7 @@ fn main() {
                     let x: f32 = parts[1].parse().unwrap_or(0.0);
                     let y: f32 = parts[2].parse().unwrap_or(0.0);
                     client_intent::Intent::Move(MoveIntent {
-                        direction: Some(Vector2 { x, y }),
+                        direction: Some(Vector2 { x_bits: (x * 65536.0) as i32, y_bits: (y * 65536.0) as i32 }),
                     })
                 } else {
                     println!("[Usage] move <x> <y> (e.g. move 1.0 0.0)");

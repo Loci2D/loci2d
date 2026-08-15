@@ -100,8 +100,8 @@ fn test_client_receives_world_state_on_join() {
     assert_eq!(entity.name, "Alice");
     assert_eq!(entity.entity_type, 0); // Player
     let pos = entity.position.as_ref().unwrap();
-    assert_eq!(pos.x, 0.0);
-    assert_eq!(pos.y, 0.0);
+    assert_eq!(pos.x_bits, 0);
+    assert_eq!(pos.y_bits, 0);
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn test_client_receives_position_updates_after_move() {
         timestamp: 0,
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x: 2.0, y: 1.0 }),
+                direction: Some(Vector2 { x_bits: (2.0f32 * 65536.0) as i32, y_bits: (1.0f32 * 65536.0) as i32 }),
             })),
         }),
     };
@@ -147,10 +147,10 @@ fn test_client_receives_position_updates_after_move() {
     let pos = entity.position.as_ref().unwrap();
     let vel = entity.velocity.as_ref().unwrap();
 
-    assert_eq!(vel.x, 2.0);
-    assert_eq!(vel.y, 1.0);
-    assert!(pos.x > 0.0, "Expected pos.x > 0, got {}", pos.x);
-    assert!(pos.y > 0.0, "Expected pos.y > 0, got {}", pos.y);
+    assert_eq!(vel.x_bits, (2.0f32 * 65536.0) as i32);
+    assert_eq!(vel.y_bits, (1.0f32 * 65536.0) as i32);
+    assert!(pos.x_bits > 0, "Expected pos.x_bits > 0, got {}", pos.x_bits);
+    assert!(pos.y_bits > 0, "Expected pos.y_bits > 0, got {}", pos.y_bits);
 }
 
 #[test]

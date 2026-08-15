@@ -4,8 +4,8 @@ package loci2d;
 
 // 2D Vector representation (ADR-0003)
 message Vector2 {
-  float x = 1;
-  float y = 2;
+  int32 x_bits = 1;
+  int32 y_bits = 2;
 }
 
 // Client Intents (Inbound)

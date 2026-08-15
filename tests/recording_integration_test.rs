@@ -64,7 +64,7 @@ fn test_live_match_recording_flow() {
         timestamp: 0,
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x: 3.0, y: -1.5 }),
+                direction: Some(Vector2 { x_bits: (3.0f32 * 65536.0) as i32, y_bits: (-1.5f32 * 65536.0) as i32 }),
             })),
         }),
     };

@@ -153,7 +153,7 @@ mod tests {
 
         let move_intent = ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x: 1.0, y: 0.0 }),
+                direction: Some(Vector2 { x_bits: (1.0f32 * 65536.0) as i32, y_bits: 0 }),
             })),
         };
         recorder.record_tick(2, vec![ReplayIntentEntry {

@@ -94,7 +94,7 @@ fn main() {
                         player_name: String::new(),
                         intent: Some(ClientIntent {
                             intent: Some(client_intent::Intent::Move(MoveIntent {
-                                direction: Some(Vector2 { x: dx, y: dy }),
+                                direction: Some(DeterministicVector2::from_f32(dx, dy).to_proto()),
                             })),
                         }),
                     });

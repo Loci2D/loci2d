@@ -58,7 +58,7 @@ fn test_end_to_end_session_lifecycle() {
         timestamp: 0,
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x: 3.0, y: 4.0 }),
+                direction: Some(Vector2 { x_bits: (3.0f32 * 65536.0) as i32, y_bits: (4.0f32 * 65536.0) as i32 }),
             })),
         }),
     };
