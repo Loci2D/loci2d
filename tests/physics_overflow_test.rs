@@ -1,8 +1,8 @@
 use fixed::types::I16F16;
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::physics::{
-    deterministic_distance, intersect_circle_circle, intersect_circle_aabb,
-    DeterministicAABB, DeterministicCircle,
+    DeterministicAABB, DeterministicCircle, deterministic_distance, intersect_circle_aabb,
+    intersect_circle_circle,
 };
 
 #[test]
@@ -16,7 +16,10 @@ fn test_large_distance_exceeding_naive_fixed_point_threshold() {
     let dist = deterministic_distance(p1, p2);
     let expected = (600.0f64 * 600.0 + 600.0 * 600.0).sqrt();
     let diff = (dist.to_num::<f64>() - expected).abs();
-    assert!(diff < 0.01, "Distance on 600-unit span failed: got {dist}, expected {expected}");
+    assert!(
+        diff < 0.01,
+        "Distance on 600-unit span failed: got {dist}, expected {expected}"
+    );
 }
 
 #[test]
@@ -28,12 +31,18 @@ fn test_extreme_coordinates_distance() {
     let dist = deterministic_distance(p1, p2);
     let expected = (10000.0f64 * 10000.0 + 10000.0 * 10000.0).sqrt();
     let diff = (dist.to_num::<f64>() - expected).abs();
-    assert!(diff < 0.05, "Extreme 10,000 unit distance failed: got {dist}, expected {expected}");
+    assert!(
+        diff < 0.05,
+        "Extreme 10,000 unit distance failed: got {dist}, expected {expected}"
+    );
 
     // Test straight line spanning 30,000 units
     let p_left = DeterministicVector2::new(I16F16::from_num(-15000), I16F16::from_num(0));
     let p_right = DeterministicVector2::new(I16F16::from_num(15000), I16F16::from_num(0));
-    assert_eq!(deterministic_distance(p_left, p_right), I16F16::from_num(30000));
+    assert_eq!(
+        deterministic_distance(p_left, p_right),
+        I16F16::from_num(30000)
+    );
 }
 
 #[test]

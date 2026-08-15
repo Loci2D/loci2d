@@ -1,9 +1,9 @@
 use fixed::types::I16F16;
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::physics::{
-    deterministic_distance, fixed_sqrt, integer_sqrt_u64, intersect_aabb_aabb,
-    intersect_aabb_circle, intersect_circle_aabb, intersect_circle_circle, intersect_shapes,
-    ColliderShape, ContactManifold, DeterministicAABB, DeterministicCircle,
+    ColliderShape, ContactManifold, DeterministicAABB, DeterministicCircle, deterministic_distance,
+    fixed_sqrt, integer_sqrt_u64, intersect_aabb_aabb, intersect_aabb_circle,
+    intersect_circle_aabb, intersect_circle_circle, intersect_shapes,
 };
 
 #[test]
@@ -27,7 +27,10 @@ fn test_integer_sqrt_u64_non_squares() {
         assert!(root * root <= val, "root^2 must be <= val for val={val}");
         if root < u32::MAX as u64 {
             let next = root + 1;
-            assert!(next.checked_mul(next).is_none_or(|sq| sq > val), "(root+1)^2 must be > val for val={val}");
+            assert!(
+                next.checked_mul(next).is_none_or(|sq| sq > val),
+                "(root+1)^2 must be > val for val={val}"
+            );
         }
     }
 }
@@ -75,20 +78,30 @@ fn test_aabb_primitives_and_methods() {
 
     assert_eq!(aabb.width(), I16F16::from_num(20));
     assert_eq!(aabb.height(), I16F16::from_num(20));
-    assert_eq!(aabb.center(), DeterministicVector2::new(I16F16::from_num(0), I16F16::from_num(5)));
-    assert_eq!(aabb.half_extents(), DeterministicVector2::new(I16F16::from_num(10), I16F16::from_num(10)));
-
-    let constructed = DeterministicAABB::from_center_half_extents(
+    assert_eq!(
         aabb.center(),
-        aabb.half_extents(),
+        DeterministicVector2::new(I16F16::from_num(0), I16F16::from_num(5))
     );
+    assert_eq!(
+        aabb.half_extents(),
+        DeterministicVector2::new(I16F16::from_num(10), I16F16::from_num(10))
+    );
+
+    let constructed =
+        DeterministicAABB::from_center_half_extents(aabb.center(), aabb.half_extents());
     assert_eq!(constructed, aabb);
 
     // Contains point
-    assert!(aabb.contains_point(DeterministicVector2::new(I16F16::from_num(0), I16F16::from_num(5))));
+    assert!(aabb.contains_point(DeterministicVector2::new(
+        I16F16::from_num(0),
+        I16F16::from_num(5)
+    )));
     assert!(aabb.contains_point(min));
     assert!(aabb.contains_point(max));
-    assert!(!aabb.contains_point(DeterministicVector2::new(I16F16::from_num(11), I16F16::from_num(5))));
+    assert!(!aabb.contains_point(DeterministicVector2::new(
+        I16F16::from_num(11),
+        I16F16::from_num(5)
+    )));
 
     // Intersects AABB
     let overlapping = DeterministicAABB::new(
@@ -110,12 +123,24 @@ fn test_circle_primitives_and_methods() {
     let circle = DeterministicCircle::new(center, I16F16::from_num(5));
 
     assert!(circle.contains_point(center));
-    assert!(circle.contains_point(DeterministicVector2::new(I16F16::from_num(13), I16F16::from_num(24))));
-    assert!(!circle.contains_point(DeterministicVector2::new(I16F16::from_num(16), I16F16::from_num(20))));
+    assert!(circle.contains_point(DeterministicVector2::new(
+        I16F16::from_num(13),
+        I16F16::from_num(24)
+    )));
+    assert!(!circle.contains_point(DeterministicVector2::new(
+        I16F16::from_num(16),
+        I16F16::from_num(20)
+    )));
 
     let bbox = circle.bounding_box();
-    assert_eq!(bbox.min, DeterministicVector2::new(I16F16::from_num(5), I16F16::from_num(15)));
-    assert_eq!(bbox.max, DeterministicVector2::new(I16F16::from_num(15), I16F16::from_num(25)));
+    assert_eq!(
+        bbox.min,
+        DeterministicVector2::new(I16F16::from_num(5), I16F16::from_num(15))
+    );
+    assert_eq!(
+        bbox.max,
+        DeterministicVector2::new(I16F16::from_num(15), I16F16::from_num(25))
+    );
 }
 
 #[test]
@@ -191,7 +216,10 @@ fn test_intersect_circle_circle() {
         DeterministicVector2::new(I16F16::from_num(6), I16F16::from_num(0)),
         I16F16::from_num(3),
     );
-    assert_eq!(intersect_circle_circle(&c1, &c_touch), ContactManifold::NONE);
+    assert_eq!(
+        intersect_circle_circle(&c1, &c_touch),
+        ContactManifold::NONE
+    );
 
     // Overlapping along X: C3 at (4, 0), C1 at (0, 0), radius 3 each. Dist = 4, radii_sum = 6, depth = 2.
     // Intersecting C3 (A) vs C1 (B): normal points from B to A -> (+1, 0)
@@ -236,7 +264,10 @@ fn test_intersect_circle_aabb_outside_and_corners() {
         DeterministicVector2::new(I16F16::from_num(15), I16F16::from_num(5)),
         I16F16::from_num(2),
     );
-    assert_eq!(intersect_circle_aabb(&circle_out, &aabb), ContactManifold::NONE);
+    assert_eq!(
+        intersect_circle_aabb(&circle_out, &aabb),
+        ContactManifold::NONE
+    );
 
     // Circle penetrating right edge: Center at (11, 5), radius 3 -> closest point is (10, 5), dist = 1, depth = 2.
     // Normal points from AABB (B) to Circle (A) -> (+1, 0)

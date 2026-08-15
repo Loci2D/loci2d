@@ -1,13 +1,13 @@
-use std::net::{SocketAddr, UdpSocket};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use std::thread;
-use prost::Message;
 use crate::network::packets::{ClientIntent, ServerPacket, server_packet};
 use crate::replay::ReplayRecorder;
 use crate::world::instance::Instance;
+use prost::Message;
+use std::net::{SocketAddr, UdpSocket};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 pub struct GameLoop {
     tick_rate: u32,
@@ -99,17 +99,22 @@ impl GameLoop {
                 // If any sessions timed out, record synthetic disconnects in the replay stream
                 if let Some(ref mut recorder) = self.recorder {
                     for (entity_id, player_name) in timed_out {
-                        recorder.record_tick(tick_count, vec![crate::network::packets::ReplayIntentEntry {
-                            entity_id,
-                            player_name,
-                            intent: Some(crate::network::packets::ClientIntent {
-                                intent: Some(crate::network::packets::client_intent::Intent::Disconnect(
-                                    crate::network::packets::DisconnectIntent {
-                                        reason: "Inactivity timeout".to_string(),
-                                    }
-                                )),
-                            }),
-                        }]);
+                        recorder.record_tick(
+                            tick_count,
+                            vec![crate::network::packets::ReplayIntentEntry {
+                                entity_id,
+                                player_name,
+                                intent: Some(crate::network::packets::ClientIntent {
+                                    intent: Some(
+                                        crate::network::packets::client_intent::Intent::Disconnect(
+                                            crate::network::packets::DisconnectIntent {
+                                                reason: "Inactivity timeout".to_string(),
+                                            },
+                                        ),
+                                    ),
+                                }),
+                            }],
+                        );
                     }
                 }
 
@@ -149,8 +154,12 @@ impl GameLoop {
             if let Err(e) = recorder.save_to_file(path) {
                 eprintln!("[Replay] Failed to save replay file '{}': {}", path, e);
             } else {
-                println!("[Replay] Successfully saved replay file '{}' ({} frames, {} checkpoints)", 
-                    path, recorder.frame_count(), recorder.checkpoint_count());
+                println!(
+                    "[Replay] Successfully saved replay file '{}' ({} frames, {} checkpoints)",
+                    path,
+                    recorder.frame_count(),
+                    recorder.checkpoint_count()
+                );
             }
         }
     }

@@ -1,14 +1,15 @@
-use std::net::UdpSocket;
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
-use prost::Message;
+use loci2d::game_loop::tick::GameLoop;
 use loci2d::network::{
-    run_server, GamePacket, ClientIntent, Vector2, MoveIntent, JoinIntent, DisconnectIntent, client_intent,
+    ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, Vector2, client_intent,
+    run_server,
 };
 use loci2d::world::instance::Instance;
-use loci2d::game_loop::tick::GameLoop;
+use prost::Message;
+use std::net::UdpSocket;
+use std::sync::Arc;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 #[test]
 fn test_end_to_end_session_lifecycle() {
@@ -49,7 +50,9 @@ fn test_end_to_end_session_lifecycle() {
     };
     let mut buf = Vec::new();
     join_packet.encode(&mut buf).unwrap();
-    client_sock.send_to(&buf, test_bind).expect("Failed to send join");
+    client_sock
+        .send_to(&buf, test_bind)
+        .expect("Failed to send join");
 
     // 2. Send MoveIntent
     thread::sleep(Duration::from_millis(50));
@@ -58,13 +61,18 @@ fn test_end_to_end_session_lifecycle() {
         timestamp: 0,
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x_bits: (3.0f32 * 65536.0) as i32, y_bits: (4.0f32 * 65536.0) as i32 }),
+                direction: Some(Vector2 {
+                    x_bits: (3.0f32 * 65536.0) as i32,
+                    y_bits: (4.0f32 * 65536.0) as i32,
+                }),
             })),
         }),
     };
     buf.clear();
     move_packet.encode(&mut buf).unwrap();
-    client_sock.send_to(&buf, test_bind).expect("Failed to send move");
+    client_sock
+        .send_to(&buf, test_bind)
+        .expect("Failed to send move");
 
     // 3. Send DisconnectIntent
     thread::sleep(Duration::from_millis(50));
@@ -79,7 +87,9 @@ fn test_end_to_end_session_lifecycle() {
     };
     buf.clear();
     dc_packet.encode(&mut buf).unwrap();
-    client_sock.send_to(&buf, test_bind).expect("Failed to send disconnect");
+    client_sock
+        .send_to(&buf, test_bind)
+        .expect("Failed to send disconnect");
 
     thread::sleep(Duration::from_millis(50));
 }

@@ -1,18 +1,17 @@
-use std::net::UdpSocket;
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
-use prost::Message;
 use loci2d::network::{
-    run_server, GamePacket, ServerPacket, server_packet,
-    client_intent, ClientIntent, DisconnectIntent, JoinIntent, MoveIntent, PingIntent,
-    ReplayIntentEntry, Vector2,
+    ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, PingIntent,
+    ReplayIntentEntry, ServerPacket, Vector2, client_intent, run_server, server_packet,
 };
 use loci2d::replay::{ReplayPlayer, ReplayRecorder};
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::instance::Instance;
+use prost::Message;
+use std::net::UdpSocket;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 #[test]
 fn test_live_spectator_replay_broadcasting() {
@@ -27,52 +26,64 @@ fn test_live_spectator_replay_broadcasting() {
     instance.handle_join("127.0.0.1:1001".parse().unwrap(), "Alice".to_string());
     instance.handle_join("127.0.0.1:1002".parse().unwrap(), "Bob".to_string());
 
-    recorder.record_tick(1, vec![
-        ReplayIntentEntry {
-            entity_id: 1,
-            player_name: "Alice".to_string(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Join(JoinIntent {
-                    player_name: "Alice".to_string(),
-                })),
-            }),
-        },
-        ReplayIntentEntry {
-            entity_id: 2,
-            player_name: "Bob".to_string(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Join(JoinIntent {
-                    player_name: "Bob".to_string(),
-                })),
-            }),
-        },
-    ]);
+    recorder.record_tick(
+        1,
+        vec![
+            ReplayIntentEntry {
+                entity_id: 1,
+                player_name: "Alice".to_string(),
+                intent: Some(ClientIntent {
+                    intent: Some(client_intent::Intent::Join(JoinIntent {
+                        player_name: "Alice".to_string(),
+                    })),
+                }),
+            },
+            ReplayIntentEntry {
+                entity_id: 2,
+                player_name: "Bob".to_string(),
+                intent: Some(ClientIntent {
+                    intent: Some(client_intent::Intent::Join(JoinIntent {
+                        player_name: "Bob".to_string(),
+                    })),
+                }),
+            },
+        ],
+    );
     instance.tick(1);
 
     // Tick 2: Movement
     instance.entities.get_mut(&1).unwrap().velocity = DeterministicVector2::from_f32(1.0, 0.0);
     instance.entities.get_mut(&2).unwrap().velocity = DeterministicVector2::from_f32(0.0, 1.0);
 
-    recorder.record_tick(2, vec![
-        ReplayIntentEntry {
-            entity_id: 1,
-            player_name: String::new(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x_bits: (1.0f32 * 65536.0) as i32, y_bits: 0 }),
-                })),
-            }),
-        },
-        ReplayIntentEntry {
-            entity_id: 2,
-            player_name: String::new(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x_bits: 0, y_bits: (1.0f32 * 65536.0) as i32 }),
-                })),
-            }),
-        },
-    ]);
+    recorder.record_tick(
+        2,
+        vec![
+            ReplayIntentEntry {
+                entity_id: 1,
+                player_name: String::new(),
+                intent: Some(ClientIntent {
+                    intent: Some(client_intent::Intent::Move(MoveIntent {
+                        direction: Some(Vector2 {
+                            x_bits: (1.0f32 * 65536.0) as i32,
+                            y_bits: 0,
+                        }),
+                    })),
+                }),
+            },
+            ReplayIntentEntry {
+                entity_id: 2,
+                player_name: String::new(),
+                intent: Some(ClientIntent {
+                    intent: Some(client_intent::Intent::Move(MoveIntent {
+                        direction: Some(Vector2 {
+                            x_bits: 0,
+                            y_bits: (1.0f32 * 65536.0) as i32,
+                        }),
+                    })),
+                }),
+            },
+        ],
+    );
 
     for t in 2..=total_ticks {
         instance.tick(t);
@@ -105,7 +116,9 @@ fn test_live_spectator_replay_broadcasting() {
 
     // 3. Connect Spectator 1 (Godot-like) sending JoinIntent
     let spectator1_sock = UdpSocket::bind("127.0.0.1:0").unwrap();
-    spectator1_sock.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
+    spectator1_sock
+        .set_read_timeout(Some(Duration::from_millis(1000)))
+        .unwrap();
 
     let join_packet = GamePacket {
         sequence_id: 1,
@@ -122,7 +135,9 @@ fn test_live_spectator_replay_broadcasting() {
 
     // 4. Connect Spectator 2 (Love2D-like) sending PingIntent
     let spectator2_sock = UdpSocket::bind("127.0.0.1:0").unwrap();
-    spectator2_sock.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
+    spectator2_sock
+        .set_read_timeout(Some(Duration::from_millis(1000)))
+        .unwrap();
 
     let ping_packet = GamePacket {
         sequence_id: 1,
@@ -153,7 +168,10 @@ fn test_live_spectator_replay_broadcasting() {
             break;
         }
     }
-    assert!(spectator1_saw_entities, "Spectator 1 must receive WorldState frame with 2 entities");
+    assert!(
+        spectator1_saw_entities,
+        "Spectator 1 must receive WorldState frame with 2 entities"
+    );
 
     // 6. Verify Spectator 2 receives broadcasted WorldState frames
     let mut spectator2_saw_entities = false;
@@ -168,7 +186,10 @@ fn test_live_spectator_replay_broadcasting() {
             break;
         }
     }
-    assert!(spectator2_saw_entities, "Spectator 2 must receive WorldState frame with 2 entities");
+    assert!(
+        spectator2_saw_entities,
+        "Spectator 2 must receive WorldState frame with 2 entities"
+    );
 
     // 7. Spectator 1 Disconnects
     let disc_packet = GamePacket {

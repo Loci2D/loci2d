@@ -1,15 +1,15 @@
-use std::collections::BTreeMap;
-use std::net::SocketAddr;
 use super::entity::{Entity, EntityType};
 use super::physics::{ColliderShape, MapBounds, StaticObstacle};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
-    ClientIntent, EntityState, ReplayIntentEntry, WorldState, EntityType as ProtoEntityType,
+    ClientIntent, EntityState, EntityType as ProtoEntityType, ReplayIntentEntry, WorldState,
 };
+use std::collections::BTreeMap;
+use std::net::SocketAddr;
 
 // Re-export Vector2 from network and DeterministicVector2 from fixed_point
-pub use crate::network::packets::Vector2;
 pub use super::fixed_point::DeterministicVector2;
+pub use crate::network::packets::Vector2;
 
 // [2026-08-08] Allowed dead_code: fields like id and tick_rate are essential metadata for multi-room management (Phase 5).
 #[allow(dead_code)]
@@ -45,7 +45,11 @@ impl Instance {
     }
 
     /// Handles an incoming client intent and returns an optional replay entry for match logging.
-    pub fn apply_intent(&mut self, addr: SocketAddr, intent: ClientIntent) -> Option<ReplayIntentEntry> {
+    pub fn apply_intent(
+        &mut self,
+        addr: SocketAddr,
+        intent: ClientIntent,
+    ) -> Option<ReplayIntentEntry> {
         use crate::network::packets::client_intent::Intent;
 
         let inner_intent = intent.intent.as_ref()?;
@@ -84,7 +88,9 @@ impl Instance {
                 let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
                 let entity_id = session.entity_id;
-                if let (Some(dir), Some(entity)) = (move_intent.direction, self.entities.get_mut(&entity_id)) {
+                if let (Some(dir), Some(entity)) =
+                    (move_intent.direction, self.entities.get_mut(&entity_id))
+                {
                     entity.velocity = DeterministicVector2::from_proto(&dir);
                 }
                 Some(ReplayIntentEntry {
@@ -102,8 +108,10 @@ impl Instance {
                 if let Some(target) = move_to_pos_intent.target_position {
                     let target_vec = DeterministicVector2::from_proto(&target);
                     let (tx, ty) = target_vec.to_f32();
-                    println!("[Intent] Entity {} ({}) requested move to target ({:.1}, {:.1})",
-                        session.entity_id, session.player_name, tx, ty);
+                    println!(
+                        "[Intent] Entity {} ({}) requested move to target ({:.1}, {:.1})",
+                        session.entity_id, session.player_name, tx, ty
+                    );
                 }
                 Some(ReplayIntentEntry {
                     entity_id,
@@ -118,7 +126,10 @@ impl Instance {
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let Some(entity) = self.entities.get_mut(&entity_id) {
-                    println!("[Intent] Entity {} ({}) executed action {}", entity_id, entity.name, action_intent.ability_id);
+                    println!(
+                        "[Intent] Entity {} ({}) executed action {}",
+                        entity_id, entity.name, action_intent.ability_id
+                    );
                 }
                 Some(ReplayIntentEntry {
                     entity_id,
@@ -131,7 +142,10 @@ impl Instance {
             Intent::Ping(_) => {
                 let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
-                println!("[Intent] Entity {} ({}) sent ping", session.entity_id, session.player_name);
+                println!(
+                    "[Intent] Entity {} ({}) sent ping",
+                    session.entity_id, session.player_name
+                );
                 // Pings are heartbeats and do not mutate simulation state
                 None
             }
@@ -146,7 +160,10 @@ impl Instance {
             if let Some(entity) = self.entities.get_mut(&session.entity_id) {
                 entity.name = player_name;
             }
-            println!("[Session] Client {} re-joined as '{}' (EntityId {})", addr, session.player_name, session.entity_id);
+            println!(
+                "[Session] Client {} re-joined as '{}' (EntityId {})",
+                addr, session.player_name, session.entity_id
+            );
             return session.entity_id;
         }
 
@@ -163,7 +180,10 @@ impl Instance {
         self.sessions.insert(addr, session);
         self.entity_to_addr.insert(entity_id, addr);
 
-        println!("[Join] Client {} joined as '{}' (SessionId {}, EntityId {})", addr, player_name, session_id, entity_id);
+        println!(
+            "[Join] Client {} joined as '{}' (SessionId {}, EntityId {})",
+            addr, player_name, session_id, entity_id
+        );
         entity_id
     }
 
@@ -173,9 +193,15 @@ impl Instance {
             session.state = SessionState::Disconnected;
             self.entity_to_addr.remove(&session.entity_id);
             self.entities.remove(&session.entity_id);
-            let display_reason = if reason.trim().is_empty() { "normal quit" } else { reason };
-            println!("[Disconnect] Client {} ('{}', EntityId {}) disconnected gracefully. Reason: '{}'", 
-                addr, session.player_name, session.entity_id, display_reason);
+            let display_reason = if reason.trim().is_empty() {
+                "normal quit"
+            } else {
+                reason
+            };
+            println!(
+                "[Disconnect] Client {} ('{}', EntityId {}) disconnected gracefully. Reason: '{}'",
+                addr, session.player_name, session.entity_id, display_reason
+            );
         }
     }
 
@@ -190,19 +216,22 @@ impl Instance {
                 Some(ColliderShape::Circle(circle)) => {
                     self.map_bounds.clamp_circle(entity.position, circle.radius)
                 }
-                Some(ColliderShape::AABB(aabb)) => {
-                    self.map_bounds.clamp_aabb(entity.position, aabb.half_extents())
-                }
-                None => {
-                    self.map_bounds.clamp_point(entity.position)
-                }
+                Some(ColliderShape::AABB(aabb)) => self
+                    .map_bounds
+                    .clamp_aabb(entity.position, aabb.half_extents()),
+                None => self.map_bounds.clamp_point(entity.position),
             };
         }
 
         // Check for timed out clients
         let timed_out = self.check_timeouts();
 
-        println!("[Tick {}] {} active entities, {} active sessions", tick_count, self.entities.len(), self.sessions.len());
+        println!(
+            "[Tick {}] {} active entities, {} active sessions",
+            tick_count,
+            self.entities.len(),
+            self.sessions.len()
+        );
         timed_out
     }
 
@@ -223,7 +252,10 @@ impl Instance {
             self.entity_to_addr.remove(&entity_id);
             self.entities.remove(&entity_id);
             timed_out_entities.push((entity_id, player_name.clone()));
-            println!("[Timeout] Client {} ('{}', EntityId {}) timed out after {}s of inactivity", addr, player_name, entity_id, timeout_secs);
+            println!(
+                "[Timeout] Client {} ('{}', EntityId {}) timed out after {}s of inactivity",
+                addr, player_name, entity_id, timeout_secs
+            );
         }
         timed_out_entities
     }
@@ -266,8 +298,10 @@ impl Instance {
 
     /// Generates a complete WorldState snapshot representing all active entities.
     pub fn create_snapshot(&self, tick: u64) -> WorldState {
-        let entities = self.entities.values().map(|e| {
-            EntityState {
+        let entities = self
+            .entities
+            .values()
+            .map(|e| EntityState {
                 id: e.id,
                 name: e.name.clone(),
                 position: Some(e.position.to_proto()),
@@ -277,8 +311,8 @@ impl Instance {
                     EntityType::NPC => ProtoEntityType::Npc as i32,
                     EntityType::Prop => ProtoEntityType::Prop as i32,
                 },
-            }
-        }).collect();
+            })
+            .collect();
 
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -301,7 +335,12 @@ impl Instance {
     pub fn apply_replay_entry(&mut self, entry: &ReplayIntentEntry) {
         use crate::network::packets::client_intent::Intent;
 
-        let Some(ClientIntent { intent: Some(ref inner_intent) }) = entry.intent else { return; };
+        let Some(ClientIntent {
+            intent: Some(ref inner_intent),
+        }) = entry.intent
+        else {
+            return;
+        };
 
         match inner_intent {
             Intent::Join(join_intent) => {
@@ -321,14 +360,20 @@ impl Instance {
                 self.entities.remove(&entry.entity_id);
             }
             Intent::Move(move_intent) => {
-                if let (Some(dir), Some(entity)) = (move_intent.direction, self.entities.get_mut(&entry.entity_id)) {
+                if let (Some(dir), Some(entity)) = (
+                    move_intent.direction,
+                    self.entities.get_mut(&entry.entity_id),
+                ) {
                     entity.velocity = DeterministicVector2::from_proto(&dir);
                 }
             }
             Intent::MoveToPos(_) => {}
             Intent::Action(action_intent) => {
                 if let Some(entity) = self.entities.get_mut(&entry.entity_id) {
-                    println!("[Replay] Entity {} ({}) executed action {}", entry.entity_id, entity.name, action_intent.ability_id);
+                    println!(
+                        "[Replay] Entity {} ({}) executed action {}",
+                        entry.entity_id, entity.name, action_intent.ability_id
+                    );
                 }
             }
             Intent::Ping(_) => {}
@@ -340,7 +385,8 @@ impl Instance {
 mod tests {
     use super::*;
     use crate::network::packets::{
-        client_intent, ActionIntent, ClientIntent, DisconnectIntent, JoinIntent, MoveIntent, PingIntent,
+        ActionIntent, ClientIntent, DisconnectIntent, JoinIntent, MoveIntent, PingIntent,
+        client_intent,
     };
 
     #[test]
@@ -434,7 +480,9 @@ mod tests {
 
         // Send action intent without prior join — should be dropped
         let action_intent = ClientIntent {
-            intent: Some(client_intent::Intent::Action(ActionIntent { ability_id: 1 })),
+            intent: Some(client_intent::Intent::Action(ActionIntent {
+                ability_id: 1,
+            })),
         };
         instance.apply_intent(addr, action_intent);
         assert_eq!(instance.sessions.len(), 0);
@@ -491,7 +539,9 @@ mod tests {
         assert_eq!(instance.sessions.len(), 1);
 
         let action_intent = ClientIntent {
-            intent: Some(client_intent::Intent::Action(ActionIntent { ability_id: 42 })),
+            intent: Some(client_intent::Intent::Action(ActionIntent {
+                ability_id: 42,
+            })),
         };
         instance.apply_intent(addr, action_intent);
         assert_eq!(instance.sessions.len(), 1);
@@ -546,8 +596,8 @@ mod tests {
 
     #[test]
     fn test_instance_map_bounds_clamping_on_tick() {
-        use fixed::types::I16F16;
         use crate::world::physics::MapBounds;
+        use fixed::types::I16F16;
 
         let mut instance = Instance::new(1, 30, 10);
         instance.set_map_bounds(MapBounds::new(
@@ -569,8 +619,10 @@ mod tests {
         instance.add_entity(e2);
 
         // 3. AABB entity (half extents 15, 15)
-        let mut e3 = Entity::new(3, "AABBEntity".to_string(), EntityType::Player)
-            .with_aabb_collider(DeterministicVector2::new(I16F16::from_num(15), I16F16::from_num(15)));
+        let mut e3 =
+            Entity::new(3, "AABBEntity".to_string(), EntityType::Player).with_aabb_collider(
+                DeterministicVector2::new(I16F16::from_num(15), I16F16::from_num(15)),
+            );
         e3.position = DeterministicVector2::new(I16F16::from_num(-80), I16F16::from_num(0));
         e3.velocity = DeterministicVector2::new(I16F16::from_num(-30), I16F16::from_num(0)); // would reach -110, 0
         instance.add_entity(e3);
@@ -579,21 +631,30 @@ mod tests {
 
         // e1 clamped to (100, 100)
         let updated_e1 = instance.get_entity(1).unwrap();
-        assert_eq!(updated_e1.position, DeterministicVector2::new(I16F16::from_num(100), I16F16::from_num(100)));
+        assert_eq!(
+            updated_e1.position,
+            DeterministicVector2::new(I16F16::from_num(100), I16F16::from_num(100))
+        );
 
         // e2 clamped to (90, -90) because radius is 10 and max is 100 / min is -100
         let updated_e2 = instance.get_entity(2).unwrap();
-        assert_eq!(updated_e2.position, DeterministicVector2::new(I16F16::from_num(90), I16F16::from_num(-90)));
+        assert_eq!(
+            updated_e2.position,
+            DeterministicVector2::new(I16F16::from_num(90), I16F16::from_num(-90))
+        );
 
         // e3 clamped to (-85, 0) because half_extent.x is 15 and min is -100
         let updated_e3 = instance.get_entity(3).unwrap();
-        assert_eq!(updated_e3.position, DeterministicVector2::new(I16F16::from_num(-85), I16F16::from_num(0)));
+        assert_eq!(
+            updated_e3.position,
+            DeterministicVector2::new(I16F16::from_num(-85), I16F16::from_num(0))
+        );
     }
 
     #[test]
     fn test_instance_static_obstacle_management() {
-        use fixed::types::I16F16;
         use crate::world::physics::{ColliderShape, DeterministicCircle, StaticObstacle};
+        use fixed::types::I16F16;
 
         let mut instance = Instance::new(1, 30, 10);
         let obs1 = StaticObstacle::solid_wall(

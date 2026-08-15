@@ -1,12 +1,10 @@
-use std::net::SocketAddr;
-use std::time::Instant;
-use loci2d::network::{
-    client_intent, ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry,
-};
+use loci2d::network::{ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry, client_intent};
 use loci2d::replay::player::ReplayPlayer;
 use loci2d::replay::recorder::ReplayRecorder;
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::instance::Instance;
+use std::net::SocketAddr;
+use std::time::Instant;
 
 fn main() {
     println!("============================================================");
@@ -39,9 +37,18 @@ fn main() {
     let tick_budget_30hz_us = 33_333.33f64; // 33.33 ms
     let budget_pct = (avg_micros_per_tick / tick_budget_30hz_us) * 100.0;
 
-    println!("   - Total Time (10,000 ticks): {:.2} ms", elapsed.as_secs_f64() * 1000.0);
-    println!("   - Average Time per Tick: {:.2} µs (Budget Target: < 100 µs)", avg_micros_per_tick);
-    println!("   - Tick Budget Consumption: {:.3}% of 33.3ms (Target: < 0.3%)", budget_pct);
+    println!(
+        "   - Total Time (10,000 ticks): {:.2} ms",
+        elapsed.as_secs_f64() * 1000.0
+    );
+    println!(
+        "   - Average Time per Tick: {:.2} µs (Budget Target: < 100 µs)",
+        avg_micros_per_tick
+    );
+    println!(
+        "   - Tick Budget Consumption: {:.3}% of 33.3ms (Target: < 0.3%)",
+        budget_pct
+    );
     if avg_micros_per_tick < 100.0 {
         println!("   ✅ PASS: Performance satisfies < 100 µs requirement!\n");
     } else {
@@ -51,11 +58,19 @@ fn main() {
     // -------------------------------------------------------------
     // Part 2: Cross-Platform Deterministic Replay Generation
     // -------------------------------------------------------------
-    println!("2. Generating 3,000-Tick 20-Player Deterministic Match Recording ('benchmark.loci')...");
+    println!(
+        "2. Generating 3,000-Tick 20-Player Deterministic Match Recording ('benchmark.loci')..."
+    );
     let total_ticks = 3000u64;
     let checkpoint_interval = 60u64;
     let seed = 42u64;
-    let mut recorder = ReplayRecorder::new(1, 30, seed, "default_arena".to_string(), checkpoint_interval);
+    let mut recorder = ReplayRecorder::new(
+        1,
+        30,
+        seed,
+        "default_arena".to_string(),
+        checkpoint_interval,
+    );
     let mut sim_instance = Instance::new(1, 30, 60);
 
     let player_count = 20u64;
@@ -110,8 +125,12 @@ fn main() {
     let file_path = "benchmark.loci";
     match recorder.save_to_file(file_path) {
         Ok(()) => {
-            println!("   - Saved '{}' ({} frames, {} checkpoints)", 
-                file_path, recorder.frame_count(), recorder.checkpoint_count());
+            println!(
+                "   - Saved '{}' ({} frames, {} checkpoints)",
+                file_path,
+                recorder.frame_count(),
+                recorder.checkpoint_count()
+            );
         }
         Err(e) => {
             eprintln!("   ❌ Failed to save benchmark replay file: {}", e);

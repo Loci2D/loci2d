@@ -5,5 +5,5 @@ pub mod player;
 pub mod recorder;
 
 pub use hash::compute_canonical_state_hash;
-pub use player::{hex_encode, DesyncReport, ReplayPlayer, VerificationReport};
-pub use recorder::{ReplayRecorder, DEFAULT_CHECKPOINT_INTERVAL_TICKS};
+pub use player::{DesyncReport, ReplayPlayer, VerificationReport, hex_encode};
+pub use recorder::{DEFAULT_CHECKPOINT_INTERVAL_TICKS, ReplayRecorder};

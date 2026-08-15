@@ -1,8 +1,8 @@
 // Pure integer arithmetic and deterministic fixed-point mathematical operations.
 // Guarantees 100% bit-exact cross-platform determinism (ADR-0007, ADR-0012).
 
-use fixed::types::I16F16;
 use crate::world::fixed_point::DeterministicVector2;
+use fixed::types::I16F16;
 
 /// Pure integer digit-by-digit restoring square root for 64-bit unsigned integers.
 /// Guarantees bit-exact identical output on all CPU architectures (x86_64, ARM64, WASM).

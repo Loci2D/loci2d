@@ -3,23 +3,42 @@ use loci2d::world::entity::{Entity, EntityType};
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::instance::Instance;
 use loci2d::world::physics::{
-    ColliderShape, CollisionFilter, DeterministicAABB, DeterministicCircle, MapBounds, StaticObstacle,
+    ColliderShape, CollisionFilter, DeterministicAABB, DeterministicCircle, MapBounds,
+    StaticObstacle,
 };
 
 #[test]
 fn test_map_bounds_defaults_and_properties() {
     let default_bounds = MapBounds::default_arena();
-    assert_eq!(default_bounds.min, DeterministicVector2::new(I16F16::from_num(-500), I16F16::from_num(-500)));
-    assert_eq!(default_bounds.max, DeterministicVector2::new(I16F16::from_num(500), I16F16::from_num(500)));
+    assert_eq!(
+        default_bounds.min,
+        DeterministicVector2::new(I16F16::from_num(-500), I16F16::from_num(-500))
+    );
+    assert_eq!(
+        default_bounds.max,
+        DeterministicVector2::new(I16F16::from_num(500), I16F16::from_num(500))
+    );
     assert_eq!(default_bounds.width(), I16F16::from_num(1000));
     assert_eq!(default_bounds.height(), I16F16::from_num(1000));
     assert_eq!(default_bounds.center(), DeterministicVector2::ZERO);
 
     assert!(default_bounds.contains_point(DeterministicVector2::ZERO));
-    assert!(default_bounds.contains_point(DeterministicVector2::new(I16F16::from_num(500), I16F16::from_num(500))));
-    assert!(default_bounds.contains_point(DeterministicVector2::new(I16F16::from_num(-500), I16F16::from_num(-500))));
-    assert!(!default_bounds.contains_point(DeterministicVector2::new(I16F16::from_num(501), I16F16::from_num(0))));
-    assert!(!default_bounds.contains_point(DeterministicVector2::new(I16F16::from_num(0), I16F16::from_num(-501))));
+    assert!(default_bounds.contains_point(DeterministicVector2::new(
+        I16F16::from_num(500),
+        I16F16::from_num(500)
+    )));
+    assert!(default_bounds.contains_point(DeterministicVector2::new(
+        I16F16::from_num(-500),
+        I16F16::from_num(-500)
+    )));
+    assert!(!default_bounds.contains_point(DeterministicVector2::new(
+        I16F16::from_num(501),
+        I16F16::from_num(0)
+    )));
+    assert!(!default_bounds.contains_point(DeterministicVector2::new(
+        I16F16::from_num(0),
+        I16F16::from_num(-501)
+    )));
 
     let aabb = default_bounds.to_aabb();
     assert_eq!(aabb.min, default_bounds.min);

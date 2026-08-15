@@ -1,10 +1,10 @@
 // Static map geometry, collision filtering, and world boundary clamping.
 // Guarantees 100% bit-exact determinism across platforms (ADR-0003, ADR-0007, ADR-0012).
 
-use fixed::types::I16F16;
-use serde::{Deserialize, Serialize};
 use crate::world::fixed_point::DeterministicVector2;
 use crate::world::physics::primitives::{ColliderShape, DeterministicAABB};
+use fixed::types::I16F16;
+use serde::{Deserialize, Serialize};
 
 /// 16-bit bitmask filter for collision layers and masks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -113,7 +113,10 @@ pub struct MapBounds {
 
 impl MapBounds {
     pub fn new(min: DeterministicVector2, max: DeterministicVector2) -> Self {
-        assert!(min.x <= max.x && min.y <= max.y, "Invalid map bounds: min must be <= max");
+        assert!(
+            min.x <= max.x && min.y <= max.y,
+            "Invalid map bounds: min must be <= max"
+        );
         Self { min, max }
     }
 
@@ -137,15 +140,15 @@ impl MapBounds {
 
     #[inline]
     pub fn center(&self) -> DeterministicVector2 {
-        DeterministicVector2::new(
-            (self.min.x + self.max.x) / 2,
-            (self.min.y + self.max.y) / 2,
-        )
+        DeterministicVector2::new((self.min.x + self.max.x) / 2, (self.min.y + self.max.y) / 2)
     }
 
     #[inline]
     pub fn contains_point(&self, point: DeterministicVector2) -> bool {
-        point.x >= self.min.x && point.x <= self.max.x && point.y >= self.min.y && point.y <= self.max.y
+        point.x >= self.min.x
+            && point.x <= self.max.x
+            && point.y >= self.min.y
+            && point.y <= self.max.y
     }
 
     #[inline]
@@ -164,7 +167,11 @@ impl MapBounds {
 
     /// Clamps a circle's center so the entire circular area remains inside the map boundaries.
     /// If arena dimensions are smaller than 2 * radius, centers to the midpoint safely without panicking.
-    pub fn clamp_circle(&self, center: DeterministicVector2, radius: I16F16) -> DeterministicVector2 {
+    pub fn clamp_circle(
+        &self,
+        center: DeterministicVector2,
+        radius: I16F16,
+    ) -> DeterministicVector2 {
         let (min_x, max_x) = if self.max.x - self.min.x <= radius * 2 {
             let mid = (self.min.x + self.max.x) / 2;
             (mid, mid)
@@ -179,15 +186,16 @@ impl MapBounds {
             (self.min.y + radius, self.max.y - radius)
         };
 
-        DeterministicVector2::new(
-            center.x.clamp(min_x, max_x),
-            center.y.clamp(min_y, max_y),
-        )
+        DeterministicVector2::new(center.x.clamp(min_x, max_x), center.y.clamp(min_y, max_y))
     }
 
     /// Clamps an AABB's center so the entire rectangular area remains inside the map boundaries.
     /// If arena dimensions are smaller than 2 * half_extents, centers to the midpoint safely without panicking.
-    pub fn clamp_aabb(&self, center: DeterministicVector2, half_extents: DeterministicVector2) -> DeterministicVector2 {
+    pub fn clamp_aabb(
+        &self,
+        center: DeterministicVector2,
+        half_extents: DeterministicVector2,
+    ) -> DeterministicVector2 {
         let (min_x, max_x) = if self.max.x - self.min.x <= half_extents.x * 2 {
             let mid = (self.min.x + self.max.x) / 2;
             (mid, mid)
@@ -202,10 +210,7 @@ impl MapBounds {
             (self.min.y + half_extents.y, self.max.y - half_extents.y)
         };
 
-        DeterministicVector2::new(
-            center.x.clamp(min_x, max_x),
-            center.y.clamp(min_y, max_y),
-        )
+        DeterministicVector2::new(center.x.clamp(min_x, max_x), center.y.clamp(min_y, max_y))
     }
 
     /// Clamps an entity's center based on its `ColliderShape`.

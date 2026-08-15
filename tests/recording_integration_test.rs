@@ -1,16 +1,16 @@
-use std::net::UdpSocket;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
-use prost::Message;
+use loci2d::game_loop::tick::GameLoop;
 use loci2d::network::{
-    run_server, GamePacket, ClientIntent, Vector2, MoveIntent, JoinIntent, DisconnectIntent,
-    client_intent, ReplayFile,
+    ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, ReplayFile, Vector2,
+    client_intent, run_server,
 };
 use loci2d::world::instance::Instance;
-use loci2d::game_loop::tick::GameLoop;
+use prost::Message;
+use std::net::UdpSocket;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 #[test]
 fn test_live_match_recording_flow() {
@@ -18,7 +18,8 @@ fn test_live_match_recording_flow() {
     let replay_path = temp_dir.path().join("test_match.loci");
     let replay_path_str = replay_path.to_str().unwrap().to_string();
 
-    let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").expect("Failed to bind test server socket"));
+    let socket =
+        Arc::new(UdpSocket::bind("127.0.0.1:0").expect("Failed to bind test server socket"));
     let server_addr = socket.local_addr().expect("Failed to get local addr");
 
     let (intent_tx, intent_rx) = mpsc::channel();
@@ -30,7 +31,7 @@ fn test_live_match_recording_flow() {
 
     let loop_socket = Arc::clone(&socket);
     let loop_path_str = replay_path_str.clone();
-    
+
     let mut game_loop = GameLoop::new(60);
     game_loop.enable_recording(1, 42, "arena_test".to_string(), 5, loop_path_str);
     let running: Arc<AtomicBool> = game_loop.running_handle();
@@ -64,7 +65,10 @@ fn test_live_match_recording_flow() {
         timestamp: 0,
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x_bits: (3.0f32 * 65536.0) as i32, y_bits: (-1.5f32 * 65536.0) as i32 }),
+                direction: Some(Vector2 {
+                    x_bits: (3.0f32 * 65536.0) as i32,
+                    y_bits: (-1.5f32 * 65536.0) as i32,
+                }),
             })),
         }),
     };
@@ -93,7 +97,10 @@ fn test_live_match_recording_flow() {
     loop_handle.join().expect("Game loop thread failed to join");
 
     // Assert that the replay file was generated directly by GameLoop upon shutdown
-    assert!(replay_path.exists(), "Replay file must exist after game loop shutdown");
+    assert!(
+        replay_path.exists(),
+        "Replay file must exist after game loop shutdown"
+    );
     let bytes = std::fs::read(&replay_path).expect("Failed to read replay file");
     let replay = ReplayFile::decode(&bytes[..]).expect("Failed to decode ReplayFile");
 
@@ -104,20 +111,41 @@ fn test_live_match_recording_flow() {
     assert_eq!(header.random_seed, 42);
     assert_eq!(header.map_name, "arena_test");
 
-    assert!(!replay.frames.is_empty(), "Replay should contain recorded frames from GameLoop");
+    assert!(
+        !replay.frames.is_empty(),
+        "Replay should contain recorded frames from GameLoop"
+    );
 
     // Verify recorded intents were stamped with entity_id == 1
-    let join_frame = replay.frames.iter().find(|f| {
-        f.entries.iter().any(|e| matches!(&e.intent, Some(ClientIntent { intent: Some(client_intent::Intent::Join(_)) })))
-    }).expect("Join frame should be recorded in replay");
-    
+    let join_frame = replay
+        .frames
+        .iter()
+        .find(|f| {
+            f.entries.iter().any(|e| {
+                matches!(
+                    &e.intent,
+                    Some(ClientIntent {
+                        intent: Some(client_intent::Intent::Join(_))
+                    })
+                )
+            })
+        })
+        .expect("Join frame should be recorded in replay");
+
     let join_entry = &join_frame.entries[0];
     assert_eq!(join_entry.entity_id, 1);
     assert_eq!(join_entry.player_name, "Alice");
 
     // Verify checkpoints were captured on intervals
-    assert!(!replay.checkpoints.is_empty(), "Checkpoints should be captured on interval");
+    assert!(
+        !replay.checkpoints.is_empty(),
+        "Checkpoints should be captured on interval"
+    );
     for cp in &replay.checkpoints {
-        assert_eq!(cp.state_sha256.len(), 32, "Checkpoint state hash must be 32 bytes");
+        assert_eq!(
+            cp.state_sha256.len(),
+            32,
+            "Checkpoint state hash must be 32 bytes"
+        );
     }
 }

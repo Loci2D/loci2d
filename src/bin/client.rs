@@ -1,17 +1,22 @@
-use std::net::UdpSocket;
+use chrono::Local;
+use loci2d::network::{
+    ActionIntent, ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, PingIntent,
+    ServerPacket, Vector2, WorldState, client_intent, server_packet,
+};
+use prost::Message;
 use std::io::{self, Write};
-use std::sync::{Arc, Mutex};
+use std::net::UdpSocket;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use chrono::Local;
-use prost::Message;
-use loci2d::network::{
-    GamePacket, ClientIntent, Vector2, MoveIntent, ActionIntent, PingIntent,
-    JoinIntent, DisconnectIntent, ServerPacket, server_packet, client_intent, WorldState,
-};
 
-fn send_packet(socket: &UdpSocket, server_addr: &str, sequence_id: &mut u64, intent_inner: client_intent::Intent) {
+fn send_packet(
+    socket: &UdpSocket,
+    server_addr: &str,
+    sequence_id: &mut u64,
+    intent_inner: client_intent::Intent,
+) {
     let packet = GamePacket {
         sequence_id: *sequence_id,
         timestamp: 0,
@@ -23,20 +28,29 @@ fn send_packet(socket: &UdpSocket, server_addr: &str, sequence_id: &mut u64, int
 
     let mut serialized = Vec::new();
     if let Err(e) = packet.encode(&mut serialized) {
-        println!("[{}] Failed to serialize packet: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+        println!(
+            "[{}] Failed to serialize packet: {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S"),
+            e
+        );
         return;
     }
 
     match socket.send_to(&serialized, server_addr) {
         Ok(num_bytes) => {
-            println!("[{}] Sent {} bytes to server: sequence_id={}", 
+            println!(
+                "[{}] Sent {} bytes to server: sequence_id={}",
                 Local::now().format("%Y-%m-%d %H:%M:%S"),
                 num_bytes,
                 packet.sequence_id,
             );
         }
         Err(e) => {
-            println!("[{}] Failed to send message: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+            println!(
+                "[{}] Failed to send message: {}",
+                Local::now().format("%Y-%m-%d %H:%M:%S"),
+                e
+            );
         }
     }
 }
@@ -57,8 +71,16 @@ fn print_world_state(ws: &WorldState) {
                 2 => "Prop",
                 _ => "Unknown",
             };
-            let pos = entity.position.as_ref().map(|p| (p.x_bits as f32 / 65536.0, p.y_bits as f32 / 65536.0)).unwrap_or((0.0, 0.0));
-            let vel = entity.velocity.as_ref().map(|v| (v.x_bits as f32 / 65536.0, v.y_bits as f32 / 65536.0)).unwrap_or((0.0, 0.0));
+            let pos = entity
+                .position
+                .as_ref()
+                .map(|p| (p.x_bits as f32 / 65536.0, p.y_bits as f32 / 65536.0))
+                .unwrap_or((0.0, 0.0));
+            let vel = entity
+                .velocity
+                .as_ref()
+                .map(|v| (v.x_bits as f32 / 65536.0, v.y_bits as f32 / 65536.0))
+                .unwrap_or((0.0, 0.0));
             println!(
                 "    - Entity {} (\"{}\", {}) @ ({:.1}, {:.1}), vel=({:.1}, {:.1})",
                 entity.id, entity.name, type_str, pos.0, pos.1, vel.0, vel.1
@@ -70,14 +92,24 @@ fn print_world_state(ws: &WorldState) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let is_spectator_init = args.iter().any(|a| a == "--spectate" || a == "--replay" || a == "-s");
+    let is_spectator_init = args
+        .iter()
+        .any(|a| a == "--spectate" || a == "--replay" || a == "-s");
 
     // Bind to any available port for the client
     let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind client socket");
-    println!("[{}] UDP Client started on {}", Local::now().format("%Y-%m-%d %H:%M:%S"), socket.local_addr().unwrap());
+    println!(
+        "[{}] UDP Client started on {}",
+        Local::now().format("%Y-%m-%d %H:%M:%S"),
+        socket.local_addr().unwrap()
+    );
 
     let server_addr = "127.0.0.1:8080";
-    println!("[{}] Connecting to server at {}", Local::now().format("%Y-%m-%d %H:%M:%S"), server_addr);
+    println!(
+        "[{}] Connecting to server at {}",
+        Local::now().format("%Y-%m-%d %H:%M:%S"),
+        server_addr
+    );
 
     let latest_state: Arc<Mutex<Option<WorldState>>> = Arc::new(Mutex::new(None));
     let stream_enabled = Arc::new(AtomicBool::new(is_spectator_init));
@@ -87,10 +119,14 @@ fn main() {
         println!("[Spectator] Mode: SPECTATOR (Replay Viewer) -> Streaming snapshots enabled.");
     }
 
-    println!("Commands: join <name> | spectate | status | move <x> <y> | stream <on|off> | leave [reason] | action <id> | ping | quit");
+    println!(
+        "Commands: join <name> | spectate | status | move <x> <y> | stream <on|off> | leave [reason] | action <id> | ping | quit"
+    );
 
     // Spawn background listener thread to receive snapshots and keep latest state
-    let recv_socket = socket.try_clone().expect("Failed to clone socket for receiver");
+    let recv_socket = socket
+        .try_clone()
+        .expect("Failed to clone socket for receiver");
     let state_clone = Arc::clone(&latest_state);
     let stream_clone = Arc::clone(&stream_enabled);
 
@@ -103,9 +139,14 @@ fn main() {
                 match server_packet.payload {
                     Some(server_packet::Payload::WorldState(ws)) => {
                         // If streaming is enabled, throttle logging to ~1 second
-                        if stream_clone.load(Ordering::Relaxed) && last_stream_print.elapsed() >= Duration::from_millis(1000) {
+                        if stream_clone.load(Ordering::Relaxed)
+                            && last_stream_print.elapsed() >= Duration::from_millis(1000)
+                        {
                             print_world_state(&ws);
-                            print!("[{}] Enter command: ", Local::now().format("%Y-%m-%d %H:%M:%S"));
+                            print!(
+                                "[{}] Enter command: ",
+                                Local::now().format("%Y-%m-%d %H:%M:%S")
+                            );
                             let _ = io::stdout().flush();
                             last_stream_print = Instant::now();
                         }
@@ -118,7 +159,10 @@ fn main() {
                             resp.sequence_id,
                             resp.status
                         );
-                        print!("[{}] Enter command: ", Local::now().format("%Y-%m-%d %H:%M:%S"));
+                        print!(
+                            "[{}] Enter command: ",
+                            Local::now().format("%Y-%m-%d %H:%M:%S")
+                        );
                         let _ = io::stdout().flush();
                     }
                     None => {}
@@ -128,7 +172,9 @@ fn main() {
     });
 
     // Spawn heartbeat thread for spectator mode
-    let heartbeat_socket = socket.try_clone().expect("Failed to clone socket for heartbeat");
+    let heartbeat_socket = socket
+        .try_clone()
+        .expect("Failed to clone socket for heartbeat");
     let is_spec_heartbeat = Arc::clone(&is_spectator);
     thread::spawn(move || {
         let mut seq: u64 = 50000;
@@ -155,7 +201,10 @@ fn main() {
 
     loop {
         // Read user input
-        print!("[{}] Enter command: ", Local::now().format("%Y-%m-%d %H:%M:%S"));
+        print!(
+            "[{}] Enter command: ",
+            Local::now().format("%Y-%m-%d %H:%M:%S")
+        );
         io::stdout().flush().expect("Failed to flush stdout");
 
         let mut input = String::new();
@@ -170,10 +219,18 @@ fn main() {
 
         if input == "quit" {
             if !is_spectator.load(Ordering::Relaxed) {
-                println!("[{}] Sending disconnect and shutting down...", Local::now().format("%Y-%m-%d %H:%M:%S"));
-                send_packet(&socket, server_addr, &mut sequence_id, client_intent::Intent::Disconnect(DisconnectIntent {
-                    reason: "normal quit".to_string(),
-                }));
+                println!(
+                    "[{}] Sending disconnect and shutting down...",
+                    Local::now().format("%Y-%m-%d %H:%M:%S")
+                );
+                send_packet(
+                    &socket,
+                    server_addr,
+                    &mut sequence_id,
+                    client_intent::Intent::Disconnect(DisconnectIntent {
+                        reason: "normal quit".to_string(),
+                    }),
+                );
             }
             break;
         }
@@ -181,7 +238,9 @@ fn main() {
         if input == "spectate" {
             is_spectator.store(true, Ordering::Relaxed);
             stream_enabled.store(true, Ordering::Relaxed);
-            println!("[Spectator] Mode: SPECTATOR (Replay Viewer) -> Periodic heartbeat pings & live snapshot streaming ENABLED.");
+            println!(
+                "[Spectator] Mode: SPECTATOR (Replay Viewer) -> Periodic heartbeat pings & live snapshot streaming ENABLED."
+            );
             continue;
         }
 
@@ -202,7 +261,9 @@ fn main() {
 
         if input == "stream off" {
             stream_enabled.store(false, Ordering::Relaxed);
-            println!("[Stream] Live snapshot logging DISABLED. Use 'status' to inspect world state.");
+            println!(
+                "[Stream] Live snapshot logging DISABLED. Use 'status' to inspect world state."
+            );
             continue;
         }
 
@@ -233,7 +294,10 @@ fn main() {
                     let x: f32 = parts[1].parse().unwrap_or(0.0);
                     let y: f32 = parts[2].parse().unwrap_or(0.0);
                     client_intent::Intent::Move(MoveIntent {
-                        direction: Some(Vector2 { x_bits: (x * 65536.0) as i32, y_bits: (y * 65536.0) as i32 }),
+                        direction: Some(Vector2 {
+                            x_bits: (x * 65536.0) as i32,
+                            y_bits: (y * 65536.0) as i32,
+                        }),
                     })
                 } else {
                     println!("[Usage] move <x> <y> (e.g. move 1.0 0.0)");
@@ -250,7 +314,10 @@ fn main() {
                 client_intent::Intent::Action(ActionIntent { ability_id })
             }
             _ => {
-                println!("Unknown command: '{}'. Available: join <name>, spectate, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit", input);
+                println!(
+                    "Unknown command: '{}'. Available: join <name>, spectate, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit",
+                    input
+                );
                 continue;
             }
         };

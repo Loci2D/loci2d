@@ -1,9 +1,9 @@
-use std::net::{SocketAddr, UdpSocket};
-use std::sync::mpsc;
-use std::sync::Arc;
+use super::packets::{ClientIntent, GamePacket};
 use chrono::Local;
 use prost::Message;
-use super::packets::{GamePacket, ClientIntent};
+use std::net::{SocketAddr, UdpSocket};
+use std::sync::Arc;
+use std::sync::mpsc;
 
 pub fn run_server(socket: Arc<UdpSocket>, intent_tx: mpsc::Sender<(SocketAddr, ClientIntent)>) {
     let mut buf = [0u8; 2048];
@@ -13,7 +13,7 @@ pub fn run_server(socket: Arc<UdpSocket>, intent_tx: mpsc::Sender<(SocketAddr, C
         match socket.recv_from(&mut buf) {
             Ok((num_bytes, src_addr)) => {
                 let received_data = &buf[..num_bytes];
-                
+
                 // Deserialize Protobuf GamePacket
                 match GamePacket::decode(received_data) {
                     Ok(packet) => {
@@ -22,7 +22,8 @@ pub fn run_server(socket: Arc<UdpSocket>, intent_tx: mpsc::Sender<(SocketAddr, C
                         }
                     }
                     Err(e) => {
-                        println!("[{}] Failed to deserialize GamePacket from {}: {}", 
+                        println!(
+                            "[{}] Failed to deserialize GamePacket from {}: {}",
                             Local::now().format("%Y-%m-%d %H:%M:%S"),
                             src_addr,
                             e
@@ -31,9 +32,12 @@ pub fn run_server(socket: Arc<UdpSocket>, intent_tx: mpsc::Sender<(SocketAddr, C
                 }
             }
             Err(e) => {
-                println!("[{}] Error receiving data: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), e);
+                println!(
+                    "[{}] Error receiving data: {}",
+                    Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    e
+                );
             }
         }
     }
 }
-

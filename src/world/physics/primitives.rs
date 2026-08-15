@@ -1,9 +1,9 @@
 // Geometric primitives for 2D deterministic collision detection (ADR-0003, ADR-0012).
 
-use fixed::types::I16F16;
-use serde::{Deserialize, Serialize};
 use crate::world::fixed_point::DeterministicVector2;
 use crate::world::physics::math::deterministic_distance;
+use fixed::types::I16F16;
+use serde::{Deserialize, Serialize};
 
 /// Axis-Aligned Bounding Box defined by min and max extents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -14,11 +14,17 @@ pub struct DeterministicAABB {
 
 impl DeterministicAABB {
     pub fn new(min: DeterministicVector2, max: DeterministicVector2) -> Self {
-        assert!(min.x <= max.x && min.y <= max.y, "Invalid AABB bounds: min must be <= max");
+        assert!(
+            min.x <= max.x && min.y <= max.y,
+            "Invalid AABB bounds: min must be <= max"
+        );
         Self { min, max }
     }
 
-    pub fn from_center_half_extents(center: DeterministicVector2, half_extents: DeterministicVector2) -> Self {
+    pub fn from_center_half_extents(
+        center: DeterministicVector2,
+        half_extents: DeterministicVector2,
+    ) -> Self {
         Self {
             min: DeterministicVector2::new(
                 center.x.saturating_sub(half_extents.x),
@@ -43,10 +49,7 @@ impl DeterministicAABB {
 
     #[inline]
     pub fn center(&self) -> DeterministicVector2 {
-        DeterministicVector2::new(
-            (self.min.x + self.max.x) / 2,
-            (self.min.y + self.max.y) / 2,
-        )
+        DeterministicVector2::new((self.min.x + self.max.x) / 2, (self.min.y + self.max.y) / 2)
     }
 
     #[inline]
@@ -56,7 +59,10 @@ impl DeterministicAABB {
 
     #[inline]
     pub fn contains_point(&self, point: DeterministicVector2) -> bool {
-        point.x >= self.min.x && point.x <= self.max.x && point.y >= self.min.y && point.y <= self.max.y
+        point.x >= self.min.x
+            && point.x <= self.max.x
+            && point.y >= self.min.y
+            && point.y <= self.max.y
     }
 
     #[inline]
@@ -82,7 +88,10 @@ pub struct DeterministicCircle {
 
 impl DeterministicCircle {
     pub fn new(center: DeterministicVector2, radius: I16F16) -> Self {
-        assert!(radius >= I16F16::ZERO, "Collider radius must be non-negative");
+        assert!(
+            radius >= I16F16::ZERO,
+            "Collider radius must be non-negative"
+        );
         Self { center, radius }
     }
 

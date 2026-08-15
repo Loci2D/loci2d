@@ -1,7 +1,7 @@
 // Canonical state hashing for determinism verification and replay checkpoints (ADR-0007, ADR-0010).
 
-use sha2::{Digest, Sha256};
 use crate::world::instance::Instance;
+use sha2::{Digest, Sha256};
 
 /// Computes a canonical SHA-256 hash of the instance world state on a given tick.
 /// Guarantees bit-exact hashing across CPU architectures by iterating entities
@@ -69,7 +69,10 @@ mod tests {
         let hash1 = compute_canonical_state_hash(&inst1, 100);
         let hash2 = compute_canonical_state_hash(&inst2, 100);
 
-        assert_eq!(hash1, hash2, "BTreeMap must guarantee identical state hash regardless of insertion order");
+        assert_eq!(
+            hash1, hash2,
+            "BTreeMap must guarantee identical state hash regardless of insertion order"
+        );
     }
 
     #[test]

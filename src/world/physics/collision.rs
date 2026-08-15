@@ -1,10 +1,10 @@
 // 2D intersection algorithms and Minimum Translation Vector (MTV) manifold calculation.
 // Guarantees 100% bit-exact determinism across platforms (ADR-0007, ADR-0012).
 
-use fixed::types::I16F16;
 use crate::world::fixed_point::DeterministicVector2;
 use crate::world::physics::math::deterministic_distance;
 use crate::world::physics::primitives::{ColliderShape, DeterministicAABB, DeterministicCircle};
+use fixed::types::I16F16;
 
 /// Contact manifold resulting from narrowphase intersection test.
 ///
@@ -72,7 +72,10 @@ pub fn intersect_aabb_aabb(a: &DeterministicAABB, b: &DeterministicAABB) -> Cont
 
 /// Intersects two Circles.
 /// Normal points from B to A (direction to push A out of B).
-pub fn intersect_circle_circle(a: &DeterministicCircle, b: &DeterministicCircle) -> ContactManifold {
+pub fn intersect_circle_circle(
+    a: &DeterministicCircle,
+    b: &DeterministicCircle,
+) -> ContactManifold {
     let dist = deterministic_distance(a.center, b.center);
     let radii_sum = a.radius + b.radius;
 
@@ -100,7 +103,10 @@ pub fn intersect_circle_circle(a: &DeterministicCircle, b: &DeterministicCircle)
 
 /// Intersects a Circle (A) with an AABB (B).
 /// Normal points from AABB (B) to Circle (A) (direction to push Circle out of AABB).
-pub fn intersect_circle_aabb(circle: &DeterministicCircle, aabb: &DeterministicAABB) -> ContactManifold {
+pub fn intersect_circle_aabb(
+    circle: &DeterministicCircle,
+    aabb: &DeterministicAABB,
+) -> ContactManifold {
     let px = circle.center.x.clamp(aabb.min.x, aabb.max.x);
     let py = circle.center.y.clamp(aabb.min.y, aabb.max.y);
     let closest_point = DeterministicVector2::new(px, py);
@@ -158,7 +164,10 @@ pub fn intersect_circle_aabb(circle: &DeterministicCircle, aabb: &DeterministicA
 
 /// Intersects an AABB (A) with a Circle (B).
 /// Normal points from Circle (B) to AABB (A) (direction to push AABB out of Circle).
-pub fn intersect_aabb_circle(aabb: &DeterministicAABB, circle: &DeterministicCircle) -> ContactManifold {
+pub fn intersect_aabb_circle(
+    aabb: &DeterministicAABB,
+    circle: &DeterministicCircle,
+) -> ContactManifold {
     let manifold = intersect_circle_aabb(circle, aabb);
     if !manifold.is_colliding {
         ContactManifold::NONE

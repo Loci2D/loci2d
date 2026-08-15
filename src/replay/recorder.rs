@@ -1,12 +1,12 @@
 // Replay recorder for event-sourced match logging (ADR-0010).
 
-use std::path::Path;
-use prost::Message;
+use super::hash::compute_canonical_state_hash;
 use crate::network::packets::{
     ReplayCheckpoint, ReplayFile, ReplayHeader, ReplayIntentEntry, ReplayTickFrame,
 };
 use crate::world::instance::Instance;
-use super::hash::compute_canonical_state_hash;
+use prost::Message;
+use std::path::Path;
 
 pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = 60; // 2.0 seconds at 30 Hz
 
@@ -104,7 +104,9 @@ impl ReplayRecorder {
 
     /// Saves the replay file to disk (.loci).
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
-        let bytes = self.to_bytes().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let bytes = self
+            .to_bytes()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         std::fs::write(path, bytes)
     }
 
@@ -132,9 +134,7 @@ impl ReplayRecorder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::packets::{
-        client_intent, ClientIntent, JoinIntent, MoveIntent, Vector2,
-    };
+    use crate::network::packets::{ClientIntent, JoinIntent, MoveIntent, Vector2, client_intent};
 
     #[test]
     fn test_replay_recorder_roundtrip() {
@@ -145,22 +145,31 @@ mod tests {
                 player_name: "Alice".to_string(),
             })),
         };
-        recorder.record_tick(1, vec![ReplayIntentEntry {
-            entity_id: 1,
-            player_name: "Alice".to_string(),
-            intent: Some(join_intent),
-        }]);
+        recorder.record_tick(
+            1,
+            vec![ReplayIntentEntry {
+                entity_id: 1,
+                player_name: "Alice".to_string(),
+                intent: Some(join_intent),
+            }],
+        );
 
         let move_intent = ClientIntent {
             intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x_bits: (1.0f32 * 65536.0) as i32, y_bits: 0 }),
+                direction: Some(Vector2 {
+                    x_bits: (1.0f32 * 65536.0) as i32,
+                    y_bits: 0,
+                }),
             })),
         };
-        recorder.record_tick(2, vec![ReplayIntentEntry {
-            entity_id: 1,
-            player_name: String::new(),
-            intent: Some(move_intent),
-        }]);
+        recorder.record_tick(
+            2,
+            vec![ReplayIntentEntry {
+                entity_id: 1,
+                player_name: String::new(),
+                intent: Some(move_intent),
+            }],
+        );
 
         recorder.record_checkpoint(60, [0xAA; 32], 1);
 

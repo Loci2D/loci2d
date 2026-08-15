@@ -1,17 +1,19 @@
-use std::net::UdpSocket;
-use std::process;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
 use loci2d::config::ServerConfig;
 use loci2d::game_loop::tick::GameLoop;
 use loci2d::network::server::run_server;
 use loci2d::replay::player::ReplayPlayer;
 use loci2d::world::instance::Instance;
+use std::net::UdpSocket;
+use std::process;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::thread;
 
 fn print_help() {
-    println!("loci2d - High-Performance Authoritative 2D Game Server & Deterministic Replay Engine\n");
+    println!(
+        "loci2d - High-Performance Authoritative 2D Game Server & Deterministic Replay Engine\n"
+    );
     println!("USAGE:");
     println!("  loci2d [OPTIONS]\n");
     println!("OPTIONS:");
@@ -22,7 +24,9 @@ fn print_help() {
     println!("  --seed <N>                   Random PRNG seed for match instance (default: 42)");
     println!("  --map <NAME>                 Map arena identifier (default: default_arena)");
     println!("  --speed <FLOAT>              Replay playback speed multiplier (default: 1.0)");
-    println!("  --broadcast <ADDR>           Spectator UDP broadcast destination (e.g. 127.0.0.1:4000)");
+    println!(
+        "  --broadcast <ADDR>           Spectator UDP broadcast destination (e.g. 127.0.0.1:4000)"
+    );
     println!("  --help, -h                   Show this help message");
 }
 
@@ -39,7 +43,10 @@ fn spawn_console_listener(running: Arc<AtomicBool>) {
                     || trimmed.eq_ignore_ascii_case("exit")
                     || trimmed.eq_ignore_ascii_case("q")
                 {
-                    println!("[Server] Shutdown command received ('{}'). Stopping gracefully...", trimmed);
+                    println!(
+                        "[Server] Shutdown command received ('{}'). Stopping gracefully...",
+                        trimmed
+                    );
                     running.store(false, Ordering::Relaxed);
                     break;
                 }
@@ -94,7 +101,9 @@ fn main() {
                     match args[i + 1].parse::<u64>() {
                         Ok(v) => checkpoint_interval = v,
                         Err(_) => {
-                            eprintln!("Error: --checkpoint-interval requires a valid integer value (e.g. 60)");
+                            eprintln!(
+                                "Error: --checkpoint-interval requires a valid integer value (e.g. 60)"
+                            );
                             process::exit(1);
                         }
                     }
@@ -133,7 +142,9 @@ fn main() {
                     match args[i + 1].parse::<f32>() {
                         Ok(v) => replay_speed = v,
                         Err(_) => {
-                            eprintln!("Error: --speed requires a valid float value (e.g. 1.0, 2.0)");
+                            eprintln!(
+                                "Error: --speed requires a valid float value (e.g. 1.0, 2.0)"
+                            );
                             process::exit(1);
                         }
                     }
@@ -173,7 +184,10 @@ fn main() {
     if let Some(ref path) = replay_file {
         if verify_mode {
             // 2.1 Headless Replay Verification Mode
-            println!("[Replay] Loading replay file '{}' for headless verification...", path);
+            println!(
+                "[Replay] Loading replay file '{}' for headless verification...",
+                path
+            );
             let mut player = match ReplayPlayer::load_from_file(path) {
                 Ok(p) => p,
                 Err(e) => {
@@ -183,9 +197,15 @@ fn main() {
             };
 
             let header = player.header();
-            println!("[Replay] Header: magic={} version={} tick_rate={}Hz seed={} map='{}'",
-                header.magic, header.version, header.tick_rate, header.random_seed, header.map_name);
-            println!("[Replay] Loaded {} frames and {} checkpoints.", player.frames().len(), player.checkpoints().len());
+            println!(
+                "[Replay] Header: magic={} version={} tick_rate={}Hz seed={} map='{}'",
+                header.magic, header.version, header.tick_rate, header.random_seed, header.map_name
+            );
+            println!(
+                "[Replay] Loaded {} frames and {} checkpoints.",
+                player.frames().len(),
+                player.checkpoints().len()
+            );
 
             match player.verify_determinism() {
                 Ok(report) => {
@@ -203,12 +223,17 @@ fn main() {
             let bind_target = if let Some(ref addr) = broadcast_addr {
                 addr.clone()
             } else {
-                println!("[Spectator] No --broadcast specified, using server default: {}", cfg.bind_addr);
+                println!(
+                    "[Spectator] No --broadcast specified, using server default: {}",
+                    cfg.bind_addr
+                );
                 cfg.bind_addr
             };
 
-            println!("[Spectator] Starting Replay Broadcast Server for '{}' at {} ({:.1}x speed)",
-                path, bind_target, replay_speed);
+            println!(
+                "[Spectator] Starting Replay Broadcast Server for '{}' at {} ({:.1}x speed)",
+                path, bind_target, replay_speed
+            );
 
             let mut player = match ReplayPlayer::load_from_file(path) {
                 Ok(p) => p,
@@ -221,7 +246,10 @@ fn main() {
             let socket = match UdpSocket::bind(&bind_target) {
                 Ok(s) => Arc::new(s),
                 Err(e) => {
-                    eprintln!("[Spectator] Failed to bind UDP socket to '{}': {}", bind_target, e);
+                    eprintln!(
+                        "[Spectator] Failed to bind UDP socket to '{}': {}",
+                        bind_target, e
+                    );
                     process::exit(1);
                 }
             };
@@ -242,7 +270,9 @@ fn main() {
             });
             spawn_console_listener(Arc::clone(&running));
 
-            println!("[Spectator] Type 'stop' or 'quit' (or press Ctrl+C) to shut down the spectator server.\n");
+            println!(
+                "[Spectator] Type 'stop' or 'quit' (or press Ctrl+C) to shut down the spectator server.\n"
+            );
             player.broadcast_live(socket, intent_rx, replay_speed, cfg.max_spectators, running);
             println!("[Spectator] Replay broadcast completed.");
             process::exit(0);
@@ -251,8 +281,10 @@ fn main() {
 
     // 3. Standard Authoritative Server Mode (with optional live match recording)
     let cfg = ServerConfig::from_env();
-    println!("[Config] bind_addr={} tick_rate={} Hz client_timeout={}s", 
-        cfg.bind_addr, cfg.tick_rate, cfg.client_timeout_secs);
+    println!(
+        "[Config] bind_addr={} tick_rate={} Hz client_timeout={}s",
+        cfg.bind_addr, cfg.tick_rate, cfg.client_timeout_secs
+    );
 
     let socket = UdpSocket::bind(&cfg.bind_addr).expect("Failed to bind UDP socket");
     let socket = Arc::new(socket);
@@ -271,8 +303,10 @@ fn main() {
     let running = game_loop.running_handle();
 
     if let Some(record_path) = record_file {
-        println!("[Replay] Live match recording enabled -> '{}' (checkpoint interval: {} ticks)", 
-            record_path, checkpoint_interval);
+        println!(
+            "[Replay] Live match recording enabled -> '{}' (checkpoint interval: {} ticks)",
+            record_path, checkpoint_interval
+        );
         game_loop.enable_recording(1, seed, map_name, checkpoint_interval, record_path);
     }
 
@@ -285,7 +319,9 @@ fn main() {
 
     // Console stdin listener for 'stop' / 'quit' command
     spawn_console_listener(Arc::clone(&running));
-    println!("[Server] Server running. Type 'stop' or 'quit' (or press Ctrl+C) to shut down and save match recording.\n");
+    println!(
+        "[Server] Server running. Type 'stop' or 'quit' (or press Ctrl+C) to shut down and save match recording.\n"
+    );
 
     let loop_socket = Arc::clone(&socket);
     let loop_thread = thread::spawn(move || {

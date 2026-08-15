@@ -1,6 +1,6 @@
-use fixed::types::I16F16;
 use super::fixed_point::DeterministicVector2;
 use super::physics::{ColliderShape, CollisionFilter, DeterministicAABB, DeterministicCircle};
+use fixed::types::I16F16;
 
 // [2026-08-08] Allowed dead_code: fields like id and entity_type are part of the core domain model
 // and will be read during snapshot serialization (Phase 3) and collision/event systems (Phases 4-6).

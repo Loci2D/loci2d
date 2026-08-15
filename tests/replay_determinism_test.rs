@@ -1,19 +1,18 @@
-use std::net::UdpSocket;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
-use prost::Message;
 use loci2d::game_loop::tick::GameLoop;
 use loci2d::network::{
-    run_server, GamePacket,
-    client_intent, ClientIntent, DisconnectIntent, JoinIntent, MoveIntent, ReplayIntentEntry,
-    Vector2,
+    ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, ReplayIntentEntry, Vector2,
+    client_intent, run_server,
 };
 use loci2d::replay::{ReplayPlayer, ReplayRecorder};
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::instance::Instance;
+use prost::Message;
+use std::net::UdpSocket;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 #[test]
 fn test_1000_tick_multi_player_replay_determinism() {
@@ -22,7 +21,13 @@ fn test_1000_tick_multi_player_replay_determinism() {
     let checkpoint_interval = 50u64;
     let seed = 99999u64;
 
-    let mut recorder = ReplayRecorder::new(1, tick_rate, seed, "determinism_arena".to_string(), checkpoint_interval);
+    let mut recorder = ReplayRecorder::new(
+        1,
+        tick_rate,
+        seed,
+        "determinism_arena".to_string(),
+        checkpoint_interval,
+    );
     let mut author_instance = Instance::new(1, tick_rate, 60);
 
     // Schedule 10 players joining and moving over 1000 ticks
@@ -34,7 +39,10 @@ fn test_1000_tick_multi_player_replay_determinism() {
         if tick <= player_count * 10 && tick % 10 == 0 {
             let pid = tick / 10;
             let name = format!("Player_{}", pid);
-            author_instance.handle_join(format!("127.0.0.1:{}", 10000 + pid).parse().unwrap(), name.clone());
+            author_instance.handle_join(
+                format!("127.0.0.1:{}", 10000 + pid).parse().unwrap(),
+                name.clone(),
+            );
 
             tick_entries.push(ReplayIntentEntry {
                 entity_id: pid,
@@ -97,20 +105,28 @@ fn test_1000_tick_multi_player_replay_determinism() {
     }
 
     // Assert checkpoints were captured
-    assert_eq!(recorder.checkpoint_count(), (total_ticks / checkpoint_interval) as usize);
+    assert_eq!(
+        recorder.checkpoint_count(),
+        (total_ticks / checkpoint_interval) as usize
+    );
 
     let bytes = recorder.to_bytes().expect("Failed to encode ReplayFile");
-    
+
     // Save to tempfile and verify via ReplayPlayer
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("match_1000_ticks.loci");
     std::fs::write(&file_path, &bytes).unwrap();
 
     let mut player = ReplayPlayer::load_from_file(&file_path).expect("Failed to load ReplayPlayer");
-    let report = player.verify_determinism().expect("1000-tick replay must verify with 0 desyncs");
+    let report = player
+        .verify_determinism()
+        .expect("1000-tick replay must verify with 0 desyncs");
 
     assert_eq!(report.total_ticks, total_ticks);
-    assert_eq!(report.verified_checkpoints, (total_ticks / checkpoint_interval) as usize);
+    assert_eq!(
+        report.verified_checkpoints,
+        (total_ticks / checkpoint_interval) as usize
+    );
     assert!(!report.final_hash.is_empty());
 }
 
@@ -122,28 +138,37 @@ fn test_rejoin_entity_state_preservation_determinism() {
 
     // 1. Initial Join as "Alice"
     live_instance.handle_join(addr, "Alice".to_string());
-    recorder.record_tick(1, vec![ReplayIntentEntry {
-        entity_id: 1,
-        player_name: "Alice".to_string(),
-        intent: Some(ClientIntent {
-            intent: Some(client_intent::Intent::Join(JoinIntent {
-                player_name: "Alice".to_string(),
-            })),
-        }),
-    }]);
+    recorder.record_tick(
+        1,
+        vec![ReplayIntentEntry {
+            entity_id: 1,
+            player_name: "Alice".to_string(),
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: "Alice".to_string(),
+                })),
+            }),
+        }],
+    );
     live_instance.tick(1);
 
     // 2. Set velocity and tick 2..=5
     live_instance.entities.get_mut(&1).unwrap().velocity = DeterministicVector2::from_f32(2.0, 1.0);
-    recorder.record_tick(2, vec![ReplayIntentEntry {
-        entity_id: 1,
-        player_name: String::new(),
-        intent: Some(ClientIntent {
-            intent: Some(client_intent::Intent::Move(MoveIntent {
-                direction: Some(Vector2 { x_bits: (2.0f32 * 65536.0) as i32, y_bits: (1.0f32 * 65536.0) as i32 }),
-            })),
-        }),
-    }]);
+    recorder.record_tick(
+        2,
+        vec![ReplayIntentEntry {
+            entity_id: 1,
+            player_name: String::new(),
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Move(MoveIntent {
+                    direction: Some(Vector2 {
+                        x_bits: (2.0f32 * 65536.0) as i32,
+                        y_bits: (1.0f32 * 65536.0) as i32,
+                    }),
+                })),
+            }),
+        }],
+    );
 
     for t in 2..=5 {
         live_instance.tick(t);
@@ -151,15 +176,18 @@ fn test_rejoin_entity_state_preservation_determinism() {
 
     // 3. Rejoin with new name "Alice_Updated" at tick 6
     live_instance.handle_join(addr, "Alice_Updated".to_string());
-    recorder.record_tick(6, vec![ReplayIntentEntry {
-        entity_id: 1,
-        player_name: "Alice_Updated".to_string(),
-        intent: Some(ClientIntent {
-            intent: Some(client_intent::Intent::Join(JoinIntent {
-                player_name: "Alice_Updated".to_string(),
-            })),
-        }),
-    }]);
+    recorder.record_tick(
+        6,
+        vec![ReplayIntentEntry {
+            entity_id: 1,
+            player_name: "Alice_Updated".to_string(),
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: "Alice_Updated".to_string(),
+                })),
+            }),
+        }],
+    );
 
     for t in 6..=10 {
         live_instance.tick(t);
@@ -168,7 +196,9 @@ fn test_rejoin_entity_state_preservation_determinism() {
 
     let bytes = recorder.to_bytes().unwrap();
     let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
-    let report = player.verify_determinism().expect("Rejoin replay must match live state deterministically");
+    let report = player
+        .verify_determinism()
+        .expect("Rejoin replay must match live state deterministically");
 
     assert_eq!(report.total_ticks, 10);
     assert_eq!(report.verified_checkpoints, 1);
@@ -225,7 +255,9 @@ fn test_inactivity_timeout_disconnect_synchronization() {
 
     assert!(replay_path.exists());
     let mut player = ReplayPlayer::load_from_file(&replay_path).unwrap();
-    let report = player.verify_determinism().expect("Timeout disconnect replay must verify with 0 desyncs");
+    let report = player
+        .verify_determinism()
+        .expect("Timeout disconnect replay must verify with 0 desyncs");
     assert!(report.total_ticks > 0);
 }
 
@@ -235,15 +267,18 @@ fn test_desync_diagnostic_report_on_tampered_frame() {
     let mut instance = Instance::new(1, 30, 60);
 
     instance.handle_join("127.0.0.1:5000".parse().unwrap(), "Alice".to_string());
-    recorder.record_tick(1, vec![ReplayIntentEntry {
-        entity_id: 1,
-        player_name: "Alice".to_string(),
-        intent: Some(ClientIntent {
-            intent: Some(client_intent::Intent::Join(JoinIntent {
-                player_name: "Alice".to_string(),
-            })),
-        }),
-    }]);
+    recorder.record_tick(
+        1,
+        vec![ReplayIntentEntry {
+            entity_id: 1,
+            player_name: "Alice".to_string(),
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: "Alice".to_string(),
+                })),
+            }),
+        }],
+    );
     instance.tick(1);
 
     for t in 2..=10 {
@@ -256,9 +291,14 @@ fn test_desync_diagnostic_report_on_tampered_frame() {
     let bytes = recorder.to_bytes().unwrap();
     let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
 
-    let desync = player.verify_determinism().expect_err("Desync must be detected");
+    let desync = player
+        .verify_determinism()
+        .expect_err("Desync must be detected");
     assert_eq!(desync.tick, 10);
-    assert_eq!(desync.expected_hash, loci2d::replay::hex_encode(&[0xEE; 32]));
+    assert_eq!(
+        desync.expected_hash,
+        loci2d::replay::hex_encode(&[0xEE; 32])
+    );
     assert_ne!(desync.actual_hash, desync.expected_hash);
     assert!(!desync.entity_summary.is_empty());
     assert!(desync.entity_summary[0].contains("Alice"));

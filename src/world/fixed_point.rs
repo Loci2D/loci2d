@@ -1,14 +1,16 @@
 // Deterministic Fixed-Point Vector2 implementation
 // Guarantees 100% bit-exact arithmetic across CPU architectures and OS platforms (ADR-0007).
 
+use crate::network::packets::Vector2 as ProtoVector2;
 use fixed::types::I16F16;
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use crate::network::packets::Vector2 as ProtoVector2;
 
 /// Fixed-point 2D Vector using 16-bit integer part and 16-bit fractional part (I16F16).
 /// Range: -32,768 to +32,767 units with precision ~0.000015 units (65,536 sub-steps per unit).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub struct DeterministicVector2 {
     pub x: I16F16,
     pub y: I16F16,
@@ -285,7 +287,10 @@ mod tests {
         assert_eq!(v1.length(), I16F16::from_num(5.0));
 
         // distance between (0, 0) and (3, 4) = 5.0
-        assert_eq!(DeterministicVector2::ZERO.distance(v1), I16F16::from_num(5.0));
+        assert_eq!(
+            DeterministicVector2::ZERO.distance(v1),
+            I16F16::from_num(5.0)
+        );
 
         // normalize (3, 4) -> (0.6, 0.8)
         let norm = v1.normalize_or_zero();
@@ -293,7 +298,10 @@ mod tests {
         assert_eq!(norm.y, I16F16::from_num(4) / I16F16::from_num(5));
 
         // normalize ZERO vector returns ZERO
-        assert_eq!(DeterministicVector2::ZERO.normalize_or_zero(), DeterministicVector2::ZERO);
+        assert_eq!(
+            DeterministicVector2::ZERO.normalize_or_zero(),
+            DeterministicVector2::ZERO
+        );
     }
 
     #[test]

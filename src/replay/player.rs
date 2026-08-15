@@ -1,20 +1,20 @@
 // Replay player for deterministic match playback and offline verification (ADR-0010, ADR-0011).
 
+use super::hash::compute_canonical_state_hash;
+use crate::network::packets::{
+    ClientIntent, ReplayCheckpoint, ReplayFile, ReplayHeader, ReplayTickFrame, ServerPacket,
+    client_intent, server_packet,
+};
+use crate::world::instance::Instance;
+use prost::Message;
 use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use prost::Message;
-use crate::network::packets::{
-    client_intent, ClientIntent, ReplayCheckpoint, ReplayFile, ReplayHeader, ReplayTickFrame,
-    ServerPacket, server_packet,
-};
-use crate::world::instance::Instance;
-use super::hash::compute_canonical_state_hash;
 
 /// Diagnostic report generated when a state checksum mismatch occurs during replay verification.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,9 +29,18 @@ pub struct DesyncReport {
 
 impl std::fmt::Display for DesyncReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "================================================================================")?;
-        writeln!(f, "                       REPLAY STATE DESYNC DETECTED                             ")?;
-        writeln!(f, "================================================================================")?;
+        writeln!(
+            f,
+            "================================================================================"
+        )?;
+        writeln!(
+            f,
+            "                       REPLAY STATE DESYNC DETECTED                             "
+        )?;
+        writeln!(
+            f,
+            "================================================================================"
+        )?;
         writeln!(f, "Desync Tick:         {}", self.tick)?;
         writeln!(f, "Expected SHA-256:    {}", self.expected_hash)?;
         writeln!(f, "Actual SHA-256:      {}", self.actual_hash)?;
@@ -41,7 +50,10 @@ impl std::fmt::Display for DesyncReport {
         for entry in &self.entity_summary {
             writeln!(f, "  {}", entry)?;
         }
-        writeln!(f, "================================================================================")
+        writeln!(
+            f,
+            "================================================================================"
+        )
     }
 }
 
@@ -81,10 +93,16 @@ impl ReplayPlayer {
 
         let header = replay.header.as_ref().ok_or("Missing replay header")?;
         if header.magic != "LOCI_REPLAY" {
-            return Err(format!("Invalid magic bytes: '{}', expected 'LOCI_REPLAY'", header.magic).into());
+            return Err(format!(
+                "Invalid magic bytes: '{}', expected 'LOCI_REPLAY'",
+                header.magic
+            )
+            .into());
         }
         if header.version != 1 {
-            return Err(format!("Unsupported replay version: {}, expected 1", header.version).into());
+            return Err(
+                format!("Unsupported replay version: {}, expected 1", header.version).into(),
+            );
         }
 
         Ok(Self { replay })
@@ -95,12 +113,8 @@ impl ReplayPlayer {
         let header = self.replay.header.as_ref().unwrap();
         let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
 
-        let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> = self
-            .replay
-            .frames
-            .iter()
-            .map(|f| (f.tick, f))
-            .collect();
+        let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> =
+            self.replay.frames.iter().map(|f| (f.tick, f)).collect();
 
         let checkpoints_by_tick: BTreeMap<u64, &ReplayCheckpoint> = self
             .replay
@@ -177,7 +191,11 @@ impl ReplayPlayer {
         max_spectators: usize,
         running: Arc<AtomicBool>,
     ) {
-        let max_spectators = if max_spectators == 0 { 128 } else { max_spectators };
+        let max_spectators = if max_spectators == 0 {
+            128
+        } else {
+            max_spectators
+        };
         const TERMINAL_FRAME_RETRIES: usize = 3;
         const TERMINAL_FRAME_DELAY_MS: u64 = 15;
 
@@ -185,28 +203,33 @@ impl ReplayPlayer {
         let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
 
         let original_speed = speed;
-        let speed = if speed <= 0.0 { 1.0 } else { speed.clamp(0.1, 10.0) };
+        let speed = if speed <= 0.0 {
+            1.0
+        } else {
+            speed.clamp(0.1, 10.0)
+        };
         if (speed - original_speed).abs() > 0.001 {
-            println!("[Spectator] Playback speed clamped from {:.1}x to {:.1}x", original_speed, speed);
+            println!(
+                "[Spectator] Playback speed clamped from {:.1}x to {:.1}x",
+                original_speed, speed
+            );
         }
 
         let base_tick_hz = header.tick_rate as f64 * speed as f64;
         let tick_duration = Duration::from_secs_f64(1.0 / base_tick_hz);
         let max_accumulator = tick_duration * 5;
 
-        let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> = self
-            .replay
-            .frames
-            .iter()
-            .map(|f| (f.tick, f))
-            .collect();
+        let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> =
+            self.replay.frames.iter().map(|f| (f.tick, f)).collect();
 
-        let end_tick = frames_by_tick
-            .keys()
-            .next_back()
-            .copied()
-            .unwrap_or(0)
-            .max(self.replay.checkpoints.iter().map(|c| c.tick).max().unwrap_or(0));
+        let end_tick = frames_by_tick.keys().next_back().copied().unwrap_or(0).max(
+            self.replay
+                .checkpoints
+                .iter()
+                .map(|c| c.tick)
+                .max()
+                .unwrap_or(0),
+        );
 
         // Track connected spectator clients (SocketAddr -> last activity timestamp)
         let mut spectators: BTreeMap<SocketAddr, Instant> = BTreeMap::new();
@@ -218,8 +241,10 @@ impl ReplayPlayer {
         let mut out_buf = Vec::with_capacity(2048);
 
         running.store(true, Ordering::Relaxed);
-        println!("[Spectator] Replay broadcast started ({} Hz at {:.1}x speed, total ticks: {})", 
-            header.tick_rate, speed, end_tick);
+        println!(
+            "[Spectator] Replay broadcast started ({} Hz at {:.1}x speed, total ticks: {})",
+            header.tick_rate, speed, end_tick
+        );
 
         while running.load(Ordering::Relaxed) && tick_count <= end_tick {
             let now = Instant::now();
@@ -236,11 +261,17 @@ impl ReplayPlayer {
                         spectators.insert(addr, now);
                     } else if spectators.len() < max_spectators {
                         spectators.insert(addr, now);
-                        println!("[Spectator] New spectator client registered: {} ({}/{} active)", 
-                            addr, spectators.len(), max_spectators);
+                        println!(
+                            "[Spectator] New spectator client registered: {} ({}/{} active)",
+                            addr,
+                            spectators.len(),
+                            max_spectators
+                        );
                     } else {
-                        println!("[Spectator] Rejected spectator client {}: maximum capacity ({} spectators) reached", 
-                            addr, max_spectators);
+                        println!(
+                            "[Spectator] Rejected spectator client {}: maximum capacity ({} spectators) reached",
+                            addr, max_spectators
+                        );
                     }
 
                     if let Some(client_intent::Intent::Disconnect(_)) = intent.intent {
@@ -308,7 +339,10 @@ impl ReplayPlayer {
             }
         }
 
-        println!("[Spectator] Replay broadcast finished at tick {}.", tick_count.saturating_sub(1));
+        println!(
+            "[Spectator] Replay broadcast finished at tick {}.",
+            tick_count.saturating_sub(1)
+        );
     }
 
     pub fn header(&self) -> &ReplayHeader {
@@ -337,7 +371,7 @@ pub fn hex_encode(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::network::packets::{
-        client_intent, ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry, Vector2,
+        ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry, Vector2, client_intent,
     };
     use crate::replay::ReplayRecorder;
 
@@ -346,26 +380,35 @@ mod tests {
         let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10);
 
         // Tick 1: Join Alice
-        recorder.record_tick(1, vec![ReplayIntentEntry {
-            entity_id: 1,
-            player_name: "Alice".to_string(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Join(JoinIntent {
-                    player_name: "Alice".to_string(),
-                })),
-            }),
-        }]);
+        recorder.record_tick(
+            1,
+            vec![ReplayIntentEntry {
+                entity_id: 1,
+                player_name: "Alice".to_string(),
+                intent: Some(ClientIntent {
+                    intent: Some(client_intent::Intent::Join(JoinIntent {
+                        player_name: "Alice".to_string(),
+                    })),
+                }),
+            }],
+        );
 
         // Tick 2: Move Alice
-        recorder.record_tick(2, vec![ReplayIntentEntry {
-            entity_id: 1,
-            player_name: String::new(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Move(MoveIntent {
-                    direction: Some(Vector2 { x_bits: (2.0f32 * 65536.0) as i32, y_bits: (1.0f32 * 65536.0) as i32 }),
-                })),
-            }),
-        }]);
+        recorder.record_tick(
+            2,
+            vec![ReplayIntentEntry {
+                entity_id: 1,
+                player_name: String::new(),
+                intent: Some(ClientIntent {
+                    intent: Some(client_intent::Intent::Move(MoveIntent {
+                        direction: Some(Vector2 {
+                            x_bits: (2.0f32 * 65536.0) as i32,
+                            y_bits: (1.0f32 * 65536.0) as i32,
+                        }),
+                    })),
+                }),
+            }],
+        );
 
         // Simulate instance ticks to record authentic checkpoints
         let mut sim_instance = Instance::new(1, 30, 10);
@@ -382,7 +425,9 @@ mod tests {
 
         let bytes = recorder.to_bytes().unwrap();
         let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
-        let report = player.verify_determinism().expect("Verification should pass");
+        let report = player
+            .verify_determinism()
+            .expect("Verification should pass");
 
         assert_eq!(report.total_ticks, 10);
         assert_eq!(report.verified_checkpoints, 1);
@@ -393,15 +438,18 @@ mod tests {
     fn test_replay_player_detects_desync() {
         let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 5);
 
-        recorder.record_tick(1, vec![ReplayIntentEntry {
-            entity_id: 1,
-            player_name: "Bob".to_string(),
-            intent: Some(ClientIntent {
-                intent: Some(client_intent::Intent::Join(JoinIntent {
-                    player_name: "Bob".to_string(),
-                })),
-            }),
-        }]);
+        recorder.record_tick(
+            1,
+            vec![ReplayIntentEntry {
+                entity_id: 1,
+                player_name: "Bob".to_string(),
+                intent: Some(ClientIntent {
+                    intent: Some(client_intent::Intent::Join(JoinIntent {
+                        player_name: "Bob".to_string(),
+                    })),
+                }),
+            }],
+        );
 
         // Record a forged/corrupted checkpoint hash
         recorder.record_checkpoint(5, [0xFF; 32], 1);
