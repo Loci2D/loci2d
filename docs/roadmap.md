@@ -125,7 +125,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 ### Fase 5: Motor de Física e Colisão Determinístico
 
 #### English
-* [ ] **Deterministic Collision Detection**:
+* [x] **Deterministic Collision Detection**:
   - Implement fixed-point AABB (Axis-Aligned Bounding Box) and Circle colliders using `I16F16`.
 * [ ] **Static Map Geometry & Boundaries**:
   - Define world boundaries and static colliders (walls, obstacles) loaded from map files/configuration.
