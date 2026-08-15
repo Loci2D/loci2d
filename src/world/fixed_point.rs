@@ -3,7 +3,7 @@
 
 use fixed::types::I16F16;
 use serde::{Deserialize, Serialize};
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use crate::network::packets::Vector2 as ProtoVector2;
 
 /// Fixed-point 2D Vector using 16-bit integer part and 16-bit fractional part (I16F16).
@@ -93,6 +93,42 @@ impl DeterministicVector2 {
         (self.x - other.x).abs() + (self.y - other.y).abs()
     }
 
+    /// Calculates dot product using 64-bit intermediate arithmetic to prevent fixed-point overflow.
+    #[inline]
+    pub fn dot(self, other: Self) -> I16F16 {
+        let x_prod = (self.x.to_bits() as i64) * (other.x.to_bits() as i64);
+        let y_prod = (self.y.to_bits() as i64) * (other.y.to_bits() as i64);
+        let sum_raw = (x_prod + y_prod) >> 16;
+        let clamped = sum_raw.clamp(i32::MIN as i64, i32::MAX as i64);
+        I16F16::from_bits(clamped as i32)
+    }
+
+    /// Calculates Euclidean length using deterministic 64-bit square root.
+    #[inline]
+    pub fn length(self) -> I16F16 {
+        crate::world::physics::math::deterministic_distance(Self::ZERO, self)
+    }
+
+    /// Calculates Euclidean distance between two vectors using deterministic 64-bit square root.
+    #[inline]
+    pub fn distance(self, other: Self) -> I16F16 {
+        crate::world::physics::math::deterministic_distance(self, other)
+    }
+
+    /// Returns normalized unit vector, or `DeterministicVector2::ZERO` if length is zero.
+    #[inline]
+    pub fn normalize_or_zero(self) -> Self {
+        let len = self.length();
+        if len == I16F16::ZERO {
+            Self::ZERO
+        } else {
+            Self {
+                x: self.x / len,
+                y: self.y / len,
+            }
+        }
+    }
+
     /// Saturating addition to prevent integer overflow at extreme map coordinates.
     #[inline]
     pub fn saturating_add(self, rhs: Self) -> Self {
@@ -169,6 +205,25 @@ impl MulAssign<I16F16> for DeterministicVector2 {
     }
 }
 
+impl Div<I16F16> for DeterministicVector2 {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: I16F16) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
+    }
+}
+
+impl DivAssign<I16F16> for DeterministicVector2 {
+    #[inline]
+    fn div_assign(&mut self, rhs: I16F16) {
+        self.x /= rhs;
+        self.y /= rhs;
+    }
+}
+
 impl Neg for DeterministicVector2 {
     type Output = Self;
     #[inline]
@@ -200,11 +255,40 @@ mod tests {
     }
 
     #[test]
-    fn test_vector_scalar_multiplication() {
+    fn test_vector_scalar_multiplication_and_division() {
         let v = DeterministicVector2::from_f32(2.0, -3.0);
         let factor = I16F16::from_num(2.5);
         let scaled = v * factor;
         assert_eq!(scaled.to_f32(), (5.0, -7.5));
+
+        let mut v_div = DeterministicVector2::from_f32(6.0, -8.0);
+        let divisor = I16F16::from_num(2.0);
+        assert_eq!((v_div / divisor).to_f32(), (3.0, -4.0));
+        v_div /= divisor;
+        assert_eq!(v_div.to_f32(), (3.0, -4.0));
+    }
+
+    #[test]
+    fn test_vector_dot_length_normalize() {
+        let v1 = DeterministicVector2::from_f32(3.0, 4.0);
+        let v2 = DeterministicVector2::from_f32(2.0, -1.0);
+
+        // dot: 3*2 + 4*(-1) = 2.0
+        assert_eq!(v1.dot(v2), I16F16::from_num(2.0));
+
+        // length of (3, 4) = 5.0
+        assert_eq!(v1.length(), I16F16::from_num(5.0));
+
+        // distance between (0, 0) and (3, 4) = 5.0
+        assert_eq!(DeterministicVector2::ZERO.distance(v1), I16F16::from_num(5.0));
+
+        // normalize (3, 4) -> (0.6, 0.8)
+        let norm = v1.normalize_or_zero();
+        assert_eq!(norm.x, I16F16::from_num(3) / I16F16::from_num(5));
+        assert_eq!(norm.y, I16F16::from_num(4) / I16F16::from_num(5));
+
+        // normalize ZERO vector returns ZERO
+        assert_eq!(DeterministicVector2::ZERO.normalize_or_zero(), DeterministicVector2::ZERO);
     }
 
     #[test]

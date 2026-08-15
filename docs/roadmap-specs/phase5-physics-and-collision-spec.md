@@ -607,7 +607,7 @@ src/
 
 ## 6. Definition of Done Checklist
 
-- [ ] **Milestone 5.1**: `DeterministicAABB`, `DeterministicCircle`, restoring `fixed_sqrt`, `deterministic_distance` (overflow-safe for distances $> 181$), and all 2D intersection queries implemented with 100% passing tests.
+- [x] **Milestone 5.1**: `DeterministicAABB`, `DeterministicCircle`, restoring `fixed_sqrt`, `deterministic_distance` (overflow-safe for distances $> 181$), and all 2D intersection queries implemented with 100% passing tests.
 - [ ] **Milestone 5.2**: `MapBounds` (with `clamp_point`, `clamp_circle`, `clamp_aabb`) and `StaticObstacle` definitions integrated into `Instance` in `BTreeMap` order.
 - [ ] **Milestone 5.3**: Solid MTV pushback (100% static, 50/50 dynamic) and wall sliding implemented; trigger zone `Enter`/`Stay`/`Exit` events functioning with deterministic `BTreeSet` order.
 - [ ] **Milestone 5.4**: `MoveToPositionIntent` click-to-move navigation and waypoint steering functioning without jitter; `ReplayPlayer` replay intent dispatch integrated.
