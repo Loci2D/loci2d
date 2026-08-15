@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::time::Instant;
 use loci2d::network::{
-    client_intent, ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry, Vector2,
+    client_intent, ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry,
 };
 use loci2d::replay::player::ReplayPlayer;
 use loci2d::replay::recorder::ReplayRecorder;

@@ -1,8 +1,7 @@
-// Instance module - Logic for a specific room/instance (tick rate, entity list, session mapping)
-
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use super::entity::{Entity, EntityType};
+use super::physics::{ColliderShape, MapBounds, StaticObstacle};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
     ClientIntent, EntityState, ReplayIntentEntry, WorldState, EntityType as ProtoEntityType,
@@ -22,6 +21,9 @@ pub struct Instance {
     pub entity_to_addr: BTreeMap<u64, SocketAddr>,
     pub tick_rate: u32, // ticks per second
     pub client_timeout_secs: u64,
+    // Phase 5 Additions:
+    pub map_bounds: MapBounds,
+    pub static_obstacles: BTreeMap<u64, StaticObstacle>,
     next_entity_id: u64,
     next_session_id: u64,
 }
@@ -35,6 +37,8 @@ impl Instance {
             entity_to_addr: BTreeMap::new(),
             tick_rate,
             client_timeout_secs,
+            map_bounds: MapBounds::default_arena(),
+            static_obstacles: BTreeMap::new(),
             next_entity_id: 1,
             next_session_id: 1,
         }
@@ -175,11 +179,24 @@ impl Instance {
         }
     }
 
-    /// Advance physics using deterministic fixed-point addition and sweep for timed-out sessions.
+    /// Advance physics using deterministic fixed-point addition, clamp to map boundaries, and sweep for timed-out sessions.
     /// Returns a list of (entity_id, player_name) for any sessions that timed out during this tick.
     pub fn tick(&mut self, tick_count: u64) -> Vec<(u64, String)> {
         for entity in self.entities.values_mut() {
             entity.position = entity.position.saturating_add(entity.velocity);
+
+            // Milestone 5.2: Map Boundary Constraint
+            entity.position = match &entity.collider {
+                Some(ColliderShape::Circle(circle)) => {
+                    self.map_bounds.clamp_circle(entity.position, circle.radius)
+                }
+                Some(ColliderShape::AABB(aabb)) => {
+                    self.map_bounds.clamp_aabb(entity.position, aabb.half_extents())
+                }
+                None => {
+                    self.map_bounds.clamp_point(entity.position)
+                }
+            };
         }
 
         // Check for timed out clients
@@ -229,6 +246,22 @@ impl Instance {
     #[allow(dead_code)]
     pub fn get_session(&self, addr: &SocketAddr) -> Option<&ClientSession> {
         self.sessions.get(addr)
+    }
+
+    pub fn add_static_obstacle(&mut self, obstacle: StaticObstacle) {
+        self.static_obstacles.insert(obstacle.id, obstacle);
+    }
+
+    pub fn remove_static_obstacle(&mut self, obstacle_id: u64) -> Option<StaticObstacle> {
+        self.static_obstacles.remove(&obstacle_id)
+    }
+
+    pub fn get_static_obstacle(&self, obstacle_id: u64) -> Option<&StaticObstacle> {
+        self.static_obstacles.get(&obstacle_id)
+    }
+
+    pub fn set_map_bounds(&mut self, bounds: MapBounds) {
+        self.map_bounds = bounds;
     }
 
     /// Generates a complete WorldState snapshot representing all active entities.
@@ -509,5 +542,85 @@ mod tests {
         let names: Vec<String> = snapshot.entities.iter().map(|e| e.name.clone()).collect();
         assert!(names.contains(&"Alice".to_string()));
         assert!(names.contains(&"Bob".to_string()));
+    }
+
+    #[test]
+    fn test_instance_map_bounds_clamping_on_tick() {
+        use fixed::types::I16F16;
+        use crate::world::physics::MapBounds;
+
+        let mut instance = Instance::new(1, 30, 10);
+        instance.set_map_bounds(MapBounds::new(
+            DeterministicVector2::new(I16F16::from_num(-100), I16F16::from_num(-100)),
+            DeterministicVector2::new(I16F16::from_num(100), I16F16::from_num(100)),
+        ));
+
+        // 1. Point entity (no collider)
+        let mut e1 = Entity::new(1, "PointEntity".to_string(), EntityType::Player);
+        e1.position = DeterministicVector2::new(I16F16::from_num(90), I16F16::from_num(90));
+        e1.velocity = DeterministicVector2::new(I16F16::from_num(30), I16F16::from_num(30)); // would reach 120, 120
+        instance.add_entity(e1);
+
+        // 2. Circle entity (radius 10)
+        let mut e2 = Entity::new(2, "CircleEntity".to_string(), EntityType::Player)
+            .with_circle_collider(I16F16::from_num(10));
+        e2.position = DeterministicVector2::new(I16F16::from_num(85), I16F16::from_num(-85));
+        e2.velocity = DeterministicVector2::new(I16F16::from_num(20), I16F16::from_num(-20)); // would reach 105, -105
+        instance.add_entity(e2);
+
+        // 3. AABB entity (half extents 15, 15)
+        let mut e3 = Entity::new(3, "AABBEntity".to_string(), EntityType::Player)
+            .with_aabb_collider(DeterministicVector2::new(I16F16::from_num(15), I16F16::from_num(15)));
+        e3.position = DeterministicVector2::new(I16F16::from_num(-80), I16F16::from_num(0));
+        e3.velocity = DeterministicVector2::new(I16F16::from_num(-30), I16F16::from_num(0)); // would reach -110, 0
+        instance.add_entity(e3);
+
+        instance.tick(1);
+
+        // e1 clamped to (100, 100)
+        let updated_e1 = instance.get_entity(1).unwrap();
+        assert_eq!(updated_e1.position, DeterministicVector2::new(I16F16::from_num(100), I16F16::from_num(100)));
+
+        // e2 clamped to (90, -90) because radius is 10 and max is 100 / min is -100
+        let updated_e2 = instance.get_entity(2).unwrap();
+        assert_eq!(updated_e2.position, DeterministicVector2::new(I16F16::from_num(90), I16F16::from_num(-90)));
+
+        // e3 clamped to (-85, 0) because half_extent.x is 15 and min is -100
+        let updated_e3 = instance.get_entity(3).unwrap();
+        assert_eq!(updated_e3.position, DeterministicVector2::new(I16F16::from_num(-85), I16F16::from_num(0)));
+    }
+
+    #[test]
+    fn test_instance_static_obstacle_management() {
+        use fixed::types::I16F16;
+        use crate::world::physics::{ColliderShape, DeterministicCircle, StaticObstacle};
+
+        let mut instance = Instance::new(1, 30, 10);
+        let obs1 = StaticObstacle::solid_wall(
+            1,
+            ColliderShape::Circle(DeterministicCircle::new(
+                DeterministicVector2::new(I16F16::from_num(10), I16F16::from_num(20)),
+                I16F16::from_num(5),
+            )),
+        );
+        let obs2 = StaticObstacle::trigger_zone(
+            2,
+            ColliderShape::Circle(DeterministicCircle::new(
+                DeterministicVector2::new(I16F16::from_num(50), I16F16::from_num(50)),
+                I16F16::from_num(10),
+            )),
+        );
+
+        instance.add_static_obstacle(obs1.clone());
+        instance.add_static_obstacle(obs2.clone());
+
+        assert_eq!(instance.static_obstacles.len(), 2);
+        assert_eq!(instance.get_static_obstacle(1), Some(&obs1));
+        assert_eq!(instance.get_static_obstacle(2), Some(&obs2));
+
+        let removed = instance.remove_static_obstacle(1);
+        assert_eq!(removed, Some(obs1));
+        assert_eq!(instance.static_obstacles.len(), 1);
+        assert_eq!(instance.get_static_obstacle(1), None);
     }
 }
