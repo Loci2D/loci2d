@@ -522,7 +522,7 @@ Intent::MoveToPos(move_to_pos_intent) => {
 
 ---
 
-### Milestone 5.5: Spatial Partitioning Broadphase (Optional Optimization)
+### Milestone 5.5: Spatial Partitioning Broadphase (Deferred to Phase 8)
 
 1. **2D Uniform Spatial Hash Grid**: Configurable cell size in `InstanceConfig` (default $64 \times 64$ units).
 2. **Candidate Pair Deduplication (Cache-Friendly)**: Normalizes entity IDs (`min_id < max_id`) into a flat `Vec<(u64, u64)>`. To avoid allocation bottlenecks on the single Game-Loop thread, pairs are sorted via `.sort_unstable()` and deduplicated with `.dedup()`, completely replacing `BTreeSet` for performance.
@@ -611,5 +611,5 @@ src/
 - [x] **Milestone 5.2**: `MapBounds` (with `clamp_point`, `clamp_circle`, `clamp_aabb`) and `StaticObstacle` definitions integrated into `Instance` in `BTreeMap` order.
 - [x] **Milestone 5.3**: Solid MTV pushback (100% static, 50/50 dynamic) and wall sliding implemented; trigger zone `Enter`/`Stay`/`Exit` events functioning with deterministic `BTreeSet` order.
 - [x] **Milestone 5.4**: `MoveToPositionIntent` click-to-move navigation and waypoint steering functioning without jitter; `ReplayPlayer` replay intent dispatch integrated.
-- [ ] **Milestone 5.5**: Broadphase spatial grid implemented and verified against brute-force baseline.
+- [-] **[Deferred] Milestone 5.5**: Broadphase spatial grid implemented and verified against brute-force baseline.
 - [ ] **Determinism Verified**: Replay CLI (`loci-replay`) validates identical SHA-256 state hashes for matches containing complex collisions and navigation paths.

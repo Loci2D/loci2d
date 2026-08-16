@@ -133,7 +133,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implement solid obstacle pushback and trigger/sensor zones (`on_overlap_enter` / `on_overlap_exit`).
 * [x] **Click-to-Move Steering & Navigation**:
   - Implement destination-based steering (`MoveToPositionIntent`) with basic obstacle navigation for RTS/MOBA controls.
-* [ ] **Spatial Partitioning (Optional Optimization)**:
+* [-] **[Deferred to Phase 8] Spatial Partitioning (Optional Optimization)**:
   - Add a fixed spatial hash grid for efficient broadphase collision queries.
 
 #### Português
@@ -145,7 +145,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implementar desvio/bloqueio de obstáculos sólidos e zonas de sensores/gatilhos (`on_overlap_enter` / `on_overlap_exit`).
 * [x] **Navegação & Movimento por Clique (Click-to-Move)**:
   - Implementar movimentação baseada em destino (`MoveToPositionIntent`) com navegação básica por obstáculos para controles RTS/MOBA.
-* [ ] **Particionamento Espacial (Otimização Opcional)**:
+* [-] **[Adiado para a Fase 8] Particionamento Espacial (Otimização Opcional)**:
   - Adicionar um spatial hash grid fixo para consultas eficientes de colisão em fase ampla (broadphase).
 
 ---
