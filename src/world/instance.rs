@@ -1,7 +1,8 @@
 use super::entity::{Entity, EntityType};
 use super::physics::{
-    ColliderShape, DeterministicCircle, MapBounds, StaticObstacle, TriggerEvent, TriggerEventType,
-    intersect_shapes, resolve_dynamic_collision, resolve_static_collision,
+    ColliderShape, DeterministicCircle, MapBounds, NavigationComponent, StaticObstacle,
+    TriggerEvent, TriggerEventType, intersect_shapes, resolve_dynamic_collision,
+    resolve_static_collision, update_entity_navigation,
 };
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
@@ -98,10 +99,14 @@ impl Instance {
                 let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
                 let entity_id = session.entity_id;
-                if let (Some(dir), Some(entity)) =
-                    (move_intent.direction, self.entities.get_mut(&entity_id))
-                {
-                    entity.velocity = DeterministicVector2::from_proto(&dir);
+                if let Some(entity) = self.entities.get_mut(&entity_id) {
+                    if let Some(dir) = move_intent.direction {
+                        entity.velocity = DeterministicVector2::from_proto(&dir);
+                    }
+                    // Direct Move intent preempts / cancels active navigation (ADR-0013)
+                    if let Some(ref mut nav) = entity.navigation {
+                        nav.clear();
+                    }
                 }
                 Some(ReplayIntentEntry {
                     entity_id,
@@ -110,18 +115,23 @@ impl Instance {
                 })
             }
 
-            // 4. Target Movement Intent (Phase 6 click-to-move reserved)
+            // 4. Target Movement Intent (Click-to-move navigation - ADR-0013, Milestone 5.4)
             Intent::MoveToPos(move_to_pos_intent) => {
                 let session = self.sessions.get_mut(&addr)?;
                 session.refresh_activity();
                 let entity_id = session.entity_id;
-                if let Some(target) = move_to_pos_intent.target_position {
-                    let target_vec = DeterministicVector2::from_proto(&target);
-                    let (tx, ty) = target_vec.to_f32();
-                    println!(
-                        "[Intent] Entity {} ({}) requested move to target ({:.1}, {:.1})",
-                        session.entity_id, session.player_name, tx, ty
+                if let (Some(target), Some(entity)) = (
+                    move_to_pos_intent.target_position,
+                    self.entities.get_mut(&entity_id),
+                ) {
+                    let target_vec = DeterministicVector2::new(
+                        I16F16::from_bits(target.x_bits),
+                        I16F16::from_bits(target.y_bits),
                     );
+                    let nav = entity.navigation.get_or_insert_with(|| {
+                        NavigationComponent::new(I16F16::from_num(1), I16F16::from_num(1))
+                    });
+                    nav.set_target(target_vec);
                 }
                 Some(ReplayIntentEntry {
                     entity_id,
@@ -184,7 +194,8 @@ impl Instance {
         self.next_session_id += 1;
 
         let session = ClientSession::new(session_id, addr, entity_id, player_name.clone());
-        let entity = Entity::new(entity_id, player_name.clone(), EntityType::Player);
+        let entity = Entity::new(entity_id, player_name.clone(), EntityType::Player)
+            .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1));
 
         self.entities.insert(entity_id, entity);
         self.sessions.insert(addr, session);
@@ -220,6 +231,13 @@ impl Instance {
     /// and sweep for timed-out sessions.
     /// Returns a list of (entity_id, player_name) for any sessions that timed out during this tick.
     pub fn tick(&mut self, tick_count: u64) -> Vec<(u64, String)> {
+        // 0. Steering & Destination Navigation Update (ADR-0013, Milestone 5.4)
+        for entity in self.entities.values_mut() {
+            if let Some(ref mut nav) = entity.navigation {
+                update_entity_navigation(entity.position, &mut entity.velocity, nav);
+            }
+        }
+
         // 1. Velocity Integration (Candidate Next Position) & Initial Map Bounds Clamping
         for entity in self.entities.values_mut() {
             entity.position = entity.position.saturating_add(entity.velocity);
@@ -267,7 +285,9 @@ impl Instance {
                 let can_collide = {
                     let entity_a = &self.entities[&id_a];
                     let entity_b = &self.entities[&id_b];
-                    entity_a.collision_filter.can_collide(&entity_b.collision_filter)
+                    entity_a
+                        .collision_filter
+                        .can_collide(&entity_b.collision_filter)
                         && entity_a.collider.is_some()
                         && entity_b.collider.is_some()
                 };
@@ -287,11 +307,7 @@ impl Instance {
                     let mut vel_b = self.entities[&id_b].velocity;
 
                     resolve_dynamic_collision(
-                        &mut pos_a,
-                        &mut vel_a,
-                        &mut pos_b,
-                        &mut vel_b,
-                        &manifold,
+                        &mut pos_a, &mut vel_a, &mut pos_b, &mut vel_b, &manifold,
                     );
 
                     let entity_a = self.entities.get_mut(&id_a).unwrap();
@@ -345,7 +361,9 @@ impl Instance {
             .collect();
 
         for (trigger_id, entity_id) in all_pairs {
-            let was_present = self.previous_trigger_overlaps.contains(&(trigger_id, entity_id));
+            let was_present = self
+                .previous_trigger_overlaps
+                .contains(&(trigger_id, entity_id));
             let is_present = current_overlaps.contains(&(trigger_id, entity_id));
             let event_type = match (was_present, is_present) {
                 (false, true) => TriggerEventType::Enter,
@@ -354,10 +372,7 @@ impl Instance {
                 (false, false) => unreachable!(),
             };
             self.trigger_events.push(TriggerEvent::new(
-                trigger_id,
-                entity_id,
-                event_type,
-                tick_count,
+                trigger_id, entity_id, event_type, tick_count,
             ));
         }
 
@@ -493,7 +508,8 @@ impl Instance {
                 if let Some(existing) = self.entities.get_mut(&entry.entity_id) {
                     existing.name = player_name;
                 } else {
-                    let entity = Entity::new(entry.entity_id, player_name, EntityType::Player);
+                    let entity = Entity::new(entry.entity_id, player_name, EntityType::Player)
+                        .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1));
                     self.entities.insert(entry.entity_id, entity);
                 }
             }
@@ -501,14 +517,30 @@ impl Instance {
                 self.entities.remove(&entry.entity_id);
             }
             Intent::Move(move_intent) => {
-                if let (Some(dir), Some(entity)) = (
-                    move_intent.direction,
-                    self.entities.get_mut(&entry.entity_id),
-                ) {
-                    entity.velocity = DeterministicVector2::from_proto(&dir);
+                if let Some(entity) = self.entities.get_mut(&entry.entity_id) {
+                    if let Some(dir) = move_intent.direction {
+                        entity.velocity = DeterministicVector2::from_proto(&dir);
+                    }
+                    if let Some(ref mut nav) = entity.navigation {
+                        nav.clear();
+                    }
                 }
             }
-            Intent::MoveToPos(_) => {}
+            Intent::MoveToPos(move_to_pos_intent) => {
+                if let (Some(target), Some(entity)) = (
+                    move_to_pos_intent.target_position,
+                    self.entities.get_mut(&entry.entity_id),
+                ) {
+                    let target_vec = DeterministicVector2::new(
+                        I16F16::from_bits(target.x_bits),
+                        I16F16::from_bits(target.y_bits),
+                    );
+                    let nav = entity.navigation.get_or_insert_with(|| {
+                        NavigationComponent::new(I16F16::from_num(1), I16F16::from_num(1))
+                    });
+                    nav.set_target(target_vec);
+                }
+            }
             Intent::Action(action_intent) => {
                 if let Some(entity) = self.entities.get_mut(&entry.entity_id) {
                     println!(
@@ -824,5 +856,70 @@ mod tests {
         assert_eq!(removed, Some(obs1));
         assert_eq!(instance.static_obstacles.len(), 1);
         assert_eq!(instance.get_static_obstacle(1), None);
+    }
+
+    #[test]
+    fn test_explicit_move_to_pos_intent_and_preemption() {
+        use crate::network::packets::MoveToPositionIntent;
+
+        let mut instance = Instance::new(1, 30, 10);
+        let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+
+        // 1. Join
+        let join_intent = ClientIntent {
+            intent: Some(client_intent::Intent::Join(JoinIntent {
+                player_name: "Alice".to_string(),
+            })),
+        };
+        instance.apply_intent(addr, join_intent);
+
+        // 2. MoveToPos Intent
+        let target_x = I16F16::from_num(10);
+        let target_y = I16F16::from_num(0);
+        let move_to_pos = ClientIntent {
+            intent: Some(client_intent::Intent::MoveToPos(MoveToPositionIntent {
+                target_position: Some(Vector2 {
+                    x_bits: target_x.to_bits(),
+                    y_bits: target_y.to_bits(),
+                }),
+            })),
+        };
+        instance.apply_intent(addr, move_to_pos);
+
+        let entity = instance.get_entity(1).unwrap();
+        assert!(entity.navigation.as_ref().unwrap().is_navigating());
+        assert_eq!(
+            entity.navigation.as_ref().unwrap().target,
+            Some(DeterministicVector2::new(target_x, target_y))
+        );
+
+        // 3. Tick: entity moves toward (10, 0) with move_speed = 1.0
+        instance.tick(1);
+        let entity = instance.get_entity(1).unwrap();
+        assert_eq!(
+            entity.velocity,
+            DeterministicVector2::new(I16F16::from_num(1), I16F16::ZERO)
+        );
+        assert_eq!(
+            entity.position,
+            DeterministicVector2::new(I16F16::from_num(1), I16F16::ZERO)
+        );
+
+        // 4. Preemption by direct Move intent
+        let move_intent = ClientIntent {
+            intent: Some(client_intent::Intent::Move(MoveIntent {
+                direction: Some(
+                    DeterministicVector2::new(I16F16::ZERO, I16F16::from_num(-2)).to_proto(),
+                ),
+            })),
+        };
+        instance.apply_intent(addr, move_intent);
+
+        let entity = instance.get_entity(1).unwrap();
+        assert!(!entity.navigation.as_ref().unwrap().is_navigating());
+        assert_eq!(
+            entity.velocity,
+            DeterministicVector2::new(I16F16::ZERO, I16F16::from_num(-2))
+        );
     }
 }

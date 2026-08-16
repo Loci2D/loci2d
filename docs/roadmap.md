@@ -131,7 +131,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Define world boundaries and static colliders (walls, obstacles) loaded from map files/configuration.
 * [x] **Collision Resolution & Trigger Zones**:
   - Implement solid obstacle pushback and trigger/sensor zones (`on_overlap_enter` / `on_overlap_exit`).
-* [ ] **Click-to-Move Steering & Navigation**:
+* [x] **Click-to-Move Steering & Navigation**:
   - Implement destination-based steering (`MoveToPositionIntent`) with basic obstacle navigation for RTS/MOBA controls.
 * [ ] **Spatial Partitioning (Optional Optimization)**:
   - Add a fixed spatial hash grid for efficient broadphase collision queries.
@@ -143,7 +143,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Definir limites do mundo e colisores estáticos (paredes, obstáculos) carregados de arquivos de mapa/configuração.
 * [x] **Resolução de Colisão & Zonas de Gatilho (Triggers)**:
   - Implementar desvio/bloqueio de obstáculos sólidos e zonas de sensores/gatilhos (`on_overlap_enter` / `on_overlap_exit`).
-* [ ] **Navegação & Movimento por Clique (Click-to-Move)**:
+* [x] **Navegação & Movimento por Clique (Click-to-Move)**:
   - Implementar movimentação baseada em destino (`MoveToPositionIntent`) com navegação básica por obstáculos para controles RTS/MOBA.
 * [ ] **Particionamento Espacial (Otimização Opcional)**:
   - Adicionar um spatial hash grid fixo para consultas eficientes de colisão em fase ampla (broadphase).

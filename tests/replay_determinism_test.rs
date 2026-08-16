@@ -1,7 +1,7 @@
 use loci2d::game_loop::tick::GameLoop;
 use loci2d::network::{
-    ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, ReplayIntentEntry, Vector2,
-    client_intent, run_server,
+    ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, MoveToPositionIntent,
+    ReplayIntentEntry, Vector2, client_intent, run_server,
 };
 use loci2d::replay::{ReplayPlayer, ReplayRecorder};
 use loci2d::world::fixed_point::DeterministicVector2;
@@ -317,4 +317,114 @@ fn test_corrupted_header_magic_fails_gracefully() {
 
     let result = ReplayPlayer::from_bytes(&tampered);
     assert!(result.is_err(), "Corrupted magic must return error");
+}
+
+#[test]
+fn test_click_to_move_replay_determinism() {
+    use fixed::types::I16F16;
+
+    let tick_rate = 30u32;
+    let total_ticks = 500u64;
+    let checkpoint_interval = 25u64;
+    let seed = 123456789u64;
+
+    let mut recorder = ReplayRecorder::new(
+        1,
+        tick_rate,
+        seed,
+        "nav_replay_arena".to_string(),
+        checkpoint_interval,
+    );
+    let mut author_instance = Instance::new(1, tick_rate, 60);
+
+    let player_count = 5;
+
+    // Join 5 players at tick 1
+    let mut join_entries = Vec::new();
+    for pid in 1..=player_count {
+        let name = format!("NavPlayer_{}", pid);
+        let addr = format!("127.0.0.1:{}", 15000 + pid).parse().unwrap();
+        author_instance.handle_join(addr, name.clone());
+
+        join_entries.push(ReplayIntentEntry {
+            entity_id: pid,
+            player_name: name.clone(),
+            intent: Some(ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: name,
+                })),
+            }),
+        });
+    }
+    recorder.record_tick(1, join_entries);
+    author_instance.tick(1);
+
+    for tick in 2..=total_ticks {
+        let mut tick_entries = Vec::new();
+
+        // Every 50 ticks, issue new destination MoveToPos commands to players
+        if tick % 50 == 0 {
+            for pid in 1..=player_count {
+                let target_x = I16F16::from_num(((tick * pid) % 160) as i16 - 80);
+                let target_y = I16F16::from_num(((tick * (pid + 3)) % 160) as i16 - 80);
+
+                let move_to_pos_intent = ClientIntent {
+                    intent: Some(client_intent::Intent::MoveToPos(MoveToPositionIntent {
+                        target_position: Some(Vector2 {
+                            x_bits: target_x.to_bits(),
+                            y_bits: target_y.to_bits(),
+                        }),
+                    })),
+                };
+
+                let addr = format!("127.0.0.1:{}", 15000 + pid).parse().unwrap();
+                author_instance.apply_intent(addr, move_to_pos_intent.clone());
+
+                tick_entries.push(ReplayIntentEntry {
+                    entity_id: pid,
+                    player_name: String::new(),
+                    intent: Some(move_to_pos_intent),
+                });
+            }
+        }
+
+        // At tick 175, player 2 issues a manual WASD preemption
+        if tick == 175 {
+            let wasd_intent = ClientIntent {
+                intent: Some(client_intent::Intent::Move(MoveIntent {
+                    direction: Some(
+                        DeterministicVector2::new(I16F16::from_num(1), I16F16::from_num(-1))
+                            .to_proto(),
+                    ),
+                })),
+            };
+            let addr = "127.0.0.1:15002".parse().unwrap();
+            author_instance.apply_intent(addr, wasd_intent.clone());
+            tick_entries.push(ReplayIntentEntry {
+                entity_id: 2,
+                player_name: String::new(),
+                intent: Some(wasd_intent),
+            });
+        }
+
+        recorder.record_tick(tick, tick_entries);
+        author_instance.tick(tick);
+
+        if tick % checkpoint_interval == 0 {
+            let hash = loci2d::replay::compute_canonical_state_hash(&author_instance, tick);
+            recorder.record_checkpoint(tick, hash, author_instance.entities.len() as u32);
+        }
+    }
+
+    let bytes = recorder.to_bytes().unwrap();
+    let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
+    let report = player
+        .verify_determinism()
+        .expect("Click-to-move replay playback must match author checksums exactly");
+
+    assert_eq!(report.total_ticks, total_ticks);
+    assert_eq!(
+        report.verified_checkpoints,
+        (total_ticks / checkpoint_interval) as usize
+    );
 }

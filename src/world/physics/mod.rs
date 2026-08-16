@@ -1,6 +1,7 @@
 pub mod collision;
 pub mod map;
 pub mod math;
+pub mod navigation;
 pub mod primitives;
 
 pub use collision::{
@@ -10,4 +11,5 @@ pub use collision::{
 };
 pub use map::{CollisionFilter, MapBounds, StaticObstacle, TriggerEvent, TriggerEventType};
 pub use math::{deterministic_distance, fixed_sqrt, integer_sqrt_u64};
+pub use navigation::{NavigationComponent, update_entity_navigation};
 pub use primitives::{ColliderShape, DeterministicAABB, DeterministicCircle};

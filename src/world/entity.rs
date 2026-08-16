@@ -1,5 +1,7 @@
 use super::fixed_point::DeterministicVector2;
-use super::physics::{ColliderShape, CollisionFilter, DeterministicAABB, DeterministicCircle};
+use super::physics::{
+    ColliderShape, CollisionFilter, DeterministicAABB, DeterministicCircle, NavigationComponent,
+};
 use fixed::types::I16F16;
 
 // [2026-08-08] Allowed dead_code: fields like id and entity_type are part of the core domain model
@@ -15,6 +17,7 @@ pub struct Entity {
     // Phase 5 Additions:
     pub collider: Option<ColliderShape>,
     pub collision_filter: CollisionFilter,
+    pub navigation: Option<NavigationComponent>,
 }
 
 impl Entity {
@@ -27,6 +30,7 @@ impl Entity {
             entity_type,
             collider: None,
             collision_filter: CollisionFilter::default_player(),
+            navigation: None,
         }
     }
 
@@ -52,6 +56,20 @@ impl Entity {
 
     pub fn with_collision_filter(mut self, filter: CollisionFilter) -> Self {
         self.collision_filter = filter;
+        self
+    }
+
+    pub fn with_navigation(mut self, nav: NavigationComponent) -> Self {
+        self.navigation = Some(nav);
+        self
+    }
+
+    pub fn with_default_navigation(
+        mut self,
+        move_speed: I16F16,
+        arrival_tolerance: I16F16,
+    ) -> Self {
+        self.navigation = Some(NavigationComponent::new(move_speed, arrival_tolerance));
         self
     }
 

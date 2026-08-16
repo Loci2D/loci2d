@@ -1,7 +1,8 @@
 use chrono::Local;
 use loci2d::network::{
-    ActionIntent, ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, PingIntent,
-    ServerPacket, Vector2, WorldState, client_intent, server_packet,
+    ActionIntent, ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent,
+    MoveToPositionIntent, PingIntent, ServerPacket, Vector2, WorldState, client_intent,
+    server_packet,
 };
 use prost::Message;
 use std::io::{self, Write};
@@ -288,6 +289,22 @@ fn main() {
                 client_intent::Intent::Disconnect(DisconnectIntent { reason })
             }
             "ping" => client_intent::Intent::Ping(PingIntent {}),
+            cmd if cmd.starts_with("moveto") || cmd.starts_with("goto") => {
+                let parts: Vec<&str> = cmd.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    let x: f32 = parts[1].parse().unwrap_or(0.0);
+                    let y: f32 = parts[2].parse().unwrap_or(0.0);
+                    client_intent::Intent::MoveToPos(MoveToPositionIntent {
+                        target_position: Some(Vector2 {
+                            x_bits: (x * 65536.0) as i32,
+                            y_bits: (y * 65536.0) as i32,
+                        }),
+                    })
+                } else {
+                    println!("[Usage] moveto <x> <y> (e.g. moveto 10.0 5.0)");
+                    continue;
+                }
+            }
             cmd if cmd.starts_with("move") => {
                 let parts: Vec<&str> = cmd.split_whitespace().collect();
                 if parts.len() >= 3 {
@@ -315,7 +332,7 @@ fn main() {
             }
             _ => {
                 println!(
-                    "Unknown command: '{}'. Available: join <name>, spectate, status, move <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit",
+                    "Unknown command: '{}'. Available: join <name>, spectate, status, move <x> <y>, moveto <x> <y>, stream <on|off>, leave [reason], action <id>, ping, quit",
                     input
                 );
                 continue;

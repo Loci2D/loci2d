@@ -292,7 +292,11 @@ fn ray_intersect_aabb(
         let t1 = (aabb.min.x - origin.x) / dir.x;
         let t2 = (aabb.max.x - origin.x) / dir.x;
         let (t_enter_x, t_exit_x, norm_x) = if t1 < t2 {
-            (t1, t2, DeterministicVector2::new(-I16F16::ONE, I16F16::ZERO))
+            (
+                t1,
+                t2,
+                DeterministicVector2::new(-I16F16::ONE, I16F16::ZERO),
+            )
         } else {
             (t2, t1, DeterministicVector2::new(I16F16::ONE, I16F16::ZERO))
         };
@@ -312,7 +316,11 @@ fn ray_intersect_aabb(
         let t1 = (aabb.min.y - origin.y) / dir.y;
         let t2 = (aabb.max.y - origin.y) / dir.y;
         let (t_enter_y, t_exit_y, norm_y) = if t1 < t2 {
-            (t1, t2, DeterministicVector2::new(I16F16::ZERO, -I16F16::ONE))
+            (
+                t1,
+                t2,
+                DeterministicVector2::new(I16F16::ZERO, -I16F16::ONE),
+            )
         } else {
             (t2, t1, DeterministicVector2::new(I16F16::ZERO, I16F16::ONE))
         };

@@ -3,9 +3,8 @@ use loci2d::world::entity::{Entity, EntityType};
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::instance::Instance;
 use loci2d::world::physics::{
-    ColliderShape, ContactManifold, DeterministicAABB, DeterministicCircle,
-    StaticObstacle, TriggerEventType, fixed_raycast,
-    resolve_dynamic_collision, resolve_static_collision,
+    ColliderShape, ContactManifold, DeterministicAABB, DeterministicCircle, StaticObstacle,
+    TriggerEventType, fixed_raycast, resolve_dynamic_collision, resolve_static_collision,
 };
 use std::collections::BTreeMap;
 
@@ -70,13 +69,7 @@ fn test_resolve_dynamic_collision_50_50_split() {
         penetration_depth: I16F16::from_num(2),
     };
 
-    resolve_dynamic_collision(
-        &mut pos_a,
-        &mut vel_a,
-        &mut pos_b,
-        &mut vel_b,
-        &manifold,
-    );
+    resolve_dynamic_collision(&mut pos_a, &mut vel_a, &mut pos_b, &mut vel_b, &manifold);
 
     // 50/50 pushback: A pushed +1.0 along +X (to 11.0), B pushed -1.0 along +X (to 7.0)
     assert_eq!(pos_a.x, I16F16::from_num(11));
@@ -102,13 +95,7 @@ fn test_resolve_dynamic_collision_lsb_remainder_preservation() {
         penetration_depth: depth,
     };
 
-    resolve_dynamic_collision(
-        &mut pos_a,
-        &mut vel_a,
-        &mut pos_b,
-        &mut vel_b,
-        &manifold,
-    );
+    resolve_dynamic_collision(&mut pos_a, &mut vel_a, &mut pos_b, &mut vel_b, &manifold);
 
     // Half depth = 1 bit, remainder = 1 bit.
     // Push A = 2 bits, Push B = 1 bit. Total separation = 3 bits (100% exact).
@@ -381,22 +368,14 @@ fn test_fixed_raycast_aabb_hit_and_miss() {
     assert_eq!(h.point.x, I16F16::from_num(20));
     assert_eq!(h.point.y, I16F16::ZERO);
     assert_eq!(h.normal, -DeterministicVector2::UNIT_X); // Normal points outward from wall (-X)
-    assert_eq!(
-        h.fraction,
-        I16F16::from_num(20) / I16F16::from_num(100)
-    );
+    assert_eq!(h.fraction, I16F16::from_num(20) / I16F16::from_num(100));
 
     // Ray shooting in opposite direction (-X) misses
     let miss = fixed_raycast(origin, -DeterministicVector2::UNIT_X, max_dist, &obstacles);
     assert!(miss.is_none());
 
     // Ray shooting with max_dist = 10 (wall is at 20) misses due to range
-    let short_ray = fixed_raycast(
-        origin,
-        direction,
-        I16F16::from_num(10),
-        &obstacles,
-    );
+    let short_ray = fixed_raycast(origin, direction, I16F16::from_num(10), &obstacles);
     assert!(short_ray.is_none());
 }
 
@@ -424,10 +403,7 @@ fn test_fixed_raycast_circle_hit() {
     assert_eq!(h.point.x, I16F16::from_num(40));
     assert_eq!(h.point.y, I16F16::ZERO);
     assert_eq!(h.normal, -DeterministicVector2::UNIT_X);
-    assert_eq!(
-        h.fraction,
-        I16F16::from_num(40) / I16F16::from_num(100)
-    );
+    assert_eq!(h.fraction, I16F16::from_num(40) / I16F16::from_num(100));
 }
 
 #[test]
@@ -473,8 +449,5 @@ fn test_fixed_raycast_occlusion_and_filter() {
     // Non-solid trigger at 10 was skipped, near wall at 30 was hit, far wall at 60 was occluded
     assert_eq!(h.obstacle_id, 2);
     assert_eq!(h.point.x, I16F16::from_num(30));
-    assert_eq!(
-        h.fraction,
-        I16F16::from_num(30) / I16F16::from_num(100)
-    );
+    assert_eq!(h.fraction, I16F16::from_num(30) / I16F16::from_num(100));
 }
