@@ -104,6 +104,34 @@ impl StaticObstacle {
     }
 }
 
+/// Lifecycle event type for trigger/sensor zone overlaps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum TriggerEventType {
+    Enter,
+    Stay,
+    Exit,
+}
+
+/// Event fired when an entity enters, stays in, or exits a trigger zone.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct TriggerEvent {
+    pub trigger_id: u64,
+    pub entity_id: u64,
+    pub event_type: TriggerEventType,
+    pub tick: u64,
+}
+
+impl TriggerEvent {
+    pub fn new(trigger_id: u64, entity_id: u64, event_type: TriggerEventType, tick: u64) -> Self {
+        Self {
+            trigger_id,
+            entity_id,
+            event_type,
+            tick,
+        }
+    }
+}
+
 /// Axis-Aligned rectangular map boundary defining the playable arena limits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MapBounds {

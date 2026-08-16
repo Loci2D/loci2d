@@ -54,6 +54,11 @@ impl Entity {
         self.collision_filter = filter;
         self
     }
+
+    /// Returns the entity's collider shape translated to its current position.
+    pub fn current_collider(&self) -> Option<ColliderShape> {
+        self.collider.map(|shape| shape.at_position(self.position))
+    }
 }
 
 // [2026-08-08] Allowed dead_code: NPC and Prop entity variants are reserved for upcoming world simulation phases.

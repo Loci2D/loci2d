@@ -1,10 +1,14 @@
 use super::entity::{Entity, EntityType};
-use super::physics::{ColliderShape, MapBounds, StaticObstacle};
+use super::physics::{
+    ColliderShape, DeterministicCircle, MapBounds, StaticObstacle, TriggerEvent, TriggerEventType,
+    intersect_shapes, resolve_dynamic_collision, resolve_static_collision,
+};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
     ClientIntent, EntityState, EntityType as ProtoEntityType, ReplayIntentEntry, WorldState,
 };
-use std::collections::BTreeMap;
+use fixed::types::I16F16;
+use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
 
 // Re-export Vector2 from network and DeterministicVector2 from fixed_point
@@ -24,6 +28,9 @@ pub struct Instance {
     // Phase 5 Additions:
     pub map_bounds: MapBounds,
     pub static_obstacles: BTreeMap<u64, StaticObstacle>,
+    pub active_trigger_overlaps: BTreeSet<(u64, u64)>,
+    pub previous_trigger_overlaps: BTreeSet<(u64, u64)>,
+    pub trigger_events: Vec<TriggerEvent>,
     next_entity_id: u64,
     next_session_id: u64,
 }
@@ -39,6 +46,9 @@ impl Instance {
             client_timeout_secs,
             map_bounds: MapBounds::default_arena(),
             static_obstacles: BTreeMap::new(),
+            active_trigger_overlaps: BTreeSet::new(),
+            previous_trigger_overlaps: BTreeSet::new(),
+            trigger_events: Vec::new(),
             next_entity_id: 1,
             next_session_id: 1,
         }
@@ -205,25 +215,156 @@ impl Instance {
         }
     }
 
-    /// Advance physics using deterministic fixed-point addition, clamp to map boundaries, and sweep for timed-out sessions.
+    /// Advance physics using deterministic fixed-point integration, resolve solid collisions against
+    /// static obstacles and dynamic entities, evaluate trigger sensor zones, clamp to map boundaries,
+    /// and sweep for timed-out sessions.
     /// Returns a list of (entity_id, player_name) for any sessions that timed out during this tick.
     pub fn tick(&mut self, tick_count: u64) -> Vec<(u64, String)> {
+        // 1. Velocity Integration (Candidate Next Position) & Initial Map Bounds Clamping
         for entity in self.entities.values_mut() {
             entity.position = entity.position.saturating_add(entity.velocity);
 
             // Milestone 5.2: Map Boundary Constraint
-            entity.position = match &entity.collider {
-                Some(ColliderShape::Circle(circle)) => {
-                    self.map_bounds.clamp_circle(entity.position, circle.radius)
-                }
-                Some(ColliderShape::AABB(aabb)) => self
-                    .map_bounds
-                    .clamp_aabb(entity.position, aabb.half_extents()),
+            entity.position = match entity.current_collider() {
+                Some(shape) => self.map_bounds.clamp_shape(&shape),
                 None => self.map_bounds.clamp_point(entity.position),
             };
         }
 
-        // Check for timed out clients
+        // 2. Static Solid Obstacle Collision Resolution (100% Pushback & Wall Sliding)
+        // Evaluated in strict ascending obstacle.id order (ADR-0012)
+        for obstacle in self.static_obstacles.values() {
+            if !obstacle.is_solid {
+                continue;
+            }
+            for entity in self.entities.values_mut() {
+                if !entity.collision_filter.can_collide(&obstacle.filter) {
+                    continue;
+                }
+                let Some(entity_shape) = entity.current_collider() else {
+                    continue;
+                };
+                let manifold = intersect_shapes(&entity_shape, &obstacle.shape);
+                if manifold.is_colliding {
+                    resolve_static_collision(&mut entity.position, &mut entity.velocity, &manifold);
+                    // Re-clamp to map bounds to ensure pushback didn't push outside arena
+                    entity.position = match entity.current_collider() {
+                        Some(shape) => self.map_bounds.clamp_shape(&shape),
+                        None => self.map_bounds.clamp_point(entity.position),
+                    };
+                }
+            }
+        }
+
+        // 3. Dynamic Entity-vs-Entity Collision Resolution (50/50 Split Pushback)
+        // Evaluated in strict ascending (entity_a.id, entity_b.id) pair order
+        let entity_ids: Vec<u64> = self.entities.keys().copied().collect();
+        for i in 0..entity_ids.len() {
+            for j in (i + 1)..entity_ids.len() {
+                let id_a = entity_ids[i];
+                let id_b = entity_ids[j];
+
+                let can_collide = {
+                    let entity_a = &self.entities[&id_a];
+                    let entity_b = &self.entities[&id_b];
+                    entity_a.collision_filter.can_collide(&entity_b.collision_filter)
+                        && entity_a.collider.is_some()
+                        && entity_b.collider.is_some()
+                };
+
+                if !can_collide {
+                    continue;
+                }
+
+                let shape_a = self.entities[&id_a].current_collider().unwrap();
+                let shape_b = self.entities[&id_b].current_collider().unwrap();
+                let manifold = intersect_shapes(&shape_a, &shape_b);
+
+                if manifold.is_colliding {
+                    let mut pos_a = self.entities[&id_a].position;
+                    let mut vel_a = self.entities[&id_a].velocity;
+                    let mut pos_b = self.entities[&id_b].position;
+                    let mut vel_b = self.entities[&id_b].velocity;
+
+                    resolve_dynamic_collision(
+                        &mut pos_a,
+                        &mut vel_a,
+                        &mut pos_b,
+                        &mut vel_b,
+                        &manifold,
+                    );
+
+                    let entity_a = self.entities.get_mut(&id_a).unwrap();
+                    entity_a.position = pos_a;
+                    entity_a.velocity = vel_a;
+                    if let Some(shape) = entity_a.current_collider() {
+                        entity_a.position = self.map_bounds.clamp_shape(&shape);
+                    }
+
+                    let entity_b = self.entities.get_mut(&id_b).unwrap();
+                    entity_b.position = pos_b;
+                    entity_b.velocity = vel_b;
+                    if let Some(shape) = entity_b.current_collider() {
+                        entity_b.position = self.map_bounds.clamp_shape(&shape);
+                    }
+                }
+            }
+        }
+
+        // 4. Trigger / Sensor Zone Overlap Evaluation & Lifecycle Events
+        self.trigger_events.clear();
+        let mut current_overlaps = BTreeSet::new();
+
+        for (&trigger_id, obstacle) in &self.static_obstacles {
+            if obstacle.is_solid {
+                continue;
+            }
+            for (&entity_id, entity) in &self.entities {
+                if !obstacle.filter.can_collide(&entity.collision_filter) {
+                    continue;
+                }
+                let entity_shape = match entity.current_collider() {
+                    Some(s) => s,
+                    None => ColliderShape::Circle(DeterministicCircle::new(
+                        entity.position,
+                        I16F16::ZERO,
+                    )),
+                };
+                let manifold = intersect_shapes(&entity_shape, &obstacle.shape);
+                if manifold.is_colliding {
+                    current_overlaps.insert((trigger_id, entity_id));
+                }
+            }
+        }
+
+        // Generate Enter, Stay, Exit events in strictly sorted (trigger_id, entity_id) order
+        let all_pairs: BTreeSet<(u64, u64)> = self
+            .previous_trigger_overlaps
+            .union(&current_overlaps)
+            .copied()
+            .collect();
+
+        for (trigger_id, entity_id) in all_pairs {
+            let was_present = self.previous_trigger_overlaps.contains(&(trigger_id, entity_id));
+            let is_present = current_overlaps.contains(&(trigger_id, entity_id));
+            let event_type = match (was_present, is_present) {
+                (false, true) => TriggerEventType::Enter,
+                (true, true) => TriggerEventType::Stay,
+                (true, false) => TriggerEventType::Exit,
+                (false, false) => unreachable!(),
+            };
+            self.trigger_events.push(TriggerEvent::new(
+                trigger_id,
+                entity_id,
+                event_type,
+                tick_count,
+            ));
+        }
+
+        self.previous_trigger_overlaps = current_overlaps.clone();
+        self.active_trigger_overlaps = current_overlaps;
+
+        // 5. Check for timed out clients
         let timed_out = self.check_timeouts();
 
         println!(

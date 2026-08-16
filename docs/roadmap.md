@@ -127,9 +127,9 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 #### English
 * [x] **Deterministic Collision Detection**:
   - Implement fixed-point AABB (Axis-Aligned Bounding Box) and Circle colliders using `I16F16`.
-* [ ] **Static Map Geometry & Boundaries**:
+* [x] **Static Map Geometry & Boundaries**:
   - Define world boundaries and static colliders (walls, obstacles) loaded from map files/configuration.
-* [ ] **Collision Resolution & Trigger Zones**:
+* [x] **Collision Resolution & Trigger Zones**:
   - Implement solid obstacle pushback and trigger/sensor zones (`on_overlap_enter` / `on_overlap_exit`).
 * [ ] **Click-to-Move Steering & Navigation**:
   - Implement destination-based steering (`MoveToPositionIntent`) with basic obstacle navigation for RTS/MOBA controls.
@@ -139,9 +139,9 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 #### Português
 * [x] **Detecção de Colisão Determinística**:
   - Implementar colisores AABB (Caixa Delimitadora) e de Círculos usando ponto fixo `I16F16`.
-* [ ] **Geometria Estática do Mapa & Limites**:
+* [x] **Geometria Estática do Mapa & Limites**:
   - Definir limites do mundo e colisores estáticos (paredes, obstáculos) carregados de arquivos de mapa/configuração.
-* [ ] **Resolução de Colisão & Zonas de Gatilho (Triggers)**:
+* [x] **Resolução de Colisão & Zonas de Gatilho (Triggers)**:
   - Implementar desvio/bloqueio de obstáculos sólidos e zonas de sensores/gatilhos (`on_overlap_enter` / `on_overlap_exit`).
 * [ ] **Navegação & Movimento por Clique (Click-to-Move)**:
   - Implementar movimentação baseada em destino (`MoveToPositionIntent`) com navegação básica por obstáculos para controles RTS/MOBA.

@@ -77,6 +77,11 @@ impl DeterministicAABB {
     pub fn bounding_box(&self) -> DeterministicAABB {
         *self
     }
+
+    #[inline]
+    pub fn at_position(&self, center: DeterministicVector2) -> Self {
+        Self::from_center_half_extents(center, self.half_extents())
+    }
 }
 
 /// Circle collider defined by center position and radius.
@@ -107,6 +112,11 @@ impl DeterministicCircle {
             DeterministicVector2::new(self.radius, self.radius),
         )
     }
+
+    #[inline]
+    pub fn at_position(&self, center: DeterministicVector2) -> Self {
+        Self::new(center, self.radius)
+    }
 }
 
 /// Unified Collider Shape representation.
@@ -130,6 +140,14 @@ impl ColliderShape {
         match self {
             ColliderShape::AABB(aabb) => aabb.center(),
             ColliderShape::Circle(circle) => circle.center,
+        }
+    }
+
+    #[inline]
+    pub fn at_position(&self, center: DeterministicVector2) -> Self {
+        match self {
+            ColliderShape::AABB(aabb) => ColliderShape::AABB(aabb.at_position(center)),
+            ColliderShape::Circle(circle) => ColliderShape::Circle(circle.at_position(center)),
         }
     }
 }
