@@ -137,7 +137,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Add a fixed spatial hash grid for efficient broadphase collision queries.
 
 #### Português
-* [ ] **Detecção de Colisão Determinística**:
+* [x] **Detecção de Colisão Determinística**:
   - Implementar colisores AABB (Caixa Delimitadora) e de Círculos usando ponto fixo `I16F16`.
 * [ ] **Geometria Estática do Mapa & Limites**:
   - Definir limites do mundo e colisores estáticos (paredes, obstáculos) carregados de arquivos de mapa/configuração.
@@ -176,6 +176,48 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Suportar recarregamento de scripts em tempo de execução sem reiniciar o executável do servidor.
 * [ ] **Execução Determinística de Scripts**:
   - Garantir que callbacks Lua sejam executados estritamente nos limites determinísticos de ticks para preservar a paridade de replays `.loci`.
+
+---
+
+### Phase 6.5: Validation, Developer Experience (DX) & API Stabilization
+> **Milestone Focus:** Feature freeze on new engine features to focus on v6.x stability, DX, client abstraction, and user-friendly documentation before moving to multi-room infrastructure.
+
+### Fase 6.5: Validação, Experiência do Desenvolvedor (DX) & Estabilização de API
+> **Foco do Marco:** Pausa temporária na adição de novas funcionalidades estruturais para focar na estabilidade da versão v6.x, DX, abstração de clientes e documentação amigável antes de avançar para a infraestrutura de múltiplas salas.
+
+#### English
+> [!NOTE]
+> **Strategic Pause (v6.x Consolidation):** Once Phase 6 is reached, `loci2d` achieves a fully playable, deterministic LAN multiplayer stack. New feature development (such as multi-instance routing in Phase 7) will be temporarily delayed to validate the engine in real-world scenarios, gather playtester feedback from students, and refine the public API.
+
+* [ ] **Engine Architecture: State vs. Scripting Separation**:
+  - Strictly decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
+  - Implement a safe command/intent dispatch layer for Lua scripts to prevent unauthorized state corruption and ensure deterministic replay integrity.
+* [ ] **Lightweight Client SDKs & Wrappers**:
+  - Build ergonomic client modules/addons for **Godot 4** (`LociClient.gd`), **Love2D** (`loci_client.lua`), and **Python** to eliminate boilerplate UDP socket/Protobuf parsing for end users.
+  - Expose intuitive signals/callbacks for state updates (`on_entity_updated`, `on_match_event`).
+* [ ] **User-Friendly Documentation & Starter Templates**:
+  - Author a "15-Minute First Multiplayer Game" quickstart tutorial (e.g., 2D Arena/Tag game).
+  - Create a comprehensive, copy-paste-ready Lua scripting API reference guide.
+* [ ] **Local LAN Playtesting & Feedback Collection**:
+  - Run multi-device playtest sessions with high school and university students to identify UX/DX friction points and API ergonomics issues.
+  - Measure tick stability, desync resilience, and packet latency under real local network conditions.
+
+#### Português
+> [!NOTE]
+> **Pausa Estratégica (Consolidação da v6.x):** Ao atingir a Fase 6, o `loci2d` alcança uma pilha multiplayer em LAN totalmente jogável e determinística. O desenvolvimento de novas funcionalidades (como o roteamento de múltiplas instâncias da Fase 7) será pausado temporariamente para validar o motor em cenários reais, coletar feedback de estudantes e refinar a API pública.
+
+* [ ] **Arquitetura da Engine: Separação de Estado vs. Scripting**:
+  - Desacoplar estritamente o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
+  - Implementar uma camada segura de envio de comandos/intenções para scripts Lua, evitando corrupção direta de estado e preservando a integridade dos replays.
+* [ ] **SDKs Leves & Wrappers para Clientes**:
+  - Criar módulos/addons ergonômicos para **Godot 4** (`LociClient.gd`), **Love2D** (`loci_client.lua`) e **Python**, eliminando o código boilerplate de sockets UDP e decodificação manual de Protobuf para o usuário final.
+  - Expor sinais/callbacks intuitivos para atualizações de estado (`on_entity_updated`, `on_match_event`).
+* [ ] **Documentação Acessível & Modelos Iniciais (Starter Templates)**:
+  - Criar um tutorial prático "Seu Primeiro Jogo Multiplayer em 15 Minutos" (ex: Arena 2D / Pega-Pega).
+  - Criar uma referência completa e didática da API de scripting em Lua com exemplos prontos para uso.
+* [ ] **Playtesting em LAN Local & Coleta de Feedback**:
+  - Realizar sessões de testes com múltiplos dispositivos físicos com estudantes de ensino médio e graduação para identificar pontos de atrito de UX/DX e ergonomia da API.
+  - Medir a estabilidade dos ticks, resiliência a dessincronização e latência de pacotes sob condições reais de rede local.
 
 ---
 
