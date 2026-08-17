@@ -325,7 +325,8 @@ fn main() {
 
     let loop_socket = Arc::clone(&socket);
     let loop_thread = thread::spawn(move || {
-        let instance = Instance::new(1, tick_rate, client_timeout_secs);
+        let mut instance = Instance::new(1, tick_rate, client_timeout_secs);
+        instance.logging_enabled = true;
         game_loop.start(instance, intent_rx, loop_socket);
     });
 

@@ -32,6 +32,7 @@ pub struct Instance {
     pub active_trigger_overlaps: BTreeSet<(u64, u64)>,
     pub previous_trigger_overlaps: BTreeSet<(u64, u64)>,
     pub trigger_events: Vec<TriggerEvent>,
+    pub logging_enabled: bool,
     next_entity_id: u64,
     next_session_id: u64,
 }
@@ -50,6 +51,7 @@ impl Instance {
             active_trigger_overlaps: BTreeSet::new(),
             previous_trigger_overlaps: BTreeSet::new(),
             trigger_events: Vec::new(),
+            logging_enabled: false,
             next_entity_id: 1,
             next_session_id: 1,
         }
@@ -241,6 +243,7 @@ impl Instance {
 
         // 1. Velocity Integration (Candidate Next Position) & Initial Map Bounds Clamping
         for entity in self.entities.values_mut() {
+            let old_pos = entity.position;
             entity.position = entity.position.saturating_add(entity.velocity);
 
             // Milestone 5.2: Map Boundary Constraint
@@ -248,6 +251,15 @@ impl Instance {
                 Some(shape) => self.map_bounds.clamp_shape(&shape),
                 None => self.map_bounds.clamp_point(entity.position),
             };
+
+            if self.logging_enabled && entity.position != old_pos {
+                println!(
+                    "Player {} moved to ({:.2}, {:.2})",
+                    entity.name,
+                    entity.position.x.to_num::<f32>(),
+                    entity.position.y.to_num::<f32>()
+                );
+            }
         }
 
         // 2. Static Solid Obstacle Collision Resolution (100% Pushback & Wall Sliding)
@@ -266,6 +278,14 @@ impl Instance {
                 let manifold = intersect_shapes(&entity_shape, &obstacle.shape);
                 if manifold.is_colliding {
                     resolve_static_collision(&mut entity.position, &mut entity.velocity, &manifold);
+                    if self.logging_enabled {
+                        println!(
+                            "Player {} collided at coordinates ({:.2}, {:.2})",
+                            entity.name,
+                            entity.position.x.to_num::<f32>(),
+                            entity.position.y.to_num::<f32>()
+                        );
+                    }
                     // Re-clamp to map bounds to ensure pushback didn't push outside arena
                     entity.position = match entity.current_collider() {
                         Some(shape) => self.map_bounds.clamp_shape(&shape),
@@ -310,6 +330,21 @@ impl Instance {
                     resolve_dynamic_collision(
                         &mut pos_a, &mut vel_a, &mut pos_b, &mut vel_b, &manifold,
                     );
+
+                    if self.logging_enabled {
+                        println!(
+                            "Player {} collided at coordinates ({:.2}, {:.2})",
+                            self.entities[&id_a].name,
+                            pos_a.x.to_num::<f32>(),
+                            pos_a.y.to_num::<f32>()
+                        );
+                        println!(
+                            "Player {} collided at coordinates ({:.2}, {:.2})",
+                            self.entities[&id_b].name,
+                            pos_b.x.to_num::<f32>(),
+                            pos_b.y.to_num::<f32>()
+                        );
+                    }
 
                     let entity_a = self.entities.get_mut(&id_a).unwrap();
                     entity_a.position = pos_a;
