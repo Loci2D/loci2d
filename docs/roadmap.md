@@ -160,7 +160,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Expose entity manipulation, fixed-point vectors, intent hooks, and collision/trigger callbacks to Lua.
 * [ ] **Event-Driven Gameplay Callbacks**:
   - Implement lifecycle hooks: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
-* [ ] **Hot-Reloadable Game Rules**:
+* [-] **[Deferred to Phase 9] Hot-Reloadable Game Rules**:
   - Support reloading script files at runtime without restarting the server binary.
 * [ ] **Deterministic Script Execution**:
   - Ensure Lua callbacks execute strictly at deterministic tick boundaries to preserve `.loci` replay parity.
@@ -172,7 +172,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Expor manipulação de entidades, vetores de ponto fixo, ganchos de intenção e callbacks de colisão/gatilho para Lua.
 * [ ] **Callbacks de Jogabilidade Orientados a Eventos**:
   - Implementar ganchos de ciclo de vida: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
-* [ ] **Regras de Jogo com Recarregamento Dinâmico (Hot-Reload)**:
+* [-] **[Adiado para a Fase 9] Regras de Jogo com Recarregamento Dinâmico (Hot-Reload)**:
   - Suportar recarregamento de scripts em tempo de execução sem reiniciar o executável do servidor.
 * [ ] **Execução Determinística de Scripts**:
   - Garantir que callbacks Lua sejam executados estritamente nos limites determinísticos de ticks para preservar a paridade de replays `.loci`.
@@ -277,3 +277,20 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Aplicar limitação de taxa (rate-limiting) de intenções, integridade de sequência de pacotes e checagens de sanidade de velocidade/teletransporte.
 * [ ] **Observabilidade de Produção & Implantação**:
   - Logs estruturados, métricas Prometheus e conteinerização para produção.
+
+---
+
+### Phase 9: Script Versioning & Hot-Reloading
+### Fase 9: Versionamento de Scripts & Recarregamento Dinâmico
+
+#### English
+* [ ] **Cross-Version Replay Support**:
+  - Bundle or version Lua scripts to ensure clients can watch old `.loci` replays with the exact logic used during that match.
+* [ ] **Immutable Live Instances**:
+  - Guarantee that hot-reloading scripts on the server only affects new instances; running matches must finish on their original script versions to maintain determinism.
+
+#### Português
+* [ ] **Suporte a Replays de Múltiplas Versões**:
+  - Empacotar ou versionar scripts Lua para garantir que clientes possam assistir a replays `.loci` antigos com a lógica exata usada naquela partida.
+* [ ] **Instâncias Ao Vivo Imutáveis**:
+  - Garantir que recarregar scripts no servidor afete apenas novas instâncias; partidas em andamento devem terminar em suas versões de script originais para manter o determinismo.

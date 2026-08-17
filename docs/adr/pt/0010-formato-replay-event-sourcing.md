@@ -41,6 +41,7 @@ message ReplayHeader {
   uint64 instance_id = 5;       // ID da Instância
   uint64 random_seed = 6;       // Semente determinística do PRNG
   string map_name = 7;          // Identificador do mapa
+  string script_hash = 8;       // Hash SHA-256 dos scripts Lua ativos no Tick 0
 }
 
 message ReplayIntentEntry {
@@ -67,10 +68,15 @@ message ReplayFile {
 }
 ```
 
-### 2. Desacoplamento de Rede através do `entity_id`
+### 2. Versionamento de Scripts
+Como o `loci2d` incorpora scripting em Lua (Fase 6), as regras da simulação podem mudar com base nos scripts ativos. Para garantir o determinismo durante a reprodução, o cabeçalho do `.loci` armazena um `script_hash` (ex: hash SHA-256 dos scripts Lua ativos no Tick 0).
+
+Durante a validação de replays (`--verify`), o motor calcula o hash dos arquivos de script locais. Se o hash não corresponder a `script_hash`, o motor aborta o carregamento para evitar uma dessincronização garantida devido à incompatibilidade de versão. (Nota: O suporte real a replays de múltiplas versões e recarregamento dinâmico estão adiados para a Fase 9).
+
+### 3. Desacoplamento de Rede através do `entity_id`
 Durante o jogo ao vivo, as tuplas `(SocketAddr, ClientIntent)` recebidas são resolvidas dentro da thread do Game Loop para o `entity_id` correspondente. O gravador carimba os eventos diretamente com `entity_id` e nome do jogador, permitindo que o motor de replay aplique os inputs diretamente às entidades da `Instance` sem criar endereços de socket falsos.
 
-### 3. Checkpoints Periódicos de Estado Canônico
+### 4. Checkpoints Periódicos de Estado Canônico
 A cada $K$ ticks (ex: a cada 60 ticks / 2 segundos), o gravador calcula o hash SHA-256 da representação binária canônica da `Instance` (ordenada por `entity_id` via `BTreeMap` com os bits inteiros brutos de ponto fixo). Esses checkpoints são gravados no contêiner `.loci`.
 
 Durante a validação do replay (`--verify`), o player calcula seu hash local nos ticks de checkpoint e valida a igualdade exata com o hash gravado, identificando o quadro exato em que ocorreu qualquer divergência.

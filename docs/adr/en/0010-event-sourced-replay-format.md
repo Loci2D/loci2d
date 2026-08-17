@@ -41,6 +41,7 @@ message ReplayHeader {
   uint64 instance_id = 5;       // Instance ID
   uint64 random_seed = 6;       // Deterministic PRNG seed
   string map_name = 7;          // Map identifier
+  string script_hash = 8;       // SHA-256 hash of the Lua scripts active at Tick 0
 }
 
 message ReplayIntentEntry {
@@ -67,7 +68,12 @@ message ReplayFile {
 }
 ```
 
-### 2. Network Decoupling via Entity ID Stamping
+### 2. Script Versioning
+Because `loci2d` embeds Lua scripting (Phase 6), the simulation rules can change based on the active scripts. To guarantee determinism during playback, the `.loci` header stores a `script_hash` (e.g., SHA-256 of the active Lua scripts at Tick 0). 
+
+During replay validation (`--verify`), the engine hashes the local script files. If the hash does not match `script_hash`, the engine aborts loading to prevent a guaranteed desync due to version mismatch. (Note: True cross-version replay support and hot-reloading are deferred to Phase 9).
+
+### 3. Network Decoupling via Entity ID Stamping
 During live gameplay, incoming `(SocketAddr, ClientIntent)` tuples are resolved inside the Game Loop thread to their assigned `entity_id`. The recorder stamps events directly with `entity_id` and player name, allowing the replay engine to apply inputs directly to `Instance` entities without creating dummy socket addresses.
 
 ### 3. Periodic Canonical State Checkpointing
