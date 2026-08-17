@@ -122,8 +122,10 @@ function send_intent(intent_table)
     if data then
         udp:send(data)
         if intent_table.move then
-            local dir = intent_table.move.direction or { x = 0, y = 0 }
-            print(string.format("[Love2D Client] Sent Move Intent (seq=%d) -> dir=(%.1f, %.1f)", sequence_id, dir.x, dir.y))
+            local dir = intent_table.move.direction or { x_bits = 0, y_bits = 0 }
+            local dx = (dir.x_bits or 0) / 65536.0
+            local dy = (dir.y_bits or 0) / 65536.0
+            print(string.format("[Love2D Client] Sent Move Intent (seq=%d) -> dir=(%.1f, %.1f)", sequence_id, dx, dy))
         elseif intent_table.join then
             print(string.format("[Love2D Client] Sent Join Intent (seq=%d) -> name='%s'", sequence_id, intent_table.join.player_name))
         elseif intent_table.disconnect then
@@ -146,7 +148,7 @@ function update_movement()
     local dx, dy = get_held_direction()
     if dx ~= last_sent_dir.x or dy ~= last_sent_dir.y then
         last_sent_dir = { x = dx, y = dy }
-        send_intent({ move = { direction = { x = dx, y = dy } } })
+        send_intent({ move = { direction = { x_bits = math.floor(dx * 65536), y_bits = math.floor(dy * 65536) } } })
     end
 end
 
@@ -167,7 +169,7 @@ function love.keypressed(key)
         elseif key == "x" or key == "k" then
             -- Explicit stop movement
             last_sent_dir = { x = 0, y = 0 }
-            send_intent({ move = { direction = { x = 0, y = 0 } } })
+            send_intent({ move = { direction = { x_bits = 0, y_bits = 0 } } })
         elseif key == "space" then
             send_intent({ action = { ability_id = 1 } })
         elseif key == "p" then
@@ -215,9 +217,10 @@ function love.update(dt)
                         last_terminal_print = now
                         local entity_strs = {}
                         for _, e in ipairs(current_entities) do
-                            local pos = e.position or { x = 0, y = 0 }
-                            local vel = e.velocity or { x = 0, y = 0 }
-                            table.insert(entity_strs, string.format("%s (id=%d) @ (%.1f, %.1f)", e.name or "Entity", e.id or 0, pos.x, pos.y))
+                            local pos = e.position or { x_bits = 0, y_bits = 0 }
+                            local px = (pos.x_bits or 0) / 65536.0
+                            local py = (pos.y_bits or 0) / 65536.0
+                            table.insert(entity_strs, string.format("%s (id=%d) @ (%.1f, %.1f)", e.name or "Entity", e.id or 0, px, py))
                         end
                         print(string.format("[Love2D Client] [Tick %d] %d entities: %s", current_tick, #current_entities, table.concat(entity_strs, " | ")))
                     end
@@ -253,8 +256,11 @@ function love.draw()
 
     -- Render all synchronized entities from WorldState
     for _, entity in ipairs(current_entities) do
-        local pos_x = center_x + (entity.position and entity.position.x or 0) * 10
-        local pos_y = center_y + (entity.position and entity.position.y or 0) * 10
+        local pos = entity.position or { x_bits = 0, y_bits = 0 }
+        local px = (pos.x_bits or 0) / 65536.0
+        local py = (pos.y_bits or 0) / 65536.0
+        local pos_x = center_x + px * 10
+        local pos_y = center_y + py * 10
 
         -- Color based on EntityType (0 = Player, 1 = NPC, 2 = Prop)
         if entity.entity_type == 1 or entity.entity_type == "NPC" then

@@ -70,6 +70,10 @@ func send_move(direction: Vector2) -> void:
 		return
 	_sequence_id += 1
 	print("[loci2d NetworkClient] Sending Move direction=", direction, " (seq=", _sequence_id, ")")
+	# In actual GDScript protobuf usage for Phase 5 fixed-point math:
+	# var move_intent = packet.get_intent().get_move()
+	# move_intent.get_direction().set_x_bits(int(direction.x * 65536))
+	# move_intent.get_direction().set_y_bits(int(direction.y * 65536))
 
 func send_action(ability_id: int) -> void:
 	if is_spectator:
@@ -84,6 +88,10 @@ func _handle_server_packet(bytes: PackedByteArray) -> void:
 	# packet.from_bytes(bytes)
 	# if packet.has_world_state():
 	#     var ws = packet.get_world_state()
+	#     # Convert from I16F16 fixed point bits to Godot float coords:
+	#     # for entity in ws.get_entities():
+	#     #     var px = entity.get_position().get_x_bits() / 65536.0
+	#     #     var py = entity.get_position().get_y_bits() / 65536.0
 	#     world_state_updated.emit(ws.get_tick(), ws.get_entities())
 	# elif packet.has_response():
 	#     var resp = packet.get_response()

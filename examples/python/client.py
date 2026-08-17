@@ -28,7 +28,11 @@ def print_world_state(ws):
         print(f"  Active Entities ({len(ws.entities)}):")
         for e in ws.entities:
             type_name = game_packets_pb2.EntityType.Name(e.entity_type)
-            print(f"    - Entity {e.id} (\"{e.name}\", {type_name}) @ ({e.position.x:.1f}, {e.position.y:.1f}), vel=({e.velocity.x:.1f}, {e.velocity.y:.1f})")
+            px = e.position.x_bits / 65536.0
+            py = e.position.y_bits / 65536.0
+            vx = e.velocity.x_bits / 65536.0
+            vy = e.velocity.y_bits / 65536.0
+            print(f"    - Entity {e.id} (\"{e.name}\", {type_name}) @ ({px:.1f}, {py:.1f}), vel=({vx:.1f}, {vy:.1f})")
     print("---------------------------------------------------------")
 
 def listen_server(sock, stop_event):
@@ -168,8 +172,8 @@ def main():
             parts = cmd.split()
             x = float(parts[1]) if len(parts) > 1 else 1.0
             y = float(parts[2]) if len(parts) > 2 else 0.0
-            packet.intent.move.direction.x = x
-            packet.intent.move.direction.y = y
+            packet.intent.move.direction.x_bits = int(x * 65536)
+            packet.intent.move.direction.y_bits = int(y * 65536)
         elif cmd.startswith("action"):
             parts = cmd.split()
             ability_id = int(parts[1]) if len(parts) > 1 else 1
