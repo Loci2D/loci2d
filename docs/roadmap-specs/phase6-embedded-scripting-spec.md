@@ -56,7 +56,9 @@ impl ScriptEngine {
 ```
 
 > [!CAUTION]
-> **Sandboxing Requirements:** Never expose the `io` or `os` libraries. The script must only interact with the world state through the explicitly provided Rust API.
+> **Sandboxing Requirements:** 
+> 1. Never expose the `io` or `os` libraries. The script must only interact with the world state through the explicitly provided Rust API.
+> 2. **DoS Prevention:** We must set an instruction limit via `lua.set_hook` (or use `mlua`'s interrupt mechanisms) to yield or abort execution if a script enters an infinite loop (`while true do end`), protecting the authoritative game thread from freezing.
 
 #### 2. Instance Integration & Script Loading
 The `ScriptEngine` is owned directly by the `Instance` struct. Scripts are strictly loaded from local `.lua` files on the host file system (never over the network). When an `Instance` is initialized, it reads the entry-point script (e.g., `scripts/{map_name}/main.lua`) into a `String` and evaluates it.
@@ -99,12 +101,15 @@ math_table.set("random", lua.create_function(|_, (min, max): (Option<i32>, Optio
 ```
 
 #### 2. Restricting `pairs()` Iteration
-Lua's hash table iteration `pairs()` does not guarantee order. 
+Lua's hash table iteration `pairs()` does not guarantee order. If a user iterates over their own custom tables using `pairs()`, the sequence will vary across machines, silently breaking replay parity.
 > [!WARNING]
-> We must document and enforce that scripts use array-like tables (`ipairs()`) for entity iteration. When the Rust Engine API returns a list of entities to Lua, it must return them as a 1-indexed array (table), sorted by `entity_id` to preserve determinism.
+> We must aggressively prevent this by **removing `pairs()` from the Lua global environment** (`lua.globals().set("pairs", mlua::Value::Nil)`). Users must be forced to use `ipairs()` for arrays, or we must provide a custom deterministic (alphabetically sorted) iterator if they absolutely need to iterate over string-keyed tables.
 
 #### 3. Script Hash Calculation
 To satisfy ADR-0010's requirement for `.loci` replay playback, the `script_hash` is computed as the **SHA-256 digest of the exact string content** of the loaded script at `Instance` initialization. If the system later supports loading multiple files (e.g., via a sandboxed `require`), the hash must be computed from the concatenated strings of all loaded `.lua` files, ordered lexicographically by filename.
+
+> [!IMPORTANT]
+> **Replay Integration**: The `ReplayRecorder` must explicitly inject this hash into the `ReplayHeader`. During playback, the `ReplayPlayer`'s `--verify` mode **must** abort with an error if the local `main.lua` hash differs from the recorded `script_hash`, preventing silent desyncs.
 
 ---
 
@@ -132,17 +137,31 @@ impl mlua::UserData for DeterministicVector2 {
 }
 ```
 
-#### 2. Exposing the Entity API (ID-Based)
-Rather than passing mutable references of the `Entity` struct to Lua, we provide an ID-based querying system. This respects Rust's borrowing rules and prevents Lua from holding stale entity references.
+#### 2. Exposing the Entity API & Command Buffer
+To bridge seamlessly into **Phase 6.5** (which requires strictly decoupling the canonical match state from Lua execution), Lua scripts **must not mutate the `Instance` directly mid-tick**. Instead, Lua writes to a **Command Buffer** that Rust processes at the end of the tick.
+
+We provide an ID-based querying system for reading state, and a Command API for intending state changes:
 
 ```lua
--- Example Lua API Usage
-local player_id = ...
-local pos = Loci.get_entity_position(player_id)
-Loci.spawn_projectile(pos + Loci.Vector2(100, 0), { damage = 10 })
-```
+-- Minimal main.lua Example Structure
+function on_init()
+    Loci.Log.info("Map Script Loaded!")
+end
 
----
+function on_tick(tick_number)
+    -- Example Lua API Usage
+    local player_id = Loci.get_entity_by_name("player_1")
+    if player_id then
+        local pos = Loci.get_entity_position(player_id)
+        
+        -- This does NOT spawn instantly. It pushes a Command to the Rust CommandBuffer.
+        Loci.Commands.spawn_entity({ 
+            blueprint = "box",
+            position = pos + Loci.Vector2(100, 0)
+        })
+    end
+end
+```
 
 ### Milestone 6.4: Event-Driven Gameplay Callbacks
 
@@ -151,15 +170,19 @@ The `Instance::tick()` loop will dispatch lifecycle events to the Lua VM.
 #### 1. Calling Lua Hooks from Rust
 ```rust
 impl ScriptEngine {
-    pub fn on_tick(&self, current_tick: u64) -> LuaResult<()> {
+    // Rust evaluates the Lua tick, then flushes and applies the Command Buffer
+    pub fn on_tick(&self, current_tick: u64, command_buffer: &mut CommandBuffer) -> LuaResult<()> {
         let globals = self.lua.globals();
         if let Ok(on_tick_fn) = globals.get::<_, LuaFunction>("on_tick") {
             on_tick_fn.call::<_, ()>(current_tick)?;
         }
+        
+        // After Lua finishes, Rust safely applies all commands (spawns, damage, etc.)
+        command_buffer.flush_and_apply();
         Ok(())
     }
     
-    pub fn on_collision(&self, entity_a: u64, entity_b: u64) -> LuaResult<()> {
+    pub fn on_collision(&self, entity_a: u64, entity_b: u64, command_buffer: &mut CommandBuffer) -> LuaResult<()> {
         let globals = self.lua.globals();
         if let Ok(on_col_fn) = globals.get::<_, LuaFunction>("on_collision") {
             on_col_fn.call::<_, ()>((entity_a, entity_b))?;
