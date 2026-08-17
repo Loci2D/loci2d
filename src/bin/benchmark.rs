@@ -1,8 +1,10 @@
-use loci2d::network::{ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry, client_intent};
+use loci2d::network::{ClientIntent, JoinIntent, MoveIntent, MoveToPositionIntent, ReplayIntentEntry, client_intent};
 use loci2d::replay::player::ReplayPlayer;
 use loci2d::replay::recorder::ReplayRecorder;
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::instance::Instance;
+use loci2d::world::physics::{ColliderShape, DeterministicCircle, DeterministicAABB, MapBounds, StaticObstacle};
+use fixed::types::I16F16;
 use std::net::SocketAddr;
 use std::time::Instant;
 
@@ -16,6 +18,16 @@ fn main() {
     // -------------------------------------------------------------
     println!("1. Running Performance Benchmark (100 active entities, 10,000 ticks)...");
     let mut bench_instance = Instance::new(1, 30, 60);
+    bench_instance.set_map_bounds(MapBounds::default_arena());
+    
+    bench_instance.add_static_obstacle(StaticObstacle::solid_wall(
+        1000,
+        ColliderShape::AABB(DeterministicAABB::from_center_half_extents(
+            DeterministicVector2::ZERO,
+            DeterministicVector2::new(I16F16::from_num(50), I16F16::from_num(50)),
+        )),
+    ));
+
     for i in 1..=100u64 {
         let addr: SocketAddr = format!("127.0.0.1:{}", 10000 + i).parse().unwrap();
         let name = format!("Entity_{:03}", i);
@@ -23,6 +35,10 @@ fn main() {
         if let Some(entity) = bench_instance.entities.get_mut(&i) {
             let angle = (i as f32) * 0.0628;
             entity.velocity = DeterministicVector2::from_f32(angle.cos() * 5.0, angle.sin() * 5.0);
+            entity.collider = Some(ColliderShape::Circle(DeterministicCircle::new(
+                DeterministicVector2::ZERO,
+                I16F16::from_num(2),
+            )));
         }
     }
 
@@ -72,6 +88,14 @@ fn main() {
         checkpoint_interval,
     );
     let mut sim_instance = Instance::new(1, 30, 60);
+    sim_instance.set_map_bounds(MapBounds::default_arena());
+    sim_instance.add_static_obstacle(StaticObstacle::solid_wall(
+        1000,
+        ColliderShape::AABB(DeterministicAABB::from_center_half_extents(
+            DeterministicVector2::ZERO,
+            DeterministicVector2::new(I16F16::from_num(50), I16F16::from_num(50)),
+        )),
+    ));
 
     let player_count = 20u64;
 
@@ -83,16 +107,14 @@ fn main() {
             let pid = tick;
             let addr: SocketAddr = format!("127.0.0.1:{}", 20000 + pid).parse().unwrap();
             let name = format!("Player_{:02}", pid);
-            sim_instance.handle_join(addr, name.clone());
-            tick_entries.push(ReplayIntentEntry {
-                entity_id: pid,
-                player_name: name.clone(),
-                intent: Some(ClientIntent {
-                    intent: Some(client_intent::Intent::Join(JoinIntent {
-                        player_name: name,
-                    })),
-                }),
-            });
+            let join_intent = ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: name.clone(),
+                })),
+            };
+            if let Some(entry) = sim_instance.apply_intent(addr, join_intent) {
+                tick_entries.push(entry);
+            }
         }
 
         // Change player movement directions periodically
@@ -102,17 +124,28 @@ fn main() {
                     let angle = ((tick * pid * 13) % 360) as f32;
                     let dx = (angle.to_radians()).cos() * 3.5;
                     let dy = (angle.to_radians()).sin() * 3.5;
-                    entity.velocity = DeterministicVector2::from_f32(dx, dy);
+                    let vec_f32 = DeterministicVector2::from_f32(dx, dy);
 
-                    tick_entries.push(ReplayIntentEntry {
-                        entity_id: pid,
-                        player_name: String::new(),
-                        intent: Some(ClientIntent {
-                            intent: Some(client_intent::Intent::Move(MoveIntent {
-                                direction: Some(DeterministicVector2::from_f32(dx, dy).to_proto()),
-                            })),
-                        }),
-                    });
+                    let inner_intent = if pid % 2 == 0 {
+                        // Even players use click-to-move
+                        client_intent::Intent::MoveToPos(MoveToPositionIntent {
+                            target_position: Some(DeterministicVector2::from_f32(dx * 50.0, dy * 50.0).to_proto()),
+                        })
+                    } else {
+                        // Odd players use direct velocity
+                        client_intent::Intent::Move(MoveIntent {
+                            direction: Some(vec_f32.to_proto()),
+                        })
+                    };
+
+                    let client_intent_payload = ClientIntent {
+                        intent: Some(inner_intent),
+                    };
+
+                    let addr: SocketAddr = format!("127.0.0.1:{}", 20000 + pid).parse().unwrap();
+                    if let Some(entry) = sim_instance.apply_intent(addr, client_intent_payload) {
+                        tick_entries.push(entry);
+                    }
                 }
             }
         }
@@ -143,7 +176,17 @@ fn main() {
     // -------------------------------------------------------------
     println!("\n3. Verifying Determinism of Generated Replay File...");
     let mut player = ReplayPlayer::load_from_file(file_path).expect("Failed to reload replay");
-    match player.verify_determinism() {
+    let mut verify_instance = Instance::new(1, 30, 60);
+    verify_instance.set_map_bounds(MapBounds::default_arena());
+    verify_instance.add_static_obstacle(StaticObstacle::solid_wall(
+        1000,
+        ColliderShape::AABB(DeterministicAABB::from_center_half_extents(
+            DeterministicVector2::ZERO,
+            DeterministicVector2::new(I16F16::from_num(50), I16F16::from_num(50)),
+        )),
+    ));
+
+    match player.verify_determinism_with_instance(&mut verify_instance) {
         Ok(report) => {
             println!("   ✅ {}", report);
         }

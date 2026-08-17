@@ -195,7 +195,8 @@ impl Instance {
 
         let session = ClientSession::new(session_id, addr, entity_id, player_name.clone());
         let entity = Entity::new(entity_id, player_name.clone(), EntityType::Player)
-            .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1));
+            .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1))
+            .with_circle_collider(I16F16::from_num(2));
 
         self.entities.insert(entity_id, entity);
         self.sessions.insert(addr, session);
@@ -382,12 +383,12 @@ impl Instance {
         // 5. Check for timed out clients
         let timed_out = self.check_timeouts();
 
-        println!(
-            "[Tick {}] {} active entities, {} active sessions",
-            tick_count,
-            self.entities.len(),
-            self.sessions.len()
-        );
+        // println!(
+        //     "[Tick {}] {} active entities, {} active sessions",
+        //     tick_count,
+        //     self.entities.len(),
+        //     self.sessions.len()
+        // );
         timed_out
     }
 
@@ -509,7 +510,8 @@ impl Instance {
                     existing.name = player_name;
                 } else {
                     let entity = Entity::new(entry.entity_id, player_name, EntityType::Player)
-                        .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1));
+                        .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1))
+                        .with_circle_collider(I16F16::from_num(2));
                     self.entities.insert(entry.entity_id, entity);
                 }
             }

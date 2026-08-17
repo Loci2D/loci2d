@@ -612,4 +612,4 @@ src/
 - [x] **Milestone 5.3**: Solid MTV pushback (100% static, 50/50 dynamic) and wall sliding implemented; trigger zone `Enter`/`Stay`/`Exit` events functioning with deterministic `BTreeSet` order.
 - [x] **Milestone 5.4**: `MoveToPositionIntent` click-to-move navigation and waypoint steering functioning without jitter; `ReplayPlayer` replay intent dispatch integrated.
 - [-] **[Deferred] Milestone 5.5**: Broadphase spatial grid implemented and verified against brute-force baseline.
-- [ ] **Determinism Verified**: Replay CLI (`loci-replay`) validates identical SHA-256 state hashes for matches containing complex collisions and navigation paths.
+- [x] **Determinism Verified**: Replay CLI (`loci-replay`) validates identical SHA-256 state hashes for matches containing complex collisions and navigation paths.

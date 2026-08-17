@@ -109,9 +109,19 @@ impl ReplayPlayer {
     }
 
     /// Runs headless verification against recorded state checksums as fast as possible.
+    /// Reads and verifies all frames, applying them to a newly created empty instance.
     pub fn verify_determinism(&mut self) -> Result<VerificationReport, DesyncReport> {
         let header = self.replay.header.as_ref().unwrap();
         let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
+        self.verify_determinism_with_instance(&mut instance)
+    }
+
+    /// Reads and verifies all frames, applying them to the provided instance.
+    /// This is useful when the instance needs to be pre-configured with map geometry.
+    pub fn verify_determinism_with_instance(
+        &mut self,
+        instance: &mut Instance,
+    ) -> Result<VerificationReport, DesyncReport> {
 
         let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> =
             self.replay.frames.iter().map(|f| (f.tick, f)).collect();
