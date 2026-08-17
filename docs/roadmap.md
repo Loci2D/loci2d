@@ -198,6 +198,11 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 * [ ] **User-Friendly Documentation & Starter Templates**:
   - Author a "15-Minute First Multiplayer Game" quickstart tutorial (e.g., 2D Arena/Tag game).
   - Create a comprehensive, copy-paste-ready Lua scripting API reference guide.
+* [ ] **Update examples with the new SDKs**:
+  - Update **CLI** example
+  - Update **Love2D** example
+  - Update **Godot** example
+  - Update **Python** example
 * [ ] **Local LAN Playtesting & Feedback Collection**:
   - Run multi-device playtest sessions with high school and university students to identify UX/DX friction points and API ergonomics issues.
   - Measure tick stability, desync resilience, and packet latency under real local network conditions.
@@ -215,10 +220,14 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 * [ ] **Documentação Acessível & Modelos Iniciais (Starter Templates)**:
   - Criar um tutorial prático "Seu Primeiro Jogo Multiplayer em 15 Minutos" (ex: Arena 2D / Pega-Pega).
   - Criar uma referência completa e didática da API de scripting em Lua com exemplos prontos para uso.
+* [ ] **Atualizar exemplos com os novos SDKs**:
+  - Adicionar exemplo de **CLI**
+  - Adicionar exemplo de **Love2D**
+  - Adicionar exemplo de **Godot**
+  - Adicionar exemplo de **Python**
 * [ ] **Playtesting em LAN Local & Coleta de Feedback**:
   - Realizar sessões de testes com múltiplos dispositivos físicos com estudantes de ensino médio e graduação para identificar pontos de atrito de UX/DX e ergonomia da API.
   - Medir a estabilidade dos ticks, resiliência a dessincronização e latência de pacotes sob condições reais de rede local.
-
 ---
 
 ### Phase 7: Multi-Instance & Room Management
