@@ -8,9 +8,11 @@ use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
     ClientIntent, EntityState, EntityType as ProtoEntityType, ReplayIntentEntry, WorldState,
 };
+use crate::scripting::ScriptEngine;
 use fixed::types::I16F16;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
+use std::path::Path;
 
 // Re-export Vector2 from network and DeterministicVector2 from fixed_point
 pub use super::fixed_point::DeterministicVector2;
@@ -33,6 +35,8 @@ pub struct Instance {
     pub previous_trigger_overlaps: BTreeSet<(u64, u64)>,
     pub trigger_events: Vec<TriggerEvent>,
     pub logging_enabled: bool,
+    // Phase 6 Additions:
+    pub script_engine: ScriptEngine,
     next_entity_id: u64,
     next_session_id: u64,
 }
@@ -52,9 +56,20 @@ impl Instance {
             previous_trigger_overlaps: BTreeSet::new(),
             trigger_events: Vec::new(),
             logging_enabled: false,
+            script_engine: ScriptEngine::new().expect("Failed to initialize ScriptEngine"),
             next_entity_id: 1,
             next_session_id: 1,
         }
+    }
+
+    /// Evaluates a Lua script content string inside the instance's script engine.
+    pub fn load_script(&mut self, script_content: &str) -> Result<(), String> {
+        self.script_engine.load_script(script_content)
+    }
+
+    /// Evaluates a Lua script file from the specified path inside the instance's script engine.
+    pub fn load_script_from_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
+        self.script_engine.load_file(path)
     }
 
     /// Handles an incoming client intent and returns an optional replay entry for match logging.

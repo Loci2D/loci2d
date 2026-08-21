@@ -180,14 +180,14 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 ---
 
 ### Phase 6.5: Validation, Developer Experience (DX) & API Stabilization
-> **Milestone Focus:** Feature freeze on new engine features to focus on v6.x stability, DX, client abstraction, and user-friendly documentation before moving to multi-room infrastructure.
+> **Milestone Focus:** Feature freeze on new engine features to focus on v0.6.x stability, DX, client abstraction, and user-friendly documentation before moving to multi-room infrastructure.
 
 ### Fase 6.5: Validação, Experiência do Desenvolvedor (DX) & Estabilização de API
-> **Foco do Marco:** Pausa temporária na adição de novas funcionalidades estruturais para focar na estabilidade da versão v6.x, DX, abstração de clientes e documentação amigável antes de avançar para a infraestrutura de múltiplas salas.
+> **Foco do Marco:** Pausa temporária na adição de novas funcionalidades estruturais para focar na estabilidade da versão v0.6.x, DX, abstração de clientes e documentação amigável antes de avançar para a infraestrutura de múltiplas salas.
 
 #### English
 > [!NOTE]
-> **Strategic Pause (v6.x Consolidation):** Once Phase 6 is reached, `loci2d` achieves a fully playable, deterministic LAN multiplayer stack. New feature development (such as multi-instance routing in Phase 7) will be temporarily delayed to validate the engine in real-world scenarios, gather playtester feedback from students, and refine the public API.
+> **Strategic Pause (v0.6.x Consolidation):** Once Phase 6 is reached, `loci2d` achieves a fully playable, deterministic LAN multiplayer stack. New feature development (such as multi-instance routing in Phase 7) will be temporarily delayed to validate the engine in real-world scenarios, gather playtester feedback from students, and refine the public API.
 
 * [ ] **Engine Architecture: State vs. Scripting Separation**:
   - Strictly decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
@@ -209,7 +209,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 
 #### Português
 > [!NOTE]
-> **Pausa Estratégica (Consolidação da v6.x):** Ao atingir a Fase 6, o `loci2d` alcança uma pilha multiplayer em LAN totalmente jogável e determinística. O desenvolvimento de novas funcionalidades (como o roteamento de múltiplas instâncias da Fase 7) será pausado temporariamente para validar o motor em cenários reais, coletar feedback de estudantes e refinar a API pública.
+> **Pausa Estratégica (Consolidação da v0.6.x):** Ao atingir a Fase 6, o `loci2d` alcança uma pilha multiplayer em LAN totalmente jogável e determinística. O desenvolvimento de novas funcionalidades (como o roteamento de múltiplas instâncias da Fase 7) será pausado temporariamente para validar o motor em cenários reais, coletar feedback de estudantes e refinar a API pública.
 
 * [ ] **Arquitetura da Engine: Separação de Estado vs. Scripting**:
   - Desacoplar estritamente o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
