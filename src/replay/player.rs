@@ -112,7 +112,7 @@ impl ReplayPlayer {
     /// Reads and verifies all frames, applying them to a newly created empty instance.
     pub fn verify_determinism(&mut self) -> Result<VerificationReport, DesyncReport> {
         let header = self.replay.header.as_ref().unwrap();
-        let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
+        let mut instance = Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
         self.verify_determinism_with_instance(&mut instance)
     }
 
@@ -122,6 +122,17 @@ impl ReplayPlayer {
         &mut self,
         instance: &mut Instance,
     ) -> Result<VerificationReport, DesyncReport> {
+        let header = self.replay.header.as_ref().unwrap();
+        if !instance.script_hash.is_empty() && instance.script_hash != header.script_hash {
+            return Err(DesyncReport {
+                tick: 0,
+                expected_hash: header.script_hash.clone(),
+                actual_hash: instance.script_hash.clone(),
+                expected_entities: 0,
+                actual_entities: 0,
+                entity_summary: vec!["Script version mismatch (hash). Replay playback aborted.".to_string()],
+            });
+        }
 
         let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> =
             self.replay.frames.iter().map(|f| (f.tick, f)).collect();
@@ -210,7 +221,7 @@ impl ReplayPlayer {
         const TERMINAL_FRAME_DELAY_MS: u64 = 15;
 
         let header = self.replay.header.as_ref().unwrap();
-        let mut instance = Instance::new(header.instance_id, header.tick_rate, 60);
+        let mut instance = Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
 
         let original_speed = speed;
         let speed = if speed <= 0.0 {
@@ -387,7 +398,7 @@ mod tests {
 
     #[test]
     fn test_replay_player_verify_success() {
-        let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10);
+        let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
 
         // Tick 1: Join Alice
         recorder.record_tick(
@@ -421,7 +432,7 @@ mod tests {
         );
 
         // Simulate instance ticks to record authentic checkpoints
-        let mut sim_instance = Instance::new(1, 30, 10);
+        let mut sim_instance = Instance::new(1, 30, 10, 42);
         sim_instance.handle_join("127.0.0.1:1000".parse().unwrap(), "Alice".to_string());
         sim_instance.tick(1);
 
@@ -446,7 +457,7 @@ mod tests {
 
     #[test]
     fn test_replay_player_detects_desync() {
-        let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 5);
+        let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 5, "".to_string());
 
         recorder.record_tick(
             1,
@@ -477,7 +488,7 @@ mod tests {
 
     #[test]
     fn test_replay_player_accessors() {
-        let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10);
+        let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
         let bytes = recorder.to_bytes().unwrap();
         let player = ReplayPlayer::from_bytes(&bytes).unwrap();
 

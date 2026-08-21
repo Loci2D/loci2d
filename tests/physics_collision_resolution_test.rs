@@ -106,7 +106,7 @@ fn test_resolve_dynamic_collision_lsb_remainder_preservation() {
 
 #[test]
 fn test_instance_static_wall_blocking_and_sliding() {
-    let mut instance = Instance::new(1, 30, 60);
+    let mut instance = Instance::new(1, 30, 60, 42);
 
     // Static solid wall from [50, 60] x [-100, 100]
     let wall_shape = ColliderShape::AABB(DeterministicAABB::new(
@@ -145,7 +145,7 @@ fn test_instance_static_wall_blocking_and_sliding() {
 
 #[test]
 fn test_instance_dynamic_entity_collision() {
-    let mut instance = Instance::new(1, 30, 60);
+    let mut instance = Instance::new(1, 30, 60, 42);
 
     // Player 1 at (-6, 0), moving right (+4, 0), radius = 5
     let mut p1 = Entity::new(1, "P1".to_string(), EntityType::Player)
@@ -183,7 +183,7 @@ fn test_instance_dynamic_entity_collision() {
 
 #[test]
 fn test_trigger_zones_lifecycle_enter_stay_exit() {
-    let mut instance = Instance::new(1, 30, 60);
+    let mut instance = Instance::new(1, 30, 60, 42);
 
     // Non-solid trigger zone at [100, 200] x [100, 200]
     let trigger_shape = ColliderShape::AABB(DeterministicAABB::new(
@@ -259,7 +259,7 @@ fn test_trigger_zones_lifecycle_enter_stay_exit() {
 
 #[test]
 fn test_multiple_triggers_and_entities_deterministic_ordering() {
-    let mut instance = Instance::new(1, 30, 60);
+    let mut instance = Instance::new(1, 30, 60, 42);
 
     // Two trigger zones
     let tz1 = StaticObstacle::trigger_zone(

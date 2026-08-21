@@ -37,12 +37,13 @@ pub struct Instance {
     pub logging_enabled: bool,
     // Phase 6 Additions:
     pub script_engine: ScriptEngine,
+    pub script_hash: String,
     next_entity_id: u64,
     next_session_id: u64,
 }
 
 impl Instance {
-    pub fn new(id: u64, tick_rate: u32, client_timeout_secs: u64) -> Self {
+    pub fn new(id: u64, tick_rate: u32, client_timeout_secs: u64, seed: u64) -> Self {
         Self {
             id,
             entities: BTreeMap::new(),
@@ -56,7 +57,8 @@ impl Instance {
             previous_trigger_overlaps: BTreeSet::new(),
             trigger_events: Vec::new(),
             logging_enabled: false,
-            script_engine: ScriptEngine::new().expect("Failed to initialize ScriptEngine"),
+            script_engine: ScriptEngine::new(seed).expect("Failed to initialize ScriptEngine"),
+            script_hash: String::new(),
             next_entity_id: 1,
             next_session_id: 1,
         }
@@ -64,12 +66,19 @@ impl Instance {
 
     /// Evaluates a Lua script content string inside the instance's script engine.
     pub fn load_script(&mut self, script_content: &str) -> Result<(), String> {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(script_content.as_bytes());
+        self.script_hash = format!("{:064x}", hasher.finalize());
         self.script_engine.load_script(script_content)
     }
 
     /// Evaluates a Lua script file from the specified path inside the instance's script engine.
     pub fn load_script_from_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
-        self.script_engine.load_file(path)
+        let path_ref = path.as_ref();
+        let content = std::fs::read_to_string(path_ref)
+            .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?;
+        self.load_script(&content)
     }
 
     /// Handles an incoming client intent and returns an optional replay entry for match logging.
@@ -616,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_explicit_join_and_move_intent() {
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
 
         // 1. Explicit Join
@@ -661,7 +670,7 @@ mod tests {
 
     #[test]
     fn test_explicit_disconnect() {
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
 
         // Join
@@ -689,7 +698,7 @@ mod tests {
 
     #[test]
     fn test_unjoined_client_intents_dropped() {
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:34567".parse().unwrap();
 
         // Send move intent without prior join — should be dropped
@@ -724,7 +733,7 @@ mod tests {
 
     #[test]
     fn test_timeout_detection() {
-        let mut instance = Instance::new(1, 30, 0); // 0-second timeout for immediate expiry
+        let mut instance = Instance::new(1, 30, 0, 42); // 0-second timeout for immediate expiry
         let addr: SocketAddr = "127.0.0.1:45678".parse().unwrap();
 
         let join_intent = ClientIntent {
@@ -746,7 +755,7 @@ mod tests {
 
     #[test]
     fn test_ping_and_action_intents() {
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:56789".parse().unwrap();
 
         let join_intent = ClientIntent {
@@ -774,7 +783,7 @@ mod tests {
 
     #[test]
     fn test_rejoin_updates_player_name() {
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:60001".parse().unwrap();
 
         // Initial join
@@ -797,7 +806,7 @@ mod tests {
 
     #[test]
     fn test_create_snapshot_and_broadcast_addresses() {
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let addr1: SocketAddr = "127.0.0.1:50001".parse().unwrap();
         let addr2: SocketAddr = "127.0.0.1:50002".parse().unwrap();
 
@@ -824,7 +833,7 @@ mod tests {
         use crate::world::physics::MapBounds;
         use fixed::types::I16F16;
 
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         instance.set_map_bounds(MapBounds::new(
             DeterministicVector2::new(I16F16::from_num(-100), I16F16::from_num(-100)),
             DeterministicVector2::new(I16F16::from_num(100), I16F16::from_num(100)),
@@ -881,7 +890,7 @@ mod tests {
         use crate::world::physics::{ColliderShape, DeterministicCircle, StaticObstacle};
         use fixed::types::I16F16;
 
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let obs1 = StaticObstacle::solid_wall(
             1,
             ColliderShape::Circle(DeterministicCircle::new(
@@ -914,7 +923,7 @@ mod tests {
     fn test_explicit_move_to_pos_intent_and_preemption() {
         use crate::network::packets::MoveToPositionIntent;
 
-        let mut instance = Instance::new(1, 30, 10);
+        let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
 
         // 1. Join

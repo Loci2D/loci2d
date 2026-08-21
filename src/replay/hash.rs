@@ -46,8 +46,8 @@ mod tests {
 
     #[test]
     fn test_canonical_state_hash_determinism() {
-        let mut inst1 = Instance::new(1, 30, 10);
-        let mut inst2 = Instance::new(1, 30, 10);
+        let mut inst1 = Instance::new(1, 30, 10, 42);
+        let mut inst2 = Instance::new(1, 30, 10, 42);
 
         // Add entities in different insertion order to inst1 vs inst2
         let mut e1 = Entity::new(1, "Alice".to_string(), EntityType::Player);
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_canonical_state_hash_changes_on_state_diff() {
-        let mut inst = Instance::new(1, 30, 10);
+        let mut inst = Instance::new(1, 30, 10, 42);
         let mut e = Entity::new(1, "Alice".to_string(), EntityType::Player);
         e.velocity = DeterministicVector2::from_f32(1.0, 2.0);
         inst.add_entity(e);

@@ -34,6 +34,7 @@ impl GameLoop {
         map_name: String,
         checkpoint_interval: u64,
         file_path: String,
+        script_hash: String,
     ) {
         self.recorder = Some(ReplayRecorder::new(
             instance_id,
@@ -41,6 +42,7 @@ impl GameLoop {
             seed,
             map_name,
             checkpoint_interval,
+            script_hash,
         ));
         self.record_path = Some(file_path);
     }

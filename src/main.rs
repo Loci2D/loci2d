@@ -307,7 +307,7 @@ fn main() {
             "[Replay] Live match recording enabled -> '{}' (checkpoint interval: {} ticks)",
             record_path, checkpoint_interval
         );
-        game_loop.enable_recording(1, seed, map_name, checkpoint_interval, record_path);
+        game_loop.enable_recording(1, seed, map_name, checkpoint_interval, record_path, "".to_string());
     }
 
     // Ctrl+C handler for graceful match saving
@@ -325,7 +325,7 @@ fn main() {
 
     let loop_socket = Arc::clone(&socket);
     let loop_thread = thread::spawn(move || {
-        let mut instance = Instance::new(1, tick_rate, client_timeout_secs);
+        let mut instance = Instance::new(1, tick_rate, client_timeout_secs, 42);
         instance.logging_enabled = true;
         game_loop.start(instance, intent_rx, loop_socket);
     });

@@ -248,7 +248,7 @@ fn test_entity_with_colliders_and_filter() {
 
 #[test]
 fn test_instance_multi_entity_boundary_clamping_simulation() {
-    let mut instance = Instance::new(1, 30, 60);
+    let mut instance = Instance::new(1, 30, 60, 42);
     // Custom arena bounds: [-300, +300]
     instance.set_map_bounds(MapBounds::new(
         DeterministicVector2::new(I16F16::from_num(-300), I16F16::from_num(-300)),

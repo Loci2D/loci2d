@@ -154,9 +154,9 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 ### Fase 6: Scripting Embutido & Lógica de Jogo (Motor Lua)
 
 #### English
-* [ ] **Lua VM Integration (`mlua`)**:
+* [x] **Lua VM Integration (`mlua`)**:
   - Embed a sandboxed, deterministic Lua runtime into the game instance.
-* [ ] **Rust-to-Lua Engine API**:
+* [x] **Rust-to-Lua Engine API**:
   - Expose entity manipulation, fixed-point vectors, intent hooks, and collision/trigger callbacks to Lua.
 * [ ] **Event-Driven Gameplay Callbacks**:
   - Implement lifecycle hooks: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
@@ -166,9 +166,9 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Ensure Lua callbacks execute strictly at deterministic tick boundaries to preserve `.loci` replay parity.
 
 #### Português
-* [ ] **Integração com Máquina Virtual Lua (`mlua`)**:
+* [x] **Integração com Máquina Virtual Lua (`mlua`)**:
   - Embutir um ambiente de execução Lua seguro e determinístico dentro da instância do jogo.
-* [ ] **API de Engine Rust-para-Lua**:
+* [x] **API de Engine Rust-para-Lua**:
   - Expor manipulação de entidades, vetores de ponto fixo, ganchos de intenção e callbacks de colisão/gatilho para Lua.
 * [ ] **Callbacks de Jogabilidade Orientados a Eventos**:
   - Implementar ganchos de ciclo de vida: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.

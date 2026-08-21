@@ -19,8 +19,8 @@ fn test_live_spectator_replay_broadcasting() {
     let total_ticks = 40u64;
 
     // 1. Record a deterministic match with 2 players
-    let mut recorder = ReplayRecorder::new(1, tick_rate, 42, "spectator_arena".to_string(), 10);
-    let mut instance = Instance::new(1, tick_rate, 60);
+    let mut recorder = ReplayRecorder::new(1, tick_rate, 42, "spectator_arena".to_string(), 10, "".to_string());
+    let mut instance = Instance::new(1, tick_rate, 60, 42);
 
     // Tick 1: Player 1 (Alice) & Player 2 (Bob) Join
     instance.handle_join("127.0.0.1:1001".parse().unwrap(), "Alice".to_string());

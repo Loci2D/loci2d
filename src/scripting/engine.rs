@@ -24,7 +24,7 @@ impl fmt::Debug for ScriptEngine {
 
 impl Default for ScriptEngine {
     fn default() -> Self {
-        Self::new().expect("Failed to initialize ScriptEngine")
+        Self::new(0).expect("Failed to initialize ScriptEngine")
     }
 }
 
@@ -32,12 +32,12 @@ impl ScriptEngine {
     /// Creates a new sandboxed `ScriptEngine`.
     /// Excludes dangerous standard libraries (`io`, `os`, `package`, `debug`).
     /// Configures execution instruction limits for DoS protection.
-    pub fn new() -> LuaResult<Self> {
-        Self::new_with_instruction_limit(DEFAULT_MAX_LUA_INSTRUCTIONS)
+    pub fn new(seed: u64) -> LuaResult<Self> {
+        Self::new_with_instruction_limit(DEFAULT_MAX_LUA_INSTRUCTIONS, seed)
     }
 
     /// Creates a sandboxed `ScriptEngine` with a custom instruction limit for DoS protection.
-    pub fn new_with_instruction_limit(max_instructions: u64) -> LuaResult<Self> {
+    pub fn new_with_instruction_limit(max_instructions: u64, seed: u64) -> LuaResult<Self> {
         // Load only safe standard libraries. EXCLUDE `io`, `os`, `package`, and `debug`.
         let std_libs = mlua::StdLib::TABLE | mlua::StdLib::STRING | mlua::StdLib::MATH;
         let lua = Lua::new_with(std_libs, mlua::LuaOptions::default())?;
@@ -49,7 +49,54 @@ impl ScriptEngine {
         };
 
         engine.setup_sandbox_hooks();
+        engine.setup_determinism(seed)?;
         Ok(engine)
+    }
+
+    /// Overrides non-deterministic elements (PRNG, pairs) to enforce reproducibility.
+    fn setup_determinism(&self, seed: u64) -> LuaResult<()> {
+        let globals = self.lua.globals();
+
+        // 1. Remove `pairs` to force users to use `ipairs` or deterministic iteration
+        globals.set("pairs", mlua::Value::Nil)?;
+
+        // 2. Overwrite `math.random` with a deterministic LCG PRNG
+        let math_table: mlua::Table = globals.get("math")?;
+        
+        let prng_state = Arc::new(AtomicU64::new(seed));
+        let random_fn = self.lua.create_function(move |_, (min, max): (Option<i32>, Option<i32>)| {
+            let mut state = prng_state.load(Ordering::Relaxed);
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            prng_state.store(state, Ordering::Relaxed);
+            
+            let rand_val = (state >> 32) as u32;
+
+            match (min, max) {
+                (None, None) => {
+                    Ok(mlua::Value::Number((rand_val as f64) / (std::u32::MAX as f64 + 1.0)))
+                }
+                (Some(m), None) => {
+                    if m < 1 {
+                        return Err(mlua::Error::RuntimeError("bad argument #1 to 'random' (interval is empty)".to_string()));
+                    }
+                    let res = 1 + (rand_val % (m as u32)) as i32;
+                    Ok(mlua::Value::Integer(res as i64))
+                }
+                (Some(m), Some(n)) => {
+                    if m > n {
+                        return Err(mlua::Error::RuntimeError("bad argument #2 to 'random' (interval is empty)".to_string()));
+                    }
+                    let range = (n as u32).wrapping_sub(m as u32).wrapping_add(1);
+                    let res = m.wrapping_add((rand_val % range) as i32);
+                    Ok(mlua::Value::Integer(res as i64))
+                }
+                _ => Err(mlua::Error::RuntimeError("invalid arguments to 'random'".to_string())),
+            }
+        })?;
+
+        math_table.set("random", random_fn)?;
+
+        Ok(())
     }
 
     /// Sets up the instruction count hook for DoS / infinite loop protection.

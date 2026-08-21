@@ -13,7 +13,7 @@ use std::net::SocketAddr;
 
 #[test]
 fn test_click_to_move_straight_axis_arrival() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
     let mut entity = Entity::new(1, "Player1".to_string(), EntityType::Player)
         .with_aabb_collider(DeterministicVector2::new(
             I16F16::from_num(1),
@@ -62,7 +62,7 @@ fn test_click_to_move_straight_axis_arrival() {
 
 #[test]
 fn test_click_to_move_diagonal_arrival() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
     let mut entity = Entity::new(1, "Player1".to_string(), EntityType::Player)
         .with_circle_collider(I16F16::from_num(1))
         .with_navigation(NavigationComponent::new(
@@ -94,7 +94,7 @@ fn test_click_to_move_diagonal_arrival() {
 
 #[test]
 fn test_multi_waypoint_path_traversal() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
     let mut entity = Entity::new(1, "Pathfinder".to_string(), EntityType::Player)
         .with_circle_collider(I16F16::from_num(1))
         .with_navigation(NavigationComponent::new(
@@ -157,7 +157,7 @@ fn test_multi_waypoint_path_traversal() {
 
 #[test]
 fn test_wasd_move_preempts_navigation() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
     let addr: SocketAddr = "127.0.0.1:20001".parse().unwrap();
 
     // 1. Join
@@ -219,7 +219,7 @@ fn test_wasd_move_preempts_navigation() {
 
 #[test]
 fn test_new_moveto_preempts_prior_target() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
     let addr: SocketAddr = "127.0.0.1:20002".parse().unwrap();
 
     // 1. Join
@@ -283,7 +283,7 @@ fn test_new_moveto_preempts_prior_target() {
 
 #[test]
 fn test_navigation_respects_static_obstacles() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
     // Add solid wall from x=8 to x=12, y=-10 to y=10
     let wall = StaticObstacle::solid_wall(
         100,
@@ -329,7 +329,7 @@ fn test_navigation_respects_static_obstacles() {
 
 #[test]
 fn test_navigation_map_bounds_clamping() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
     instance.set_map_bounds(MapBounds::new(
         DeterministicVector2::new(I16F16::from_num(-50), I16F16::from_num(-50)),
         DeterministicVector2::new(I16F16::from_num(50), I16F16::from_num(50)),

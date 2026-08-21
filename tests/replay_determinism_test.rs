@@ -27,8 +27,9 @@ fn test_1000_tick_multi_player_replay_determinism() {
         seed,
         "determinism_arena".to_string(),
         checkpoint_interval,
+        "".to_string(),
     );
-    let mut author_instance = Instance::new(1, tick_rate, 60);
+    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
 
     // Schedule 10 players joining and moving over 1000 ticks
     let player_count = 10;
@@ -132,8 +133,8 @@ fn test_1000_tick_multi_player_replay_determinism() {
 
 #[test]
 fn test_rejoin_entity_state_preservation_determinism() {
-    let mut recorder = ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10);
-    let mut live_instance = Instance::new(1, 30, 60);
+    let mut recorder = ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, "".to_string());
+    let mut live_instance = Instance::new(1, 30, 60, 42);
     let addr = "127.0.0.1:20000".parse().unwrap();
 
     // 1. Initial Join as "Alice"
@@ -222,11 +223,11 @@ fn test_inactivity_timeout_disconnect_synchronization() {
     let loop_socket = Arc::clone(&socket);
     let mut game_loop = GameLoop::new(60);
     // 0-second timeout so it times out immediately on the next sweep
-    game_loop.enable_recording(1, 42, "timeout_arena".to_string(), 5, replay_path_str);
+    game_loop.enable_recording(1, 42, "timeout_arena".to_string(), 5, replay_path_str, "".to_string());
     let running: Arc<AtomicBool> = game_loop.running_handle();
 
     let loop_handle = thread::spawn(move || {
-        let instance = Instance::new(1, 60, 0); // 0s timeout
+        let instance = Instance::new(1, 60, 0, 42); // 0s timeout
         game_loop.start(instance, intent_rx, loop_socket);
     });
 
@@ -263,8 +264,8 @@ fn test_inactivity_timeout_disconnect_synchronization() {
 
 #[test]
 fn test_desync_diagnostic_report_on_tampered_frame() {
-    let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10);
-    let mut instance = Instance::new(1, 30, 60);
+    let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
+    let mut instance = Instance::new(1, 30, 60, 42);
 
     instance.handle_join("127.0.0.1:5000".parse().unwrap(), "Alice".to_string());
     recorder.record_tick(
@@ -306,7 +307,7 @@ fn test_desync_diagnostic_report_on_tampered_frame() {
 
 #[test]
 fn test_corrupted_header_magic_fails_gracefully() {
-    let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10);
+    let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
     let bytes = recorder.to_bytes().unwrap();
 
     // Tamper with bytes to alter magic string
@@ -334,8 +335,9 @@ fn test_click_to_move_replay_determinism() {
         seed,
         "nav_replay_arena".to_string(),
         checkpoint_interval,
+        "".to_string(),
     );
-    let mut author_instance = Instance::new(1, tick_rate, 60);
+    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
 
     let player_count = 5;
 

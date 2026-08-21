@@ -5,7 +5,7 @@ use std::io::Write;
 
 #[test]
 fn test_io_library_disabled() {
-    let engine = ScriptEngine::new().expect("Failed to initialize ScriptEngine");
+    let engine = ScriptEngine::new(42).expect("Failed to initialize ScriptEngine");
 
     // Accessing io should fail (io is nil)
     let result = engine.load_script(
@@ -24,7 +24,7 @@ fn test_io_library_disabled() {
 
 #[test]
 fn test_os_library_disabled() {
-    let engine = ScriptEngine::new().expect("Failed to initialize ScriptEngine");
+    let engine = ScriptEngine::new(42).expect("Failed to initialize ScriptEngine");
 
     // Accessing os library should fail (os is nil)
     let result = engine.load_script(
@@ -43,7 +43,7 @@ fn test_os_library_disabled() {
 
 #[test]
 fn test_package_and_debug_disabled() {
-    let engine = ScriptEngine::new().expect("Failed to initialize ScriptEngine");
+    let engine = ScriptEngine::new(42).expect("Failed to initialize ScriptEngine");
 
     let package_res = engine.load_script("local p = package.loaded");
     assert!(package_res.is_err());
@@ -54,7 +54,7 @@ fn test_package_and_debug_disabled() {
 
 #[test]
 fn test_safe_standard_libraries_functional() {
-    let engine = ScriptEngine::new().expect("Failed to initialize ScriptEngine");
+    let engine = ScriptEngine::new(42).expect("Failed to initialize ScriptEngine");
 
     let script = r#"
         local val = math.floor(10.7)
@@ -75,7 +75,7 @@ fn test_safe_standard_libraries_functional() {
 #[test]
 fn test_dos_protection_infinite_loop() {
     // Set a small instruction limit for rapid test execution
-    let engine = ScriptEngine::new_with_instruction_limit(1_000)
+    let engine = ScriptEngine::new_with_instruction_limit(1_000, 42)
         .expect("Failed to initialize ScriptEngine with low instruction limit");
 
     let infinite_loop_script = r#"
@@ -96,7 +96,7 @@ fn test_dos_protection_infinite_loop() {
 #[test]
 fn test_dos_protection_resets_per_invocation() {
     // Instruction limit of 500
-    let engine = ScriptEngine::new_with_instruction_limit(500)
+    let engine = ScriptEngine::new_with_instruction_limit(500, 42)
         .expect("Failed to initialize ScriptEngine");
 
     // Execute scripts that each consume 300 instructions (total 600 > 500 across two calls)
@@ -118,7 +118,7 @@ fn test_dos_protection_resets_per_invocation() {
 
 #[test]
 fn test_instance_script_loading() {
-    let mut instance = Instance::new(1, 30, 10);
+    let mut instance = Instance::new(1, 30, 10, 42);
 
     // Test inline script loading
     let inline_res = instance.load_script("test_var = 100");

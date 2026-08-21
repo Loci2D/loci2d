@@ -17,7 +17,7 @@ fn main() {
     // Part 1: Performance Benchmark (100 active entities)
     // -------------------------------------------------------------
     println!("1. Running Performance Benchmark (100 active entities, 10,000 ticks)...");
-    let mut bench_instance = Instance::new(1, 30, 60);
+    let mut bench_instance = Instance::new(1, 30, 60, 42);
     bench_instance.set_map_bounds(MapBounds::default_arena());
     
     bench_instance.add_static_obstacle(StaticObstacle::solid_wall(
@@ -86,8 +86,9 @@ fn main() {
         seed,
         "default_arena".to_string(),
         checkpoint_interval,
+        "".to_string(),
     );
-    let mut sim_instance = Instance::new(1, 30, 60);
+    let mut sim_instance = Instance::new(1, 30, 60, 42);
     sim_instance.set_map_bounds(MapBounds::default_arena());
     sim_instance.add_static_obstacle(StaticObstacle::solid_wall(
         1000,
@@ -176,7 +177,7 @@ fn main() {
     // -------------------------------------------------------------
     println!("\n3. Verifying Determinism of Generated Replay File...");
     let mut player = ReplayPlayer::load_from_file(file_path).expect("Failed to reload replay");
-    let mut verify_instance = Instance::new(1, 30, 60);
+    let mut verify_instance = Instance::new(1, 30, 60, 42);
     verify_instance.set_map_bounds(MapBounds::default_arena());
     verify_instance.add_static_obstacle(StaticObstacle::solid_wall(
         1000,
