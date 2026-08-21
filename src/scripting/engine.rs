@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 /// Default maximum Lua instructions per callback before interrupting/aborting (DoS protection).
+// TODO(Phase 6.5): Calibrate against real tick budget measurements (tick_rate × budget_µs).
 pub const DEFAULT_MAX_LUA_INSTRUCTIONS: u64 = 100_000;
 
 pub struct ScriptEngine {
@@ -65,6 +66,8 @@ impl ScriptEngine {
         
         let prng_state = Arc::new(AtomicU64::new(seed));
         let random_fn = self.lua.create_function(move |_, (min, max): (Option<i32>, Option<i32>)| {
+            // Knuth multiplicative LCG: fast, portable, sufficient quality for game scripting.
+            // Not cryptographically secure, but deterministic cross-platform by construction.
             let mut state = prng_state.load(Ordering::Relaxed);
             state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
             prng_state.store(state, Ordering::Relaxed);
@@ -79,6 +82,7 @@ impl ScriptEngine {
                     if m < 1 {
                         return Err(mlua::Error::RuntimeError("bad argument #1 to 'random' (interval is empty)".to_string()));
                     }
+                    // Note: modulo bias exists for non-power-of-2 ranges. Acceptable for game scripting.
                     let res = 1 + (rand_val % (m as u32)) as i32;
                     Ok(mlua::Value::Integer(res as i64))
                 }
@@ -95,6 +99,13 @@ impl ScriptEngine {
         })?;
 
         math_table.set("random", random_fn)?;
+        
+        // Neutralize `math.randomseed` so users don't get confused
+        math_table.set("randomseed", self.lua.create_function(|_, _: mlua::Value| {
+            // Deterministic PRNG is seeded by the Instance at initialization.
+            // Calling math.randomseed() from Lua has no effect.
+            Ok(())
+        })?)?;
 
         Ok(())
     }

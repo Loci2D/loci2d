@@ -66,11 +66,14 @@ impl Instance {
 
     /// Evaluates a Lua script content string inside the instance's script engine.
     pub fn load_script(&mut self, script_content: &str) -> Result<(), String> {
+        self.script_engine.load_script(script_content)?;
+        
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(script_content.as_bytes());
-        self.script_hash = format!("{:064x}", hasher.finalize());
-        self.script_engine.load_script(script_content)
+        let hash_bytes: [u8; 32] = hasher.finalize().into();
+        self.script_hash = hash_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+        Ok(())
     }
 
     /// Evaluates a Lua script file from the specified path inside the instance's script engine.
