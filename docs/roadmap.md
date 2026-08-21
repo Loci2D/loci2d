@@ -188,6 +188,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 #### English
 > [!NOTE]
 > **Strategic Pause (v0.6.x Consolidation):** Once Phase 6 is reached, `loci2d` achieves a fully playable, deterministic LAN multiplayer stack. New feature development (such as multi-instance routing in Phase 7) will be temporarily delayed to validate the engine in real-world scenarios, gather playtester feedback from students, and refine the public API.
+> See [ADR 0015](adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md) for details on Phase 6.5 governance and dedicated sub-roadmap structure.
 
 * [ ] **Engine Architecture: State vs. Scripting Separation**:
   - Strictly decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
@@ -210,6 +211,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 #### Português
 > [!NOTE]
 > **Pausa Estratégica (Consolidação da v0.6.x):** Ao atingir a Fase 6, o `loci2d` alcança uma pilha multiplayer em LAN totalmente jogável e determinística. O desenvolvimento de novas funcionalidades (como o roteamento de múltiplas instâncias da Fase 7) será pausado temporariamente para validar o motor em cenários reais, coletar feedback de estudantes e refinar a API pública.
+> Veja a [ADR 0015](adr/pt/0015-estrutura-roadmap-dedicado-fase6.5-validacao-dx.md) para detalhes sobre a governança e estrutura de sub-roadmap dedicado da Fase 6.5.
 
 * [ ] **Arquitetura da Engine: Separação de Estado vs. Scripting**:
   - Desacoplar estritamente o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
