@@ -242,6 +242,25 @@ impl Neg for DeterministicVector2 {
     }
 }
 
+impl mlua::UserData for DeterministicVector2 {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
+        // Expose components as floats for debugging/printing
+        methods.add_method("x_float", |_, vec, ()| Ok(vec.x.to_num::<f64>()));
+        methods.add_method("y_float", |_, vec, ()| Ok(vec.y.to_num::<f64>()));
+
+        // Expose arithmetic. Behind the scenes, everything stays in I16F16.
+        methods.add_meta_method(mlua::MetaMethod::Add, |_, vec1, vec2: mlua::AnyUserData| {
+            let vec2 = vec2.borrow::<DeterministicVector2>()?;
+            Ok(DeterministicVector2::new(vec1.x + vec2.x, vec1.y + vec2.y))
+        });
+
+        methods.add_meta_method(mlua::MetaMethod::Sub, |_, vec1, vec2: mlua::AnyUserData| {
+            let vec2 = vec2.borrow::<DeterministicVector2>()?;
+            Ok(DeterministicVector2::new(vec1.x - vec2.x, vec1.y - vec2.y))
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

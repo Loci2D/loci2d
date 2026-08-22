@@ -4,6 +4,7 @@ use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use crate::scripting::api::setup_base_api;
 
 /// Default maximum Lua instructions per callback before interrupting/aborting (DoS protection).
 // TODO(Phase 6.5): Calibrate against real tick budget measurements (tick_rate × budget_µs).
@@ -51,6 +52,7 @@ impl ScriptEngine {
 
         engine.setup_sandbox_hooks();
         engine.setup_determinism(seed)?;
+        setup_base_api(&engine.lua)?;
         Ok(engine)
     }
 
