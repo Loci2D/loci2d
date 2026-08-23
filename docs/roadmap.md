@@ -158,7 +158,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Embed a sandboxed, deterministic Lua runtime into the game instance.
 * [x] **Rust-to-Lua Engine API**:
   - Expose entity manipulation, fixed-point vectors, intent hooks, and collision/trigger callbacks to Lua.
-* [ ] **Event-Driven Gameplay Callbacks**:
+* [x] **Event-Driven Gameplay Callbacks**:
   - Implement lifecycle hooks: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
 * [-] **[Deferred to Phase 9] Hot-Reloadable Game Rules**:
   - Support reloading script files at runtime without restarting the server binary.
@@ -170,7 +170,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Embutir um ambiente de execução Lua seguro e determinístico dentro da instância do jogo.
 * [x] **API de Engine Rust-para-Lua**:
   - Expor manipulação de entidades, vetores de ponto fixo, ganchos de intenção e callbacks de colisão/gatilho para Lua.
-* [ ] **Callbacks de Jogabilidade Orientados a Eventos**:
+* [x] **Callbacks de Jogabilidade Orientados a Eventos**:
   - Implementar ganchos de ciclo de vida: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
 * [-] **[Adiado para a Fase 9] Regras de Jogo com Recarregamento Dinâmico (Hot-Reload)**:
   - Suportar recarregamento de scripts em tempo de execução sem reiniciar o executável do servidor.

@@ -398,6 +398,7 @@ mod tests {
 
     #[test]
     fn test_replay_player_verify_success() {
+        // Note: Empty script hash is acceptable in this unit test since script hash verification logic is tested separately.
         let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
 
         // Tick 1: Join Alice
