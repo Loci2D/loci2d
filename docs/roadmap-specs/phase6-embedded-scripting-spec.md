@@ -105,7 +105,10 @@ Lua's hash table iteration `pairs()` does not guarantee order. If a user iterate
 > [!WARNING]
 > We must aggressively prevent this by **removing `pairs()` from the Lua global environment** (`lua.globals().set("pairs", mlua::Value::Nil)`). Users must be forced to use `ipairs()` for arrays, or we must provide a custom deterministic (alphabetically sorted) iterator if they absolutely need to iterate over string-keyed tables.
 
-#### 3. Script Hash Calculation
+#### 3. Memory Address Leaks (`tostring`)
+Calling `tostring()` on Lua tables, functions, or userdata returns their memory address (e.g., `table: 0x12345678`). If a script uses this string as a key in a table or for any logic branching, it will immediately break determinism because memory layouts differ across executions and architectures. We must either override `tostring()` to return stable identifiers for tables, or strictly educate developers to never rely on stringification of reference types for game logic.
+
+#### 4. Script Hash Calculation
 To satisfy ADR-0010's requirement for `.loci` replay playback, the `script_hash` is computed as the **SHA-256 digest of the exact string content** of the loaded script at `Instance` initialization. If the system later supports loading multiple files (e.g., via a sandboxed `require`), the hash must be computed from the concatenated strings of all loaded `.lua` files, ordered lexicographically by filename.
 
 > [!IMPORTANT]

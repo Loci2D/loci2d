@@ -28,6 +28,8 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Expose `Loci.start_match()` and `Loci.end_match()` to Lua scripts so developers can dictate when the game loop actually begins advancing ticks based on player connections or readiness.
 * [ ] **Timer & Cooldown System:**
   - Expose `Loci.Commands.start_timer(timer_id, delay_ticks)` and route expiration to a new Lua callback `on_timer_complete(timer_id)`.
+* [ ] **Dynamic Entity Spawning:**
+  - Resolve the `SpawnEntity` CommandBuffer stub so scripts can dynamically spawn projectiles and pickups at runtime.
 
 ### Português
 * [ ] **Sistema de Propriedades de Entidade (Design Orientado a Dados):**
@@ -44,6 +46,8 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Expor `Loci.start_match()` e `Loci.end_match()` para os scripts Lua, permitindo que os desenvolvedores ditem quando o loop do jogo realmente começa a avançar os ticks com base nas conexões ou prontidão dos jogadores.
 * [ ] **Sistema de Timers e Cooldowns:**
   - Expor `Loci.Commands.start_timer(timer_id, delay_ticks)` e rotear o fim da contagem para um novo callback Lua `on_timer_complete(timer_id)`.
+* [ ] **Spawn Dinâmico de Entidades:**
+  - Resolver o stub do `SpawnEntity` no CommandBuffer para que os scripts possam criar projéteis e itens dinamicamente durante a partida.
 
 ---
 
