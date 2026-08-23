@@ -9,13 +9,48 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 
 ---
 
-## 6.5.1: Architecture, Match Lifecycle & Determinism Validation
-## 6.5.1: Arquitetura, Ciclo de Vida da Partida & Determinismo
+## 6.5.0: Entity Data Model & Game Rules API
+## 6.5.0: Modelo de Dados de Entidade & API de Regras de Jogo
+> **Reference ADRs:** [ADR-0014](adr/en/0014-embedded-lua-scripting-and-command-buffer.md) · [ADR-0016](adr/en/0016-data-driven-entity-properties-and-engine-agnosticism.md)
 
 ### English
+* [ ] **Entity Property System (Data-Driven Design):**
+  - Add a flexible key-value property map (e.g., `health`, `team`) to the `Entity` struct in Rust.
+  - **Crucial Rule:** The Rust core must remain agnostic to game rules. Hardcoded fields like `health` or `team` must NOT be added directly to the Rust structs. The engine only provides generic property storage; Lua scripts define their meaning and game logic.
+* [ ] **Lua Property Interface:**
+  - Expose `Loci.get_entity_property` and `Loci.Commands.set_property` to Lua scripts.
+* [ ] **Action/Ability Dispatch:**
+  - Route the `ActionIntent` from client network packets to a new Lua callback `on_action(entity_id, ability_id)`.
+* [ ] **Global Match Metadata:**
+  - Allow Lua to query the current player count and manage global variables (e.g., match score).
 * [ ] **Match Lifecycle State Machine:**
   - Introduce a `Paused`/`Running` state to the server instance.
-  - Expose `loci.start_match()` and `loci.end_match()` to Lua scripts so developers can dictate when the game loop actually begins advancing ticks based on player connections or readiness.
+  - Expose `Loci.start_match()` and `Loci.end_match()` to Lua scripts so developers can dictate when the game loop actually begins advancing ticks based on player connections or readiness.
+* [ ] **Timer & Cooldown System:**
+  - Expose `Loci.Commands.start_timer(timer_id, delay_ticks)` and route expiration to a new Lua callback `on_timer_complete(timer_id)`.
+
+### Português
+* [ ] **Sistema de Propriedades de Entidade (Design Orientado a Dados):**
+  - Adicionar um mapa chave-valor flexível (ex: `health`, `team`) na struct `Entity` no Rust.
+  - **Regra Crucial:** O núcleo em Rust deve permanecer agnóstico às regras do jogo. Campos "hardcoded" como `health` ou `team_id` NÃO devem ser adicionados nas structs Rust. O motor apenas provê o armazenamento genérico das propriedades; os scripts Lua definem seu significado e a lógica.
+* [ ] **Interface de Propriedades no Lua:**
+  - Expor `Loci.get_entity_property` e `Loci.Commands.set_property` para os scripts Lua.
+* [ ] **Despacho de Ações/Habilidades:**
+  - Roteamento do `ActionIntent` dos pacotes de rede do cliente para um novo callback Lua `on_action(entity_id, ability_id)`.
+* [ ] **Metadados Globais da Partida:**
+  - Permitir que o Lua consulte a quantidade de jogadores e gerencie variáveis globais (ex: placar da partida).
+* [ ] **Máquina de Estado do Ciclo de Vida da Partida:**
+  - Introduzir um estado de `Pausado`/`Em Execução` para a instância do servidor.
+  - Expor `Loci.start_match()` e `Loci.end_match()` para os scripts Lua, permitindo que os desenvolvedores ditem quando o loop do jogo realmente começa a avançar os ticks com base nas conexões ou prontidão dos jogadores.
+* [ ] **Sistema de Timers e Cooldowns:**
+  - Expor `Loci.Commands.start_timer(timer_id, delay_ticks)` e rotear o fim da contagem para um novo callback Lua `on_timer_complete(timer_id)`.
+
+---
+
+## 6.5.1: Architecture, Safety & Determinism Validation
+## 6.5.1: Arquitetura, Segurança & Validação de Determinismo
+
+### English
 * [ ] **Strict State vs. Scripting Separation:**
   - Decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
 * [ ] **Safe Dispatch Layer:**
@@ -24,9 +59,6 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Establish a rigorous cross-platform continuous integration (CI) test suite to mathematically prove `I16F16` fixed-point determinism across ARM64 and x86_64 architectures.
 
 ### Português
-* [ ] **Máquina de Estado do Ciclo de Vida da Partida:**
-  - Introduzir um estado de `Pausado`/`Em Execução` para a instância do servidor.
-  - Expor `loci.start_match()` e `loci.end_match()` para os scripts Lua, permitindo que os desenvolvedores ditem quando o loop do jogo realmente começa a avançar os ticks com base nas conexões ou prontidão dos jogadores.
 * [ ] **Separação Estrita entre Estado e Scripting:**
   - Desacoplar o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
 * [ ] **Camada Segura de Despacho:**
@@ -65,12 +97,14 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 ## 6.5.3: Exemplos de Referência & Templates
 
 ### English
+* [ ] **Standard Lua Game Template:** Create a boilerplate `main.lua` file with heavily documented callbacks (`on_init`, `on_player_join`, etc.) establishing the official structure for students to build game rules.
 * [ ] **Refactor CLI Example:** Update the headless rust client example to reflect recent architectural changes.
 * [ ] **Refactor Love2D Example:** Rebuild the Love2D demo using the new `loci_client.lua` SDK.
 * [ ] **Refactor Godot Example:** Rebuild the Godot demo using the new `LociClient.gd` SDK.
 * [ ] **Refactor Python Example:** Showcase basic interactions using the new Python SDK.
 
 ### Português
+* [ ] **Template Padrão de Jogo em Lua:** Criar um arquivo `main.lua` modelo com callbacks amplamente documentados (`on_init`, `on_player_join`, etc.), estabelecendo a estrutura oficial para os alunos criarem regras de jogo.
 * [ ] **Refatorar Exemplo CLI:** Atualizar o exemplo de cliente headless em Rust para refletir as mudanças arquiteturais recentes.
 * [ ] **Refatorar Exemplo Love2D:** Reconstruir a demo em Love2D usando o novo SDK `loci_client.lua`.
 * [ ] **Refatorar Exemplo Godot:** Reconstruir a demo em Godot usando o novo SDK `LociClient.gd`.
