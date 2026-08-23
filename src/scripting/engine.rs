@@ -4,7 +4,9 @@ use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use crate::scripting::api::setup_base_api;
+use crate::scripting::api::{setup_base_api, with_scoped_api};
+use crate::scripting::command::CommandBuffer;
+use crate::world::instance::Instance;
 
 /// Default maximum Lua instructions per callback before interrupting/aborting (DoS protection).
 // TODO(Phase 6.5): Calibrate against real tick budget measurements (tick_rate × budget_µs).
@@ -158,5 +160,95 @@ impl ScriptEngine {
     /// Accessor for underlying Lua VM instance.
     pub fn lua(&self) -> &Lua {
         &self.lua
+    }
+
+    // --- Lifecycle Event Hooks ---
+
+    pub fn on_init(&self, instance: &Instance, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_init_fn) = globals.get::<mlua::Function>("on_init") {
+                on_init_fn.call::<()>(())?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_tick(&self, instance: &Instance, current_tick: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_tick_fn) = globals.get::<mlua::Function>("on_tick") {
+                on_tick_fn.call::<()>(current_tick)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_player_join(&self, instance: &Instance, entity_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_join_fn) = globals.get::<mlua::Function>("on_player_join") {
+                on_join_fn.call::<()>(entity_id)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_player_leave(&self, instance: &Instance, entity_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_leave_fn) = globals.get::<mlua::Function>("on_player_leave") {
+                on_leave_fn.call::<()>(entity_id)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_collision(&self, instance: &Instance, entity_a: u64, entity_b: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_col_fn) = globals.get::<mlua::Function>("on_collision") {
+                on_col_fn.call::<()>((entity_a, entity_b))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_trigger_enter(&self, instance: &Instance, entity_id: u64, trigger_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_enter_fn) = globals.get::<mlua::Function>("on_trigger_enter") {
+                on_enter_fn.call::<()>((entity_id, trigger_id))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_trigger_stay(&self, instance: &Instance, entity_id: u64, trigger_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_stay_fn) = globals.get::<mlua::Function>("on_trigger_stay") {
+                on_stay_fn.call::<()>((entity_id, trigger_id))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_trigger_exit(&self, instance: &Instance, entity_id: u64, trigger_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_exit_fn) = globals.get::<mlua::Function>("on_trigger_exit") {
+                on_exit_fn.call::<()>((entity_id, trigger_id))?;
+            }
+            Ok(())
+        })
     }
 }

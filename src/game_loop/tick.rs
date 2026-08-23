@@ -83,11 +83,23 @@ impl GameLoop {
 
                 // 1. Drain the intent queue (non-blocking) for this fixed tick
                 while let Ok((addr, intent)) = intent_rx.try_recv() {
-                    if let Some(entry) = instance.apply_intent(addr, intent)
-                        && self.recorder.is_some()
-                    {
-                        tick_entries.push(entry);
+                    match instance.apply_intent(addr, intent) {
+                        Ok(Some(entry)) => {
+                            if self.recorder.is_some() {
+                                tick_entries.push(entry);
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            eprintln!("[Server] Script Error during apply_intent: {}. Aborting instance.", e);
+                            self.running.store(false, Ordering::Relaxed);
+                            break;
+                        }
                     }
+                }
+
+                if !self.running.load(Ordering::Relaxed) {
+                    break;
                 }
 
                 // 2. Record tick inputs if recording is enabled
@@ -96,7 +108,28 @@ impl GameLoop {
                 }
 
                 // 3. Advance deterministic simulation physics & sweep timeouts
-                let timed_out = instance.tick(tick_count);
+                let timed_out = match instance.tick(tick_count) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!("[Server] Script Error during tick: {}. Aborting instance.", e);
+                        self.running.store(false, Ordering::Relaxed);
+                        // Attempt to broadcast disconnect
+                        out_buf.clear();
+                        let packet = ServerPacket {
+                            sequence_id: tick_count,
+                            payload: Some(server_packet::Payload::Response(crate::network::packets::ServerResponse {
+                                sequence_id: tick_count,
+                                status: "Disconnect: Server Error".to_string(),
+                            })),
+                        };
+                        if let Ok(()) = packet.encode(&mut out_buf) {
+                            for client_addr in instance.get_broadcast_addresses() {
+                                let _ = socket.send_to(&out_buf, client_addr);
+                            }
+                        }
+                        break;
+                    }
+                };
 
                 // If any sessions timed out, record synthetic disconnects in the replay stream
                 if let Some(ref mut recorder) = self.recorder {

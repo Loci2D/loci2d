@@ -162,7 +162,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implement lifecycle hooks: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
 * [-] **[Deferred to Phase 9] Hot-Reloadable Game Rules**:
   - Support reloading script files at runtime without restarting the server binary.
-* [ ] **Deterministic Script Execution**:
+* [x] **Deterministic Script Execution**:
   - Ensure Lua callbacks execute strictly at deterministic tick boundaries to preserve `.loci` replay parity.
 
 #### Português
@@ -174,7 +174,7 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implementar ganchos de ciclo de vida: `on_init`, `on_tick`, `on_player_join`, `on_player_leave`, `on_collision`.
 * [-] **[Adiado para a Fase 9] Regras de Jogo com Recarregamento Dinâmico (Hot-Reload)**:
   - Suportar recarregamento de scripts em tempo de execução sem reiniciar o executável do servidor.
-* [ ] **Execução Determinística de Scripts**:
+* [x] **Execução Determinística de Scripts**:
   - Garantir que callbacks Lua sejam executados estritamente nos limites determinísticos de ticks para preservar a paridade de replays `.loci`.
 
 ---

@@ -227,6 +227,6 @@ If a Lua script throws an unhandled runtime error (e.g., syntax error, nil refer
 
 - [x] **Milestone 6.1**: `mlua` dependency added; script environment loads with strict standard library exclusions.
 - [x] **Milestone 6.2**: `math.random` overridden with deterministic implementation tied to the instance seed.
-- [ ] **Milestone 6.3**: `DeterministicVector2` and Entity ID-based query APIs exposed safely to Lua via `UserData`.
+- [x] **Milestone 6.3**: `DeterministicVector2` and Entity ID-based query APIs exposed safely to Lua via `UserData`.
 - [ ] **Milestone 6.4**: `on_tick`, `on_init`, `on_player_join`, `on_player_leave`, `on_collision`, and trigger callbacks implemented.
 - [-] **Milestone 6.5**: [Deferred to Phase 9]

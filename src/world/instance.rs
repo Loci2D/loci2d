@@ -8,7 +8,7 @@ use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
     ClientIntent, EntityState, EntityType as ProtoEntityType, ReplayIntentEntry, WorldState,
 };
-use crate::scripting::ScriptEngine;
+use crate::scripting::{CommandBuffer, ScriptEngine};
 use fixed::types::I16F16;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
@@ -68,6 +68,10 @@ impl Instance {
     pub fn load_script(&mut self, script_content: &str) -> Result<(), String> {
         self.script_engine.load_script(script_content)?;
         
+        let mut cmd_buffer = CommandBuffer::new();
+        self.script_engine.on_init(self, &mut cmd_buffer).map_err(|e| e.to_string())?;
+        cmd_buffer.flush_and_apply(self);
+
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(script_content.as_bytes());
@@ -89,10 +93,13 @@ impl Instance {
         &mut self,
         addr: SocketAddr,
         intent: ClientIntent,
-    ) -> Option<ReplayIntentEntry> {
+    ) -> Result<Option<ReplayIntentEntry>, String> {
         use crate::network::packets::client_intent::Intent;
 
-        let inner_intent = intent.intent.as_ref()?;
+        let inner_intent = match intent.intent.as_ref() {
+            Some(i) => i,
+            None => return Ok(None),
+        };
 
         match inner_intent {
             // 1. Explicit Join Handshake
@@ -103,29 +110,45 @@ impl Instance {
                     join_intent.player_name.clone()
                 };
                 let entity_id = self.handle_join(addr, player_name.clone());
-                Some(ReplayIntentEntry {
+                
+                let mut cmd_buffer = CommandBuffer::new();
+                self.script_engine.on_player_join(self, entity_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
+                cmd_buffer.flush_and_apply(self);
+
+                Ok(Some(ReplayIntentEntry {
                     entity_id,
                     player_name,
                     intent: Some(intent),
-                })
+                }))
             }
 
             // 2. Explicit Disconnect
             Intent::Disconnect(disconnect_intent) => {
-                let session = self.sessions.get(&addr)?;
+                let session = match self.sessions.get(&addr) {
+                    Some(s) => s,
+                    None => return Ok(None),
+                };
                 let entity_id = session.entity_id;
                 let player_name = session.player_name.clone();
                 self.handle_disconnect(addr, &disconnect_intent.reason);
-                Some(ReplayIntentEntry {
+
+                let mut cmd_buffer = CommandBuffer::new();
+                self.script_engine.on_player_leave(self, entity_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
+                cmd_buffer.flush_and_apply(self);
+
+                Ok(Some(ReplayIntentEntry {
                     entity_id,
                     player_name,
                     intent: Some(intent),
-                })
+                }))
             }
 
             // 3. Movement Intent (requires active session)
             Intent::Move(move_intent) => {
-                let session = self.sessions.get_mut(&addr)?;
+                let session = match self.sessions.get_mut(&addr) {
+                    Some(s) => s,
+                    None => return Ok(None),
+                };
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let Some(entity) = self.entities.get_mut(&entity_id) {
@@ -137,16 +160,19 @@ impl Instance {
                         nav.clear();
                     }
                 }
-                Some(ReplayIntentEntry {
+                Ok(Some(ReplayIntentEntry {
                     entity_id,
                     player_name: String::new(),
                     intent: Some(intent),
-                })
+                }))
             }
 
             // 4. Target Movement Intent (Click-to-move navigation - ADR-0013, Milestone 5.4)
             Intent::MoveToPos(move_to_pos_intent) => {
-                let session = self.sessions.get_mut(&addr)?;
+                let session = match self.sessions.get_mut(&addr) {
+                    Some(s) => s,
+                    None => return Ok(None),
+                };
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let (Some(target), Some(entity)) = (
@@ -162,16 +188,19 @@ impl Instance {
                     });
                     nav.set_target(target_vec);
                 }
-                Some(ReplayIntentEntry {
+                Ok(Some(ReplayIntentEntry {
                     entity_id,
                     player_name: String::new(),
                     intent: Some(intent),
-                })
+                }))
             }
 
             // 5. Action Intent (requires active session)
             Intent::Action(action_intent) => {
-                let session = self.sessions.get_mut(&addr)?;
+                let session = match self.sessions.get_mut(&addr) {
+                    Some(s) => s,
+                    None => return Ok(None),
+                };
                 session.refresh_activity();
                 let entity_id = session.entity_id;
                 if let Some(entity) = self.entities.get_mut(&entity_id) {
@@ -180,23 +209,26 @@ impl Instance {
                         entity_id, entity.name, action_intent.ability_id
                     );
                 }
-                Some(ReplayIntentEntry {
+                Ok(Some(ReplayIntentEntry {
                     entity_id,
                     player_name: String::new(),
                     intent: Some(intent),
-                })
+                }))
             }
 
             // 6. Ping / Heartbeat Intent (requires active session)
             Intent::Ping(_) => {
-                let session = self.sessions.get_mut(&addr)?;
+                let session = match self.sessions.get_mut(&addr) {
+                    Some(s) => s,
+                    None => return Ok(None),
+                };
                 session.refresh_activity();
                 println!(
                     "[Intent] Entity {} ({}) sent ping",
                     session.entity_id, session.player_name
                 );
                 // Pings are heartbeats and do not mutate simulation state
-                None
+                Ok(None)
             }
         }
     }
@@ -260,7 +292,10 @@ impl Instance {
     /// static obstacles and dynamic entities, evaluate trigger sensor zones, clamp to map boundaries,
     /// and sweep for timed-out sessions.
     /// Returns a list of (entity_id, player_name) for any sessions that timed out during this tick.
-    pub fn tick(&mut self, tick_count: u64) -> Vec<(u64, String)> {
+    pub fn tick(&mut self, tick_count: u64) -> Result<Vec<(u64, String)>, String> {
+        let mut cmd_buffer = CommandBuffer::new();
+        self.script_engine.on_tick(self, tick_count, &mut cmd_buffer).map_err(|e| e.to_string())?;
+
         // 0. Steering & Destination Navigation Update (ADR-0013, Milestone 5.4)
         for entity in self.entities.values_mut() {
             if let Some(ref mut nav) = entity.navigation {
@@ -358,6 +393,8 @@ impl Instance {
                         &mut pos_a, &mut vel_a, &mut pos_b, &mut vel_b, &manifold,
                     );
 
+                    self.script_engine.on_collision(self, id_a, id_b, &mut cmd_buffer).map_err(|e| e.to_string())?;
+
                     if self.logging_enabled {
                         println!(
                             "Player {} collided at coordinates ({:.2}, {:.2})",
@@ -429,9 +466,18 @@ impl Instance {
                 .contains(&(trigger_id, entity_id));
             let is_present = current_overlaps.contains(&(trigger_id, entity_id));
             let event_type = match (was_present, is_present) {
-                (false, true) => TriggerEventType::Enter,
-                (true, true) => TriggerEventType::Stay,
-                (true, false) => TriggerEventType::Exit,
+                (false, true) => {
+                    self.script_engine.on_trigger_enter(self, entity_id, trigger_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
+                    TriggerEventType::Enter
+                },
+                (true, true) => {
+                    self.script_engine.on_trigger_stay(self, entity_id, trigger_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
+                    TriggerEventType::Stay
+                },
+                (true, false) => {
+                    self.script_engine.on_trigger_exit(self, entity_id, trigger_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
+                    TriggerEventType::Exit
+                },
                 (false, false) => unreachable!(),
             };
             self.trigger_events.push(TriggerEvent::new(
@@ -451,7 +497,10 @@ impl Instance {
         //     self.entities.len(),
         //     self.sessions.len()
         // );
-        timed_out
+        
+        cmd_buffer.flush_and_apply(self);
+        
+        Ok(timed_out)
     }
 
     /// Sweep and remove inactive sessions, returning the removed (entity_id, player_name) pairs.

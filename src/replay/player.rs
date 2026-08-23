@@ -160,7 +160,7 @@ impl ReplayPlayer {
             }
 
             // 2. Advance simulation physics
-            instance.tick(tick);
+            instance.tick(tick).unwrap();
 
             // 3. Check for state hash checkpoint verification
             if let Some(checkpoint) = checkpoints_by_tick.get(&tick) {
@@ -320,7 +320,7 @@ impl ReplayPlayer {
                 }
 
                 // 4. Advance deterministic simulation physics
-                instance.tick(tick_count);
+                instance.tick(tick_count).unwrap();
 
                 // 5. Generate WorldState snapshot
                 let world_state = instance.create_snapshot(tick_count);
@@ -434,12 +434,12 @@ mod tests {
         // Simulate instance ticks to record authentic checkpoints
         let mut sim_instance = Instance::new(1, 30, 10, 42);
         sim_instance.handle_join("127.0.0.1:1000".parse().unwrap(), "Alice".to_string());
-        sim_instance.tick(1);
+        sim_instance.tick(1).unwrap();
 
         sim_instance.entities.get_mut(&1).unwrap().velocity =
             crate::world::fixed_point::DeterministicVector2::from_f32(2.0, 1.0);
         for t in 2..=10 {
-            sim_instance.tick(t);
+            sim_instance.tick(t).unwrap();
         }
 
         recorder.maybe_record_checkpoint(10, &sim_instance);

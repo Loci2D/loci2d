@@ -45,7 +45,7 @@ fn main() {
     let iterations = 10_000u64;
     let start_time = Instant::now();
     for tick in 1..=iterations {
-        bench_instance.tick(tick);
+        bench_instance.tick(tick).unwrap();
     }
     let elapsed = start_time.elapsed();
     let total_micros = elapsed.as_micros() as f64;
@@ -113,7 +113,7 @@ fn main() {
                     player_name: name.clone(),
                 })),
             };
-            if let Some(entry) = sim_instance.apply_intent(addr, join_intent) {
+            if let Ok(Some(entry)) = sim_instance.apply_intent(addr, join_intent) {
                 tick_entries.push(entry);
             }
         }
@@ -144,7 +144,7 @@ fn main() {
                     };
 
                     let addr: SocketAddr = format!("127.0.0.1:{}", 20000 + pid).parse().unwrap();
-                    if let Some(entry) = sim_instance.apply_intent(addr, client_intent_payload) {
+                    if let Ok(Some(entry)) = sim_instance.apply_intent(addr, client_intent_payload) {
                         tick_entries.push(entry);
                     }
                 }
@@ -152,7 +152,7 @@ fn main() {
         }
 
         recorder.record_tick(tick, tick_entries);
-        sim_instance.tick(tick);
+        sim_instance.tick(tick).unwrap();
         recorder.maybe_record_checkpoint(tick, &sim_instance);
     }
 
