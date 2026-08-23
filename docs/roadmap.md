@@ -187,49 +187,19 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
 
 #### English
 > [!NOTE]
-> **Strategic Pause (v0.6.x Consolidation):** Once Phase 6 is reached, `loci2d` achieves a fully playable, deterministic LAN multiplayer stack. New feature development (such as multi-instance routing in Phase 7) will be temporarily delayed to validate the engine in real-world scenarios, gather playtester feedback from students, and refine the public API.
-> See [ADR 0015](adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md) for details on Phase 6.5 governance and dedicated sub-roadmap structure.
-
-* [ ] **Engine Architecture: State vs. Scripting Separation**:
-  - Strictly decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
-  - Implement a safe command/intent dispatch layer for Lua scripts to prevent unauthorized state corruption and ensure deterministic replay integrity.
-* [ ] **Lightweight Client SDKs & Wrappers**:
-  - Build ergonomic client modules/addons for **Godot 4** (`LociClient.gd`), **Love2D** (`loci_client.lua`), and **Python** to eliminate boilerplate UDP socket/Protobuf parsing for end users.
-  - Expose intuitive signals/callbacks for state updates (`on_entity_updated`, `on_match_event`).
-* [ ] **User-Friendly Documentation & Starter Templates**:
-  - Author a "15-Minute First Multiplayer Game" quickstart tutorial (e.g., 2D Arena/Tag game).
-  - Create a comprehensive, copy-paste-ready Lua scripting API reference guide.
-* [ ] **Update examples with the new SDKs**:
-  - Update **CLI** example
-  - Update **Love2D** example
-  - Update **Godot** example
-  - Update **Python** example
-* [ ] **Local LAN Playtesting & Feedback Collection**:
-  - Run multi-device playtest sessions with high school and university students to identify UX/DX friction points and API ergonomics issues.
-  - Measure tick stability, desync resilience, and packet latency under real local network conditions.
+> **Strategic Pause (v0.6.x Consolidation):** Once Phase 6 is reached, `loci2d` achieves a fully playable, deterministic LAN multiplayer stack. New feature development will be temporarily delayed to validate the engine, gather playtester feedback, and refine the public API.
+> 
+> Due to the heterogeneous nature of this milestone (spanning client SDKs, documentation, and engine architecture), the detailed roadmap and sub-specifications for Phase 6.5 have been moved to a dedicated document.
+> 
+> **[View the full Phase 6.5 Roadmap here](phase6.5-roadmap.md)** (See [ADR 0015](adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md) for details).
 
 #### Português
-> [!NOTE]
-> **Pausa Estratégica (Consolidação da v0.6.x):** Ao atingir a Fase 6, o `loci2d` alcança uma pilha multiplayer em LAN totalmente jogável e determinística. O desenvolvimento de novas funcionalidades (como o roteamento de múltiplas instâncias da Fase 7) será pausado temporariamente para validar o motor em cenários reais, coletar feedback de estudantes e refinar a API pública.
-> Veja a [ADR 0015](adr/pt/0015-estrutura-roadmap-dedicado-fase6.5-validacao-dx.md) para detalhes sobre a governança e estrutura de sub-roadmap dedicado da Fase 6.5.
 
-* [ ] **Arquitetura da Engine: Separação de Estado vs. Scripting**:
-  - Desacoplar estritamente o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
-  - Implementar uma camada segura de envio de comandos/intenções para scripts Lua, evitando corrupção direta de estado e preservando a integridade dos replays.
-* [ ] **SDKs Leves & Wrappers para Clientes**:
-  - Criar módulos/addons ergonômicos para **Godot 4** (`LociClient.gd`), **Love2D** (`loci_client.lua`) e **Python**, eliminando o código boilerplate de sockets UDP e decodificação manual de Protobuf para o usuário final.
-  - Expor sinais/callbacks intuitivos para atualizações de estado (`on_entity_updated`, `on_match_event`).
-* [ ] **Documentação Acessível & Modelos Iniciais (Starter Templates)**:
-  - Criar um tutorial prático "Seu Primeiro Jogo Multiplayer em 15 Minutos" (ex: Arena 2D / Pega-Pega).
-  - Criar uma referência completa e didática da API de scripting em Lua com exemplos prontos para uso.
-* [ ] **Atualizar exemplos com os novos SDKs**:
-  - Adicionar exemplo de **CLI**
-  - Adicionar exemplo de **Love2D**
-  - Adicionar exemplo de **Godot**
-  - Adicionar exemplo de **Python**
-* [ ] **Playtesting em LAN Local & Coleta de Feedback**:
-  - Realizar sessões de testes com múltiplos dispositivos físicos com estudantes de ensino médio e graduação para identificar pontos de atrito de UX/DX e ergonomia da API.
-  - Medir a estabilidade dos ticks, resiliência a dessincronização e latência de pacotes sob condições reais de rede local.
+> **Pausa Estratégica (Consolidação da v0.6.x):** Ao atingir a Fase 6, o `loci2d` alcança uma pilha multiplayer em LAN totalmente jogável e determinística. O desenvolvimento de novas funcionalidades será pausado temporariamente para validar o motor, coletar feedback e refinar a API pública.
+> 
+> Devido à natureza heterogênea deste marco (abrangendo SDKs de clientes, documentação e arquitetura da engine), o roadmap detalhado e as sub-especificações para a Fase 6.5 foram movidos para um documento dedicado.
+> 
+> **[Veja o Roadmap completo da Fase 6.5 aqui](phase6.5-roadmap.md)** (Veja a [ADR 0015](adr/pt/0015-estrutura-roadmap-dedicado-fase6.5-validacao-dx.md) para detalhes).
 ---
 
 ### Phase 7: Multi-Instance & Room Management
@@ -269,6 +239,8 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implement secure handshake validation, session tokens, and optional external auth webhooks.
 * [ ] **Intent Validation & Anti-Tamper**:
   - Enforce server-side intent rate-limiting, packet sequence integrity, and velocity/teleportation sanity checks.
+* [ ] **Lua Sandbox Security Hardening**:
+  - Implement OOM protection (memory limits per instance), disable dangerous base globals (`dofile`, `load`, `getmetatable`), and establish CI penetration tests to prevent Sandbox escapes.
 * [ ] **Production Observability & Deployment**:
   - Structured logging, Prometheus metrics, and production containerization.
 
@@ -277,6 +249,8 @@ Este documento descreve as fases de desenvolvimento, metas e marcos técnicos pa
   - Implementar validação de handshake seguro, tokens de sessão e webhooks opcionais de autenticação externa.
 * [ ] **Validação de Intenções & Anti-Adulteração**:
   - Aplicar limitação de taxa (rate-limiting) de intenções, integridade de sequência de pacotes e checagens de sanidade de velocidade/teletransporte.
+* [ ] **Blindagem de Segurança do Sandbox Lua**:
+  - Implementar proteção OOM (limites de memória por instância), desabilitar globais perigosas nativas (`dofile`, `load`, `getmetatable`) e estabelecer testes de penetração na CI para evitar escapes do Sandbox.
 * [ ] **Observabilidade de Produção & Implantação**:
   - Logs estruturados, métricas Prometheus e conteinerização para produção.
 
