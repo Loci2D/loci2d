@@ -13,7 +13,7 @@ pub fn setup_base_api(lua: &Lua) -> LuaResult<()> {
 
     // Loci.Vector2(x, y)
     let vector2_fn = lua.create_function(|_, (x, y): (f64, f64)| {
-        Ok(DeterministicVector2::from_f32(x as f32, y as f32))
+        Ok(DeterministicVector2::from_f64(x, y))
     })?;
     loci_table.set("Vector2", vector2_fn)?;
 
@@ -93,13 +93,6 @@ where
         loci_table.set("Commands", commands_table)?;
 
         // Execute the user's closure
-        let result = f();
-
-        // Clean up scoped functions so they can't be used outside this execution
-        loci_table.set("get_entity_by_name", mlua::Value::Nil)?;
-        loci_table.set("get_entity_position", mlua::Value::Nil)?;
-        loci_table.set("Commands", mlua::Value::Nil)?;
-
-        result
+        f()
     })
 }

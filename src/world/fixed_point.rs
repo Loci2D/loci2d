@@ -61,6 +61,24 @@ impl DeterministicVector2 {
         }
     }
 
+    /// Quantizes an incoming double into fixed-point representation directly.
+    #[inline]
+    pub fn from_f64(x: f64, y: f64) -> Self {
+        #[inline]
+        fn quantize(val: f64) -> I16F16 {
+            if val.is_nan() {
+                I16F16::ZERO
+            } else {
+                I16F16::saturating_from_num(val)
+            }
+        }
+
+        Self {
+            x: quantize(x),
+            y: quantize(y),
+        }
+    }
+
     /// Converts fixed-point vector to float representation for Protobuf snapshots / client rendering.
     #[inline]
     pub fn to_f32(self) -> (f32, f32) {

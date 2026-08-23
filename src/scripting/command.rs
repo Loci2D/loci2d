@@ -30,6 +30,7 @@ impl CommandBuffer {
                 Command::SpawnEntity { blueprint, position } => {
                     // For Phase 6.3, we'll just log this intent as a demonstration.
                     // True blueprint handling and dynamic entity spawning is part of Phase 7 content definitions.
+                    // Returning a pre-allocated EntityID for DX is deferred to Phase 6.4/7 (see ADR-0014).
                     if instance.logging_enabled {
                         println!("[CommandBuffer] Spawning entity from blueprint '{}' at ({}, {})", 
                                  blueprint, 

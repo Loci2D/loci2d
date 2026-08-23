@@ -24,11 +24,7 @@ impl fmt::Debug for ScriptEngine {
     }
 }
 
-impl Default for ScriptEngine {
-    fn default() -> Self {
-        Self::new(0).expect("Failed to initialize ScriptEngine")
-    }
-}
+
 
 impl ScriptEngine {
     /// Creates a new sandboxed `ScriptEngine`.
@@ -122,6 +118,7 @@ impl ScriptEngine {
             triggers.every_nth_instruction = Some(100);
 
             self.lua.set_hook(triggers, move |_, _| {
+                // Single-threaded VM; Relaxed ordering is sufficient.
                 let current = counter.fetch_add(100, Ordering::Relaxed);
                 if current >= max_inst {
                     Err(LuaError::RuntimeError(format!(
@@ -140,6 +137,8 @@ impl ScriptEngine {
     }
 
     /// Loads and evaluates a script from a raw string.
+    /// NOTE: This does not reset Lua globals. Should be called only once at Instance init.
+    /// Full VM resetting for hot-reloading is deferred to Phase 6.4/9.
     pub fn load_script(&self, script: &str) -> Result<(), String> {
         self.reset_instruction_counter();
         self.lua
