@@ -9,10 +9,13 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 
 ---
 
-## 6.5.1: Architecture & Determinism Validation
-## 6.5.1: Validação de Arquitetura & Determinismo
+## 6.5.1: Architecture, Match Lifecycle & Determinism Validation
+## 6.5.1: Arquitetura, Ciclo de Vida da Partida & Determinismo
 
 ### English
+* [ ] **Match Lifecycle State Machine:**
+  - Introduce a `Paused`/`Running` state to the server instance.
+  - Expose `loci.start_match()` and `loci.end_match()` to Lua scripts so developers can dictate when the game loop actually begins advancing ticks based on player connections or readiness.
 * [ ] **Strict State vs. Scripting Separation:**
   - Decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
 * [ ] **Safe Dispatch Layer:**
@@ -21,6 +24,9 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Establish a rigorous cross-platform continuous integration (CI) test suite to mathematically prove `I16F16` fixed-point determinism across ARM64 and x86_64 architectures.
 
 ### Português
+* [ ] **Máquina de Estado do Ciclo de Vida da Partida:**
+  - Introduzir um estado de `Pausado`/`Em Execução` para a instância do servidor.
+  - Expor `loci.start_match()` e `loci.end_match()` para os scripts Lua, permitindo que os desenvolvedores ditem quando o loop do jogo realmente começa a avançar os ticks com base nas conexões ou prontidão dos jogadores.
 * [ ] **Separação Estrita entre Estado e Scripting:**
   - Desacoplar o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
 * [ ] **Camada Segura de Despacho:**
