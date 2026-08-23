@@ -6,7 +6,25 @@ pub enum Command {
         blueprint: String,
         position: DeterministicVector2,
     },
-    // Future commands could go here
+    DestroyEntity {
+        entity_id: u64,
+    },
+    SetPosition {
+        entity_id: u64,
+        position: DeterministicVector2,
+    },
+    SetVelocity {
+        entity_id: u64,
+        velocity: DeterministicVector2,
+    },
+    ApplyDamage {
+        entity_id: u64,
+        amount: i32,
+    },
+    SendEvent {
+        event_name: String,
+        data: String,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -28,14 +46,42 @@ impl CommandBuffer {
         for command in self.commands.drain(..) {
             match command {
                 Command::SpawnEntity { blueprint, position } => {
-                    // For Phase 6.3, we'll just log this intent as a demonstration.
-                    // True blueprint handling and dynamic entity spawning is part of Phase 7 content definitions.
-                    // Returning a pre-allocated EntityID for DX is deferred to Phase 6.4/7 (see ADR-0014).
                     if instance.logging_enabled {
-                        println!("[CommandBuffer] Spawning entity from blueprint '{}' at ({}, {})", 
-                                 blueprint, 
-                                 position.x.to_num::<f64>(), 
-                                 position.y.to_num::<f64>());
+                        println!(
+                            "[CommandBuffer] Spawning entity from blueprint '{}' at ({}, {})",
+                            blueprint,
+                            position.x.to_num::<f64>(),
+                            position.y.to_num::<f64>()
+                        );
+                    }
+                }
+                Command::DestroyEntity { entity_id } => {
+                    instance.entities.remove(&entity_id);
+                }
+                Command::SetPosition { entity_id, position } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        entity.position = position;
+                    }
+                }
+                Command::SetVelocity { entity_id, velocity } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        entity.velocity = velocity;
+                    }
+                }
+                Command::ApplyDamage { entity_id, amount } => {
+                    if instance.logging_enabled {
+                        println!(
+                            "[CommandBuffer] Entity {} received {} damage",
+                            entity_id, amount
+                        );
+                    }
+                }
+                Command::SendEvent { event_name, data } => {
+                    if instance.logging_enabled {
+                        println!(
+                            "[CommandBuffer] Broadcasting event '{}' with data '{}'",
+                            event_name, data
+                        );
                     }
                 }
             }

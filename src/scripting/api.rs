@@ -90,6 +90,57 @@ where
         })?;
         commands_table.set("spawn_entity", spawn_entity)?;
 
+        let cmd_buf_destroy = Rc::clone(&cmd_buffer_rc);
+        let destroy_entity = scope.create_function(move |_, id: u64| {
+            cmd_buf_destroy.borrow_mut().push(Command::DestroyEntity {
+                entity_id: id,
+            });
+            Ok(())
+        })?;
+        commands_table.set("destroy_entity", destroy_entity)?;
+
+        let cmd_buf_set_pos = Rc::clone(&cmd_buffer_rc);
+        let set_position = scope.create_function(move |_, (id, position_ud): (u64, mlua::AnyUserData)| {
+            let position = *position_ud.borrow::<DeterministicVector2>()?;
+            cmd_buf_set_pos.borrow_mut().push(Command::SetPosition {
+                entity_id: id,
+                position,
+            });
+            Ok(())
+        })?;
+        commands_table.set("set_position", set_position)?;
+
+        let cmd_buf_set_vel = Rc::clone(&cmd_buffer_rc);
+        let set_velocity = scope.create_function(move |_, (id, velocity_ud): (u64, mlua::AnyUserData)| {
+            let velocity = *velocity_ud.borrow::<DeterministicVector2>()?;
+            cmd_buf_set_vel.borrow_mut().push(Command::SetVelocity {
+                entity_id: id,
+                velocity,
+            });
+            Ok(())
+        })?;
+        commands_table.set("set_velocity", set_velocity)?;
+
+        let cmd_buf_damage = Rc::clone(&cmd_buffer_rc);
+        let apply_damage = scope.create_function(move |_, (id, amount): (u64, i32)| {
+            cmd_buf_damage.borrow_mut().push(Command::ApplyDamage {
+                entity_id: id,
+                amount,
+            });
+            Ok(())
+        })?;
+        commands_table.set("apply_damage", apply_damage)?;
+
+        let cmd_buf_event = Rc::clone(&cmd_buffer_rc);
+        let send_event = scope.create_function(move |_, (event_name, data): (String, String)| {
+            cmd_buf_event.borrow_mut().push(Command::SendEvent {
+                event_name,
+                data,
+            });
+            Ok(())
+        })?;
+        commands_table.set("send_event", send_event)?;
+
         loci_table.set("Commands", commands_table)?;
 
         // Execute the user's closure

@@ -87,3 +87,36 @@ fn test_lua_script_hash() {
     
     assert_ne!(hash1, hash2, "Different scripts must have different hashes");
 }
+
+#[test]
+fn test_lua_deterministic_iteration() {
+    let mut inst = Instance::new(1, 30, 10, 42);
+    
+    let script = r#"
+        local t = {
+            z_last = 100,
+            a_first = 1,
+            m_middle = 50,
+            ["1_number"] = 999,
+        }
+
+        local results = {}
+        for k, v in dpairs(t) do
+            table.insert(results, k .. ":" .. tostring(v))
+        end
+
+        function get_result()
+            return table.concat(results, ",")
+        end
+    "#;
+
+    inst.load_script(script).unwrap();
+    let globals = inst.script_engine.lua().globals();
+    let get_result: mlua::Function = globals.get("get_result").unwrap();
+    
+    let output: String = get_result.call(()).unwrap();
+    
+    // We expect lexicographical sorting of keys:
+    // "1_number" < "a_first" < "m_middle" < "z_last"
+    assert_eq!(output, "1_number:999,a_first:1,m_middle:50,z_last:100");
+}

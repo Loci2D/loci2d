@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use loci2d::game_loop::tick::GameLoop;
 use loci2d::network::{
     ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, MoveToPositionIntent,

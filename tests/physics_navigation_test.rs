@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use fixed::types::I16F16;
 use loci2d::network::packets::{
     ClientIntent, MoveIntent, MoveToPositionIntent, Vector2, client_intent,

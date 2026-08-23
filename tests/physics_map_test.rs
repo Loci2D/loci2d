@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use fixed::types::I16F16;
 use loci2d::world::entity::{Entity, EntityType};
 use loci2d::world::fixed_point::DeterministicVector2;

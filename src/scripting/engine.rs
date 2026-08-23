@@ -58,8 +58,49 @@ impl ScriptEngine {
     fn setup_determinism(&self, seed: u64) -> LuaResult<()> {
         let globals = self.lua.globals();
 
-        // 1. Remove `pairs` to force users to use `ipairs` or deterministic iteration
+        // 1. Remove `pairs` and introduce `dpairs` (deterministic pairs)
         globals.set("pairs", mlua::Value::Nil)?;
+
+        let dpairs_fn = self.lua.create_function(|lua, table: mlua::Table| {
+            let mut keys = Vec::new();
+            for pair in table.pairs::<mlua::Value, mlua::Value>() {
+                let (k, _) = pair?;
+                keys.push(k);
+            }
+
+            keys.sort_by(|a, b| {
+                let a_str = match a {
+                    mlua::Value::String(s) => s.to_string_lossy(),
+                    mlua::Value::Integer(i) => i.to_string(),
+                    mlua::Value::Number(n) => n.to_string(),
+                    mlua::Value::Boolean(b) => b.to_string(),
+                    _ => String::new(),
+                };
+                let b_str = match b {
+                    mlua::Value::String(s) => s.to_string_lossy(),
+                    mlua::Value::Integer(i) => i.to_string(),
+                    mlua::Value::Number(n) => n.to_string(),
+                    mlua::Value::Boolean(b) => b.to_string(),
+                    _ => String::new(),
+                };
+                a_str.cmp(&b_str)
+            });
+
+            let mut current_idx = 0;
+            let iter = lua.create_function_mut(move |_, ()| {
+                if current_idx < keys.len() {
+                    let k = keys[current_idx].clone();
+                    current_idx += 1;
+                    let v: mlua::Value = table.get(k.clone())?;
+                    Ok((k, v))
+                } else {
+                    Ok((mlua::Value::Nil, mlua::Value::Nil))
+                }
+            })?;
+
+            Ok(iter)
+        })?;
+        globals.set("dpairs", dpairs_fn)?;
 
         // 2. Overwrite `math.random` with a deterministic LCG PRNG
         let math_table: mlua::Table = globals.get("math")?;

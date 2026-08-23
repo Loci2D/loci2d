@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use loci2d::network::{
     ClientIntent, DisconnectIntent, GamePacket, JoinIntent, MoveIntent, PingIntent,
     ReplayIntentEntry, ServerPacket, Vector2, client_intent, run_server, server_packet,

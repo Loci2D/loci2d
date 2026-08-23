@@ -1,13 +1,10 @@
 use super::entity::{Entity, EntityType};
-use super::physics::{
-    ColliderShape, DeterministicCircle, MapBounds, NavigationComponent, StaticObstacle,
-    TriggerEvent, TriggerEventType, intersect_shapes, resolve_dynamic_collision,
-    resolve_static_collision, update_entity_navigation,
-};
+use super::physics::{MapBounds, StaticObstacle, TriggerEvent};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
     ClientIntent, EntityState, EntityType as ProtoEntityType, ReplayIntentEntry, WorldState,
 };
+use crate::network::packets::client_intent::Intent;
 use crate::scripting::{CommandBuffer, ScriptEngine};
 use fixed::types::I16F16;
 use std::collections::{BTreeMap, BTreeSet};
@@ -94,15 +91,13 @@ impl Instance {
         addr: SocketAddr,
         intent: ClientIntent,
     ) -> Result<Option<ReplayIntentEntry>, String> {
-        use crate::network::packets::client_intent::Intent;
 
         let inner_intent = match intent.intent.as_ref() {
             Some(i) => i,
             None => return Ok(None),
         };
 
-        match inner_intent {
-            // 1. Explicit Join Handshake
+        let (entity_id, player_name) = match inner_intent {
             Intent::Join(join_intent) => {
                 let player_name = if join_intent.player_name.trim().is_empty() {
                     format!("Player_{}", self.next_entity_id)
@@ -110,19 +105,8 @@ impl Instance {
                     join_intent.player_name.clone()
                 };
                 let entity_id = self.handle_join(addr, player_name.clone());
-                
-                let mut cmd_buffer = CommandBuffer::new();
-                self.script_engine.on_player_join(self, entity_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
-                cmd_buffer.flush_and_apply(self);
-
-                Ok(Some(ReplayIntentEntry {
-                    entity_id,
-                    player_name,
-                    intent: Some(intent),
-                }))
+                (entity_id, player_name)
             }
-
-            // 2. Explicit Disconnect
             Intent::Disconnect(disconnect_intent) => {
                 let session = match self.sessions.get(&addr) {
                     Some(s) => s,
@@ -131,106 +115,36 @@ impl Instance {
                 let entity_id = session.entity_id;
                 let player_name = session.player_name.clone();
                 self.handle_disconnect(addr, &disconnect_intent.reason);
-
-                let mut cmd_buffer = CommandBuffer::new();
-                self.script_engine.on_player_leave(self, entity_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
-                cmd_buffer.flush_and_apply(self);
-
-                Ok(Some(ReplayIntentEntry {
-                    entity_id,
-                    player_name,
-                    intent: Some(intent),
-                }))
+                (entity_id, player_name)
             }
-
-            // 3. Movement Intent (requires active session)
-            Intent::Move(move_intent) => {
+            _ => {
                 let session = match self.sessions.get_mut(&addr) {
                     Some(s) => s,
                     None => return Ok(None),
                 };
                 session.refresh_activity();
-                let entity_id = session.entity_id;
-                if let Some(entity) = self.entities.get_mut(&entity_id) {
-                    if let Some(dir) = move_intent.direction {
-                        entity.velocity = DeterministicVector2::from_proto(&dir);
-                    }
-                    // Direct Move intent preempts / cancels active navigation (ADR-0013)
-                    if let Some(ref mut nav) = entity.navigation {
-                        nav.clear();
-                    }
-                }
-                Ok(Some(ReplayIntentEntry {
-                    entity_id,
-                    player_name: String::new(),
-                    intent: Some(intent),
-                }))
+                (session.entity_id, String::new())
             }
+        };
 
-            // 4. Target Movement Intent (Click-to-move navigation - ADR-0013, Milestone 5.4)
-            Intent::MoveToPos(move_to_pos_intent) => {
-                let session = match self.sessions.get_mut(&addr) {
-                    Some(s) => s,
-                    None => return Ok(None),
-                };
-                session.refresh_activity();
-                let entity_id = session.entity_id;
-                if let (Some(target), Some(entity)) = (
-                    move_to_pos_intent.target_position,
-                    self.entities.get_mut(&entity_id),
-                ) {
-                    let target_vec = DeterministicVector2::new(
-                        I16F16::from_bits(target.x_bits),
-                        I16F16::from_bits(target.y_bits),
-                    );
-                    let nav = entity.navigation.get_or_insert_with(|| {
-                        NavigationComponent::new(I16F16::from_num(1), I16F16::from_num(1))
-                    });
-                    nav.set_target(target_vec);
-                }
-                Ok(Some(ReplayIntentEntry {
-                    entity_id,
-                    player_name: String::new(),
-                    intent: Some(intent),
-                }))
-            }
+        crate::world::intent_handler::apply_resolved_intent(
+            self,
+            entity_id,
+            player_name.clone(),
+            inner_intent,
+        )?;
 
-            // 5. Action Intent (requires active session)
-            Intent::Action(action_intent) => {
-                let session = match self.sessions.get_mut(&addr) {
-                    Some(s) => s,
-                    None => return Ok(None),
-                };
-                session.refresh_activity();
-                let entity_id = session.entity_id;
-                if let Some(entity) = self.entities.get_mut(&entity_id) {
-                    println!(
-                        "[Intent] Entity {} ({}) executed action {}",
-                        entity_id, entity.name, action_intent.ability_id
-                    );
-                }
-                Ok(Some(ReplayIntentEntry {
-                    entity_id,
-                    player_name: String::new(),
-                    intent: Some(intent),
-                }))
-            }
+        let intent_for_replay = if matches!(inner_intent, Intent::Ping(_)) {
+            None
+        } else {
+            Some(ReplayIntentEntry {
+                entity_id,
+                player_name,
+                intent: Some(intent),
+            })
+        };
 
-            // 6. Ping / Heartbeat Intent (requires active session)
-            Intent::Ping(_) => {
-                let session = match self.sessions.get_mut(&addr) {
-                    Some(s) => s,
-                    None => return Ok(None),
-                };
-                session.refresh_activity();
-                println!(
-                    "[Intent] Entity {} ({}) sent ping",
-                    session.entity_id, session.player_name
-                );
-                // Pings are heartbeats and do not mutate simulation state
-                Ok(None)
-            }
-        }
+        Ok(intent_for_replay)
     }
 
     /// Explicit client join
@@ -293,214 +207,7 @@ impl Instance {
     /// and sweep for timed-out sessions.
     /// Returns a list of (entity_id, player_name) for any sessions that timed out during this tick.
     pub fn tick(&mut self, tick_count: u64) -> Result<Vec<(u64, String)>, String> {
-        let mut cmd_buffer = CommandBuffer::new();
-        self.script_engine.on_tick(self, tick_count, &mut cmd_buffer).map_err(|e| e.to_string())?;
-
-        // 0. Steering & Destination Navigation Update (ADR-0013, Milestone 5.4)
-        for entity in self.entities.values_mut() {
-            if let Some(ref mut nav) = entity.navigation {
-                update_entity_navigation(entity.position, &mut entity.velocity, nav);
-            }
-        }
-
-        // 1. Velocity Integration (Candidate Next Position) & Initial Map Bounds Clamping
-        for entity in self.entities.values_mut() {
-            let old_pos = entity.position;
-            entity.position = entity.position.saturating_add(entity.velocity);
-
-            // Milestone 5.2: Map Boundary Constraint
-            entity.position = match entity.current_collider() {
-                Some(shape) => self.map_bounds.clamp_shape(&shape),
-                None => self.map_bounds.clamp_point(entity.position),
-            };
-
-            if self.logging_enabled && entity.position != old_pos {
-                println!(
-                    "Player {} moved to ({:.2}, {:.2})",
-                    entity.name,
-                    entity.position.x.to_num::<f32>(),
-                    entity.position.y.to_num::<f32>()
-                );
-            }
-        }
-
-        // 2. Static Solid Obstacle Collision Resolution (100% Pushback & Wall Sliding)
-        // Evaluated in strict ascending obstacle.id order (ADR-0012)
-        for obstacle in self.static_obstacles.values() {
-            if !obstacle.is_solid {
-                continue;
-            }
-            for entity in self.entities.values_mut() {
-                if !entity.collision_filter.can_collide(&obstacle.filter) {
-                    continue;
-                }
-                let Some(entity_shape) = entity.current_collider() else {
-                    continue;
-                };
-                let manifold = intersect_shapes(&entity_shape, &obstacle.shape);
-                if manifold.is_colliding {
-                    resolve_static_collision(&mut entity.position, &mut entity.velocity, &manifold);
-                    if self.logging_enabled {
-                        println!(
-                            "Player {} collided at coordinates ({:.2}, {:.2})",
-                            entity.name,
-                            entity.position.x.to_num::<f32>(),
-                            entity.position.y.to_num::<f32>()
-                        );
-                    }
-                    // Re-clamp to map bounds to ensure pushback didn't push outside arena
-                    entity.position = match entity.current_collider() {
-                        Some(shape) => self.map_bounds.clamp_shape(&shape),
-                        None => self.map_bounds.clamp_point(entity.position),
-                    };
-                }
-            }
-        }
-
-        // 3. Dynamic Entity-vs-Entity Collision Resolution (50/50 Split Pushback)
-        // Evaluated in strict ascending (entity_a.id, entity_b.id) pair order
-        let entity_ids: Vec<u64> = self.entities.keys().copied().collect();
-        for i in 0..entity_ids.len() {
-            for j in (i + 1)..entity_ids.len() {
-                let id_a = entity_ids[i];
-                let id_b = entity_ids[j];
-
-                let can_collide = {
-                    let entity_a = &self.entities[&id_a];
-                    let entity_b = &self.entities[&id_b];
-                    entity_a
-                        .collision_filter
-                        .can_collide(&entity_b.collision_filter)
-                        && entity_a.collider.is_some()
-                        && entity_b.collider.is_some()
-                };
-
-                if !can_collide {
-                    continue;
-                }
-
-                let shape_a = self.entities[&id_a].current_collider().unwrap();
-                let shape_b = self.entities[&id_b].current_collider().unwrap();
-                let manifold = intersect_shapes(&shape_a, &shape_b);
-
-                if manifold.is_colliding {
-                    let mut pos_a = self.entities[&id_a].position;
-                    let mut vel_a = self.entities[&id_a].velocity;
-                    let mut pos_b = self.entities[&id_b].position;
-                    let mut vel_b = self.entities[&id_b].velocity;
-
-                    resolve_dynamic_collision(
-                        &mut pos_a, &mut vel_a, &mut pos_b, &mut vel_b, &manifold,
-                    );
-
-                    self.script_engine.on_collision(self, id_a, id_b, &mut cmd_buffer).map_err(|e| e.to_string())?;
-
-                    if self.logging_enabled {
-                        println!(
-                            "Player {} collided at coordinates ({:.2}, {:.2})",
-                            self.entities[&id_a].name,
-                            pos_a.x.to_num::<f32>(),
-                            pos_a.y.to_num::<f32>()
-                        );
-                        println!(
-                            "Player {} collided at coordinates ({:.2}, {:.2})",
-                            self.entities[&id_b].name,
-                            pos_b.x.to_num::<f32>(),
-                            pos_b.y.to_num::<f32>()
-                        );
-                    }
-
-                    let entity_a = self.entities.get_mut(&id_a).unwrap();
-                    entity_a.position = pos_a;
-                    entity_a.velocity = vel_a;
-                    if let Some(shape) = entity_a.current_collider() {
-                        entity_a.position = self.map_bounds.clamp_shape(&shape);
-                    }
-
-                    let entity_b = self.entities.get_mut(&id_b).unwrap();
-                    entity_b.position = pos_b;
-                    entity_b.velocity = vel_b;
-                    if let Some(shape) = entity_b.current_collider() {
-                        entity_b.position = self.map_bounds.clamp_shape(&shape);
-                    }
-                }
-            }
-        }
-
-        // 4. Trigger / Sensor Zone Overlap Evaluation & Lifecycle Events
-        self.trigger_events.clear();
-        let mut current_overlaps = BTreeSet::new();
-
-        for (&trigger_id, obstacle) in &self.static_obstacles {
-            if obstacle.is_solid {
-                continue;
-            }
-            for (&entity_id, entity) in &self.entities {
-                if !obstacle.filter.can_collide(&entity.collision_filter) {
-                    continue;
-                }
-                let entity_shape = match entity.current_collider() {
-                    Some(s) => s,
-                    None => ColliderShape::Circle(DeterministicCircle::new(
-                        entity.position,
-                        I16F16::ZERO,
-                    )),
-                };
-                let manifold = intersect_shapes(&entity_shape, &obstacle.shape);
-                if manifold.is_colliding {
-                    current_overlaps.insert((trigger_id, entity_id));
-                }
-            }
-        }
-
-        // Generate Enter, Stay, Exit events in strictly sorted (trigger_id, entity_id) order
-        let all_pairs: BTreeSet<(u64, u64)> = self
-            .previous_trigger_overlaps
-            .union(&current_overlaps)
-            .copied()
-            .collect();
-
-        for (trigger_id, entity_id) in all_pairs {
-            let was_present = self
-                .previous_trigger_overlaps
-                .contains(&(trigger_id, entity_id));
-            let is_present = current_overlaps.contains(&(trigger_id, entity_id));
-            let event_type = match (was_present, is_present) {
-                (false, true) => {
-                    self.script_engine.on_trigger_enter(self, entity_id, trigger_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
-                    TriggerEventType::Enter
-                },
-                (true, true) => {
-                    self.script_engine.on_trigger_stay(self, entity_id, trigger_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
-                    TriggerEventType::Stay
-                },
-                (true, false) => {
-                    self.script_engine.on_trigger_exit(self, entity_id, trigger_id, &mut cmd_buffer).map_err(|e| e.to_string())?;
-                    TriggerEventType::Exit
-                },
-                (false, false) => unreachable!(),
-            };
-            self.trigger_events.push(TriggerEvent::new(
-                trigger_id, entity_id, event_type, tick_count,
-            ));
-        }
-
-        self.previous_trigger_overlaps = current_overlaps.clone();
-        self.active_trigger_overlaps = current_overlaps;
-
-        // 5. Check for timed out clients
-        let timed_out = self.check_timeouts();
-
-        // println!(
-        //     "[Tick {}] {} active entities, {} active sessions",
-        //     tick_count,
-        //     self.entities.len(),
-        //     self.sessions.len()
-        // );
-        
-        cmd_buffer.flush_and_apply(self);
-        
-        Ok(timed_out)
+        crate::world::simulation::tick(self, tick_count)
     }
 
     /// Sweep and remove inactive sessions, returning the removed (entity_id, player_name) pairs.
@@ -601,7 +308,6 @@ impl Instance {
 
     /// Applies a recorded replay intent entry directly by entity_id without requiring network sockets.
     pub fn apply_replay_entry(&mut self, entry: &ReplayIntentEntry) {
-        use crate::network::packets::client_intent::Intent;
 
         let Some(ClientIntent {
             intent: Some(ref inner_intent),
@@ -610,59 +316,13 @@ impl Instance {
             return;
         };
 
-        match inner_intent {
-            Intent::Join(join_intent) => {
-                let player_name = if join_intent.player_name.trim().is_empty() {
-                    entry.player_name.clone()
-                } else {
-                    join_intent.player_name.clone()
-                };
-                if let Some(existing) = self.entities.get_mut(&entry.entity_id) {
-                    existing.name = player_name;
-                } else {
-                    let entity = Entity::new(entry.entity_id, player_name, EntityType::Player)
-                        .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1))
-                        .with_circle_collider(I16F16::from_num(2));
-                    self.entities.insert(entry.entity_id, entity);
-                }
-            }
-            Intent::Disconnect(_) => {
-                self.entities.remove(&entry.entity_id);
-            }
-            Intent::Move(move_intent) => {
-                if let Some(entity) = self.entities.get_mut(&entry.entity_id) {
-                    if let Some(dir) = move_intent.direction {
-                        entity.velocity = DeterministicVector2::from_proto(&dir);
-                    }
-                    if let Some(ref mut nav) = entity.navigation {
-                        nav.clear();
-                    }
-                }
-            }
-            Intent::MoveToPos(move_to_pos_intent) => {
-                if let (Some(target), Some(entity)) = (
-                    move_to_pos_intent.target_position,
-                    self.entities.get_mut(&entry.entity_id),
-                ) {
-                    let target_vec = DeterministicVector2::new(
-                        I16F16::from_bits(target.x_bits),
-                        I16F16::from_bits(target.y_bits),
-                    );
-                    let nav = entity.navigation.get_or_insert_with(|| {
-                        NavigationComponent::new(I16F16::from_num(1), I16F16::from_num(1))
-                    });
-                    nav.set_target(target_vec);
-                }
-            }
-            Intent::Action(action_intent) => {
-                if let Some(entity) = self.entities.get_mut(&entry.entity_id) {
-                    println!(
-                        "[Replay] Entity {} ({}) executed action {}",
-                        entry.entity_id, entity.name, action_intent.ability_id
-                    );
-                }
-            }
-            Intent::Ping(_) => {}
+        if let Err(e) = crate::world::intent_handler::apply_resolved_intent(
+            self,
+            entry.entity_id,
+            entry.player_name.clone(),
+            inner_intent,
+        ) {
+            eprintln!("[Replay] Error applying intent: {}", e);
         }
     }
 }
@@ -984,7 +644,7 @@ mod tests {
                 player_name: "Alice".to_string(),
             })),
         };
-        instance.apply_intent(addr, join_intent);
+        let _ = instance.apply_intent(addr, join_intent);
 
         // 2. MoveToPos Intent
         let target_x = I16F16::from_num(10);
@@ -997,7 +657,7 @@ mod tests {
                 }),
             })),
         };
-        instance.apply_intent(addr, move_to_pos);
+        let _ = instance.apply_intent(addr, move_to_pos);
 
         let entity = instance.get_entity(1).unwrap();
         assert!(entity.navigation.as_ref().unwrap().is_navigating());
@@ -1007,7 +667,7 @@ mod tests {
         );
 
         // 3. Tick: entity moves toward (10, 0) with move_speed = 1.0
-        instance.tick(1);
+        let _ = instance.tick(1);
         let entity = instance.get_entity(1).unwrap();
         assert_eq!(
             entity.velocity,
@@ -1026,7 +686,7 @@ mod tests {
                 ),
             })),
         };
-        instance.apply_intent(addr, move_intent);
+        let _ = instance.apply_intent(addr, move_intent);
 
         let entity = instance.get_entity(1).unwrap();
         assert!(!entity.navigation.as_ref().unwrap().is_navigating());

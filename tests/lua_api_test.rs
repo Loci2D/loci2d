@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use loci2d::scripting::{ScriptEngine, Command, CommandBuffer};
 use loci2d::scripting::api::with_scoped_api;
 use loci2d::world::instance::{Instance, DeterministicVector2};
@@ -64,5 +65,6 @@ fn test_command_buffer_and_entity_api() {
             assert_eq!(blueprint, "box");
             assert_eq!(position.to_f32(), (15.0, 20.0));
         }
+        _ => panic!("Expected SpawnEntity command"),
     }
 }
