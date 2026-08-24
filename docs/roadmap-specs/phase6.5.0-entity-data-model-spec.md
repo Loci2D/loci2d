@@ -1,8 +1,8 @@
 # Implementation Spec — Phase 6.5.0: Entity Data Model & Game Rules API
 
-> **Status:** Draft  
+> **Status:** Ready to review
 > **Roadmap Phase:** Phase 6.5.0  
-> **Reference ADRs:** [ADR-0014](../adr/en/0014-embedded-lua-scripting-and-command-buffer.md) · [ADR-0015](../adr/pt/0015-estrutura-roadmap-dedicado-fase6.5-validacao-dx.md) · [ADR-0016](../adr/en/0016-data-driven-entity-properties-and-engine-agnosticism.md)
+> **Reference ADRs:** [ADR-0014](../adr/en/0014-embedded-lua-scripting-and-command-buffer.md) · [ADR-0015](../adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md) · [ADR-0016](../adr/en/0016-data-driven-entity-properties-and-engine-agnosticism.md)
 
 ---
 
@@ -28,7 +28,7 @@ To support arbitrary data without hardcoding rules, entities will store a determ
 use std::collections::BTreeMap;
 
 pub struct Entity {
-    pub id: u32,
+    pub id: u64,
     pub position: DeterministicVector2,
     pub velocity: DeterministicVector2,
     // ... other physics/spatial fields ...
@@ -45,15 +45,17 @@ To allow Lua to mutate properties safely, we add a new command variant:
 pub enum Command {
     // ... existing commands ...
     SetEntityProperty {
-        entity_id: u32,
+        entity_id: u64,
         key: String,
         value: String,
     },
 }
 ```
 
+* **Legacy Cleanup:** The existing `Command::ApplyDamage` must be removed as it violates ADR-0016. All damage and health management now belong entirely to Lua via property mutations.
+
 #### Protobuf Serialization
-To ensure the `WorldState` Protobuf snapshot remains bit-exact across architectures, the `BTreeMap` should be serialized as a repeated message of key-value pairs (which naturally maintains the `BTreeMap`'s sorted order), rather than a Protobuf `map` (which depending on the Rust Protobuf crate, might deserialize into a non-deterministic `HashMap`).
+To ensure the `WorldState` Protobuf snapshot remains bit-exact across architectures, the `BTreeMap` should be serialized as a repeated message of key-value pairs (which naturally maintains the `BTreeMap`'s sorted order), rather than a Protobuf `map` (which, depending on the Rust Protobuf crate such as `prost`, often deserializes into a non-deterministic `HashMap`).
 
 ```protobuf
 message Property {
@@ -62,11 +64,13 @@ message Property {
 }
 
 message EntityState {
-    uint32 id = 1;
+    uint64 id = 1;
     // ... physics fields ...
-    repeated Property properties = 5;
+    repeated Property properties = 6; // Field 5 is reserved for entity_type
 }
 ```
+
+* **Snapshot Update:** `Instance::create_snapshot()` must be updated to populate the new `properties` field on each `EntityState` from the entity's `BTreeMap`, ensuring clients receive dynamic game state (e.g., team colors, health bars).
 
 ---
 
@@ -90,7 +94,7 @@ end
 Some properties belong to the match itself (e.g., round number, red team score).
 * **Storage:** Add `pub globals: BTreeMap<String, String>` to the `Instance` struct.
 * **Getters/Setters:** Expose `Loci.get_global(key)` and `Loci.Commands.set_global(key, value)`.
-* **Player Count:** There will be NO dedicated API for player count (e.g., `Loci.get_player_count()`). Scripts must manage this manually by incrementing/decrementing a global variable in the `on_player_join` and `on_player_leave` callbacks. This keeps the engine's API surface minimal.
+* **Player Count:** There will be NO dedicated API for player count (e.g., `Loci.get_player_count()`). Scripts must manage this manually by incrementing/decrementing a global variable in the `on_player_join` and `on_player_leave` callbacks. *Design Rationale: Manual management enforces a single source of truth (the global BTreeMap) and keeps the engine's API surface minimal, adhering strictly to ADR-0016.*
 
 ---
 
@@ -112,8 +116,9 @@ pub struct Instance {
 ```
 
 * **Logic Update:** In `Instance::tick()`, skip physics updates and `on_tick` Lua callbacks if `state` is not `Running`. If `Ended`, the server should also stop accepting client `ActionIntent` packets and finalize the replay file.
+* **Callback Availability During Pause:** Player connection callbacks (`on_player_join`, `on_player_leave`) MUST be invoked regardless of `MatchState`, since they are required for lobby logic (e.g., counting connected players before starting the match). Only `on_tick` and physics are gated by `Running`.
 * **Lua Control:** Expose `Loci.Commands.start_match()`, `Loci.Commands.pause_match()`, and `Loci.Commands.end_match(winner_data: string)`.
-* **Use Case:** Lua script waits until 6 players connect in `on_player_join` before calling `start_match()`. When a team's base is destroyed, it calls `end_match("red_team_won")`.
+* **Use Case:** Lua script waits until 6 players connect in `on_player_join` before calling `start_match()`. When a team's base is destroyed, it calls `end_match("red_team_won")`. Death/respawn is managed entirely via properties (e.g., `set_property(id, "alive", "false")`) — the engine does not provide a dedicated death/disable API.
 
 ---
 
@@ -132,6 +137,8 @@ pub struct Instance {
     // ...
     /// Key: timer_id. MUST be BTreeMap to guarantee stable execution order if multiple 
     /// timers expire on the exact same tick.
+    /// NOTE: While execution order is deterministic, scripts MUST NOT rely on this 
+    /// alphabetical execution order for critical game logic.
     pub active_timers: BTreeMap<String, ActiveTimer>, 
 }
 ```
@@ -146,11 +153,19 @@ pub struct Instance {
 
 ### 2.5 Action Intent Dispatching
 
-When a client wants to cast an ability or perform a game-specific action, they send an `ActionIntent` over the network.
+When a client wants to cast an ability or perform a game-specific action, they send an `ActionIntent` over the network. Most game abilities are **directional** (e.g., "fire projectile toward cursor"), so the intent must carry a target direction.
 
-* **Client Packet:** `ActionIntent { ability_id: u8, target_dir: Vector2 }`
-* **Rust Routing:** The Rust `IntentHandler` receives the packet, validates the player is connected, and routes it directly to Lua via `ScriptEngine::on_action(entity_id, ability_id, target_dir.x, target_dir.y)`.
-* **Agnostic Core:** Rust does *not* know what `ability_id == 1` means. It merely passes the intent to the Lua ruleset.
+#### Protobuf Update
+```protobuf
+message ActionIntent {
+  uint32 ability_id = 1;
+  Vector2 target_direction = 2;  // Normalized aim direction from client input (cursor/joystick)
+}
+```
+
+* **Rust Routing:** The Rust `IntentHandler` receives the packet, validates the player is connected, and routes it directly to Lua via `ScriptEngine::on_action(entity_id, ability_id, dir_x, dir_y)`.
+* **Agnostic Core:** Rust does *not* know what `ability_id == 1` means. It merely passes the intent and direction to the Lua ruleset. If the client omits `target_direction`, Rust passes `(0, 0)` to Lua.
+* **Use Case:** Client presses "Q" while aiming right → sends `ActionIntent { ability_id: 1, target_direction: (1, 0) }` → Lua receives `on_action(entity_id, 1, 1.0, 0.0)` → Lua spawns a fireball entity moving in that direction.
 
 ---
 
@@ -163,7 +178,28 @@ The `Command::SpawnEntity` variant currently only logs to the console. It must b
   2. Create a new `Entity` instance.
   3. Insert it into `instance.entities`.
   4. Optionally trigger `on_entity_spawned(entity_id, blueprint)` in Lua.
-* **Lua API:** `Loci.Commands.spawn_entity(blueprint: string, x: number, y: number)`.
+* **Lua API:** `Loci.Commands.spawn_entity({ blueprint = "name", x = 0, y = 0 })` (Using table arguments to match the established Lua API pattern).
+
+---
+
+### 2.7 Entity Physics Configuration
+
+Currently, `NavigationComponent` parameters (`move_speed`, `arrival_tolerance`) are hardcoded at entity creation time (see [Issue #4](https://github.com/lamfsantos/loci2d/issues/4)). For a Battle Arena where different characters have different movement speeds and buffs/debuffs alter speed dynamically, Lua must be able to configure these values at runtime.
+
+#### Command Buffer Integration
+```rust
+pub enum Command {
+    // ... existing commands ...
+    SetMoveSpeed {
+        entity_id: u64,
+        speed: I16F16,
+    },
+}
+```
+
+* **Lua API:** `Loci.Commands.set_move_speed(entity_id, speed)` where `speed` is a number (e.g., `2.5`). The Rust side converts to `I16F16` for deterministic physics.
+* **Application:** When `flush_and_apply` processes this command, it updates `entity.navigation.move_speed`. If the entity has no `NavigationComponent`, the command is a no-op.
+* **Use Case:** Lua sets base speed on join: `set_move_speed(entity_id, 2.0)`. A speed buff applies: `set_move_speed(entity_id, 3.0)`. On buff expiry via `on_timer_complete`, restore: `set_move_speed(entity_id, 2.0)`.
 
 ---
 
@@ -176,3 +212,5 @@ The `Command::SpawnEntity` variant currently only logs to the console. It must b
    * **Test:** Create an Entity. Insert `{"health": "100", "team": "red"}`. Snapshot the `WorldState` hash.
    * **Test:** Create an Entity. Insert `{"team": "red", "health": "100"}`. Snapshot the `WorldState` hash.
    * **Assert:** Both hashes MUST be identical. This proves ADR-0007 compliance and prevents cross-architecture desyncs.
+5. **Action Direction Passthrough:** Verify that `on_action(entity_id, ability_id, dir_x, dir_y)` receives correct fixed-point-converted direction values from the client's `ActionIntent.target_direction`.
+6. **Move Speed Mutation:** Verify that `Command::SetMoveSpeed` correctly updates `NavigationComponent.move_speed` and that the entity's velocity magnitude changes on the next tick.

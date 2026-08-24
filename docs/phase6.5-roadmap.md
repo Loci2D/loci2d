@@ -1,5 +1,7 @@
 # Phase 6.5 Roadmap: Validation, DX & API Stabilization
 # Roadmap da Fase 6.5: Validação, DX & Estabilização de API
+> **Reference ADRs:** [ADR-0015](adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md)
+
 
 ### English
 This document details the sub-milestones for Phase 6.5 of the **loci2d** project. Phase 6.5 acts as a "strategic pause" (v0.6.x) to consolidate the engine's core features into a playable, developer-friendly multiplayer ecosystem before introducing multi-room infrastructure.
@@ -20,16 +22,19 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 * [ ] **Lua Property Interface:**
   - Expose `Loci.get_entity_property` and `Loci.Commands.set_property` to Lua scripts.
 * [ ] **Action/Ability Dispatch:**
-  - Route the `ActionIntent` from client network packets to a new Lua callback `on_action(entity_id, ability_id)`.
+  - Expand `ActionIntent` with a `target_direction` field for directional abilities (e.g., projectile aim).
+  - Route the intent to a new Lua callback `on_action(entity_id, ability_id, dir_x, dir_y)`.
 * [ ] **Global Match Metadata:**
-  - Allow Lua to query the current player count and manage global variables (e.g., match score).
+  - Allow Lua to manage global match variables (e.g., match score, player count) via the generic property system.
 * [ ] **Match Lifecycle State Machine:**
-  - Introduce a `Paused`/`Running` state to the server instance.
-  - Expose `Loci.start_match()` and `Loci.end_match()` to Lua scripts so developers can dictate when the game loop actually begins advancing ticks based on player connections or readiness.
+  - Introduce a `Paused`/`Running`/`Ended` state machine to the server instance.
+  - Expose `Loci.Commands.start_match()`, `Loci.Commands.pause_match()`, and `Loci.Commands.end_match()` to Lua scripts so developers can dictate when the game loop actually begins advancing ticks based on player connections or readiness.
 * [ ] **Timer & Cooldown System:**
   - Expose `Loci.Commands.start_timer(timer_id, delay_ticks)` and route expiration to a new Lua callback `on_timer_complete(timer_id)`.
 * [ ] **Dynamic Entity Spawning:**
   - Resolve the `SpawnEntity` CommandBuffer stub so scripts can dynamically spawn projectiles and pickups at runtime.
+* [ ] **Entity Physics Configuration:**
+  - Expose `Loci.Commands.set_move_speed(entity_id, speed)` to allow Lua scripts to configure per-entity movement speed at runtime (resolves [Issue #4](https://github.com/lamfsantos/loci2d/issues/4)).
 
 ### Português
 * [ ] **Sistema de Propriedades de Entidade (Design Orientado a Dados):**
@@ -38,16 +43,19 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 * [ ] **Interface de Propriedades no Lua:**
   - Expor `Loci.get_entity_property` e `Loci.Commands.set_property` para os scripts Lua.
 * [ ] **Despacho de Ações/Habilidades:**
-  - Roteamento do `ActionIntent` dos pacotes de rede do cliente para um novo callback Lua `on_action(entity_id, ability_id)`.
+  - Expandir o `ActionIntent` com campo `target_direction` para habilidades direcionais (ex: mira de projéteis).
+  - Roteamento do intent para um novo callback Lua `on_action(entity_id, ability_id, dir_x, dir_y)`.
 * [ ] **Metadados Globais da Partida:**
-  - Permitir que o Lua consulte a quantidade de jogadores e gerencie variáveis globais (ex: placar da partida).
+  - Permitir que o Lua gerencie variáveis globais da partida (ex: placar, contagem de jogadores) via o sistema genérico de propriedades.
 * [ ] **Máquina de Estado do Ciclo de Vida da Partida:**
-  - Introduzir um estado de `Pausado`/`Em Execução` para a instância do servidor.
-  - Expor `Loci.start_match()` e `Loci.end_match()` para os scripts Lua, permitindo que os desenvolvedores ditem quando o loop do jogo realmente começa a avançar os ticks com base nas conexões ou prontidão dos jogadores.
+  - Introduzir uma máquina de estados `Pausado`/`Em Execução`/`Encerrado` para a instância do servidor.
+  - Expor `Loci.Commands.start_match()`, `Loci.Commands.pause_match()` e `Loci.Commands.end_match()` para os scripts Lua, permitindo que os desenvolvedores ditem quando o loop do jogo realmente começa a avançar os ticks com base nas conexões ou prontidão dos jogadores.
 * [ ] **Sistema de Timers e Cooldowns:**
   - Expor `Loci.Commands.start_timer(timer_id, delay_ticks)` e rotear o fim da contagem para um novo callback Lua `on_timer_complete(timer_id)`.
 * [ ] **Spawn Dinâmico de Entidades:**
   - Resolver o stub do `SpawnEntity` no CommandBuffer para que os scripts possam criar projéteis e itens dinamicamente durante a partida.
+* [ ] **Configuração de Física por Entidade:**
+  - Expor `Loci.Commands.set_move_speed(entity_id, speed)` para permitir que scripts Lua configurem a velocidade de movimento por entidade em tempo de execução (resolve [Issue #4](https://github.com/lamfsantos/loci2d/issues/4)).
 
 ---
 
