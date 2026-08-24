@@ -11,51 +11,69 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 
 ---
 
-## 6.5.0: Entity Data Model & Game Rules API
-## 6.5.0: Modelo de Dados de Entidade & API de Regras de Jogo
+## 6.5.0-1: Entity Data Model & Global Properties
+## 6.5.0-1: Modelo de Dados de Entidade & Propriedades Globais
 > **Reference ADRs:** [ADR-0014](adr/en/0014-embedded-lua-scripting-and-command-buffer.md) · [ADR-0016](adr/en/0016-data-driven-entity-properties-and-engine-agnosticism.md)
+> **Spec:** [phase6.5.0-1-data-model-spec.md](roadmap-specs/phase6.5.0-1-data-model-spec.md)
 
 ### English
 * [ ] **Entity Property System (Data-Driven Design):**
-  - Add a flexible key-value property map (e.g., `health`, `team`) to the `Entity` struct in Rust.
-  - **Crucial Rule:** The Rust core must remain agnostic to game rules. Hardcoded fields like `health` or `team` must NOT be added directly to the Rust structs. The engine only provides generic property storage; Lua scripts define their meaning and game logic.
+  - Add a flexible key-value property map to the `Entity` struct in Rust.
 * [ ] **Lua Property Interface:**
   - Expose `Loci.get_entity_property` and `Loci.Commands.set_property` to Lua scripts.
-* [ ] **Action/Ability Dispatch:**
-  - Expand `ActionIntent` with a `target_direction` field for directional abilities (e.g., projectile aim).
-  - Route the intent to a new Lua callback `on_action(entity_id, ability_id, dir_x, dir_y)`.
 * [ ] **Global Match Metadata:**
-  - Allow Lua to manage global match variables (e.g., match score, player count) via the generic property system.
-* [ ] **Match Lifecycle State Machine:**
-  - Introduce a `Paused`/`Running`/`Ended` state machine to the server instance.
-  - Expose `Loci.Commands.start_match()`, `Loci.Commands.pause_match()`, and `Loci.Commands.end_match()` to Lua scripts so developers can dictate when the game loop actually begins advancing ticks based on player connections or readiness.
-* [ ] **Timer & Cooldown System:**
-  - Expose `Loci.Commands.start_timer(timer_id, delay_ticks)` and route expiration to a new Lua callback `on_timer_complete(timer_id)`.
-* [ ] **Dynamic Entity Spawning:**
-  - Resolve the `SpawnEntity` CommandBuffer stub so scripts can dynamically spawn projectiles and pickups at runtime.
-* [ ] **Entity Physics Configuration:**
-  - Expose `Loci.Commands.set_move_speed(entity_id, speed)` to allow Lua scripts to configure per-entity movement speed at runtime (resolves [Issue #4](https://github.com/lamfsantos/loci2d/issues/4)).
+  - Allow Lua to manage global match variables (e.g., match score, player count) via the generic property system (`globals`).
 
 ### Português
-* [ ] **Sistema de Propriedades de Entidade (Design Orientado a Dados):**
-  - Adicionar um mapa chave-valor flexível (ex: `health`, `team`) na struct `Entity` no Rust.
-  - **Regra Crucial:** O núcleo em Rust deve permanecer agnóstico às regras do jogo. Campos "hardcoded" como `health` ou `team_id` NÃO devem ser adicionados nas structs Rust. O motor apenas provê o armazenamento genérico das propriedades; os scripts Lua definem seu significado e a lógica.
+* [ ] **Sistema de Propriedades de Entidade:**
+  - Adicionar um mapa chave-valor flexível na struct `Entity` no Rust.
 * [ ] **Interface de Propriedades no Lua:**
-  - Expor `Loci.get_entity_property` e `Loci.Commands.set_property` para os scripts Lua.
-* [ ] **Despacho de Ações/Habilidades:**
-  - Expandir o `ActionIntent` com campo `target_direction` para habilidades direcionais (ex: mira de projéteis).
-  - Roteamento do intent para um novo callback Lua `on_action(entity_id, ability_id, dir_x, dir_y)`.
+  - Expor `Loci.get_entity_property` e `Loci.Commands.set_property`.
 * [ ] **Metadados Globais da Partida:**
-  - Permitir que o Lua gerencie variáveis globais da partida (ex: placar, contagem de jogadores) via o sistema genérico de propriedades.
+  - Permitir que o Lua gerencie variáveis globais (placar, etc.) via o sistema de propriedades genéricas (`globals`).
+
+---
+
+## 6.5.0-2: Match Lifecycle & Timers
+## 6.5.0-2: Ciclo de Vida da Partida & Timers
+> **Spec:** [phase6.5.0-2-match-lifecycle-spec.md](roadmap-specs/phase6.5.0-2-match-lifecycle-spec.md)
+
+### English
+* [ ] **Match Lifecycle State Machine:**
+  - Introduce a `Paused`/`Running`/`Ended` state machine to the server instance.
+  - Expose `Loci.Commands.start_match()`, `Loci.Commands.pause_match()`, and `Loci.Commands.end_match()` to Lua scripts.
+* [ ] **Timer & Cooldown System:**
+  - Expose `Loci.Commands.start_timer(timer_id, delay_ticks)` and route expiration to a new Lua callback `on_timer_complete(timer_id)`.
+
+### Português
 * [ ] **Máquina de Estado do Ciclo de Vida da Partida:**
-  - Introduzir uma máquina de estados `Pausado`/`Em Execução`/`Encerrado` para a instância do servidor.
-  - Expor `Loci.Commands.start_match()`, `Loci.Commands.pause_match()` e `Loci.Commands.end_match()` para os scripts Lua, permitindo que os desenvolvedores ditem quando o loop do jogo realmente começa a avançar os ticks com base nas conexões ou prontidão dos jogadores.
+  - Introduzir uma máquina de estados `Pausado`/`Em Execução`/`Encerrado` para a instância.
+  - Expor comandos de `start_match`, `pause_match` e `end_match`.
 * [ ] **Sistema de Timers e Cooldowns:**
-  - Expor `Loci.Commands.start_timer(timer_id, delay_ticks)` e rotear o fim da contagem para um novo callback Lua `on_timer_complete(timer_id)`.
+  - Expor `Loci.Commands.start_timer` e o callback `on_timer_complete`.
+
+---
+
+## 6.5.0-3: Gameplay Actions & Physics Configuration
+## 6.5.0-3: Ações de Gameplay & Configuração de Física
+> **Spec:** [phase6.5.0-3-gameplay-actions-spec.md](roadmap-specs/phase6.5.0-3-gameplay-actions-spec.md)
+
+### English
+* [ ] **Action/Ability Dispatch:**
+  - Expand `ActionIntent` with a `target_direction` field for directional abilities.
+  - Route the intent to a new Lua callback `on_action(entity_id, ability_id, dir_x, dir_y)`.
+* [ ] **Dynamic Entity Spawning:**
+  - Resolve the `SpawnEntity` CommandBuffer stub so scripts can dynamically spawn projectiles.
+* [ ] **Entity Physics Configuration:**
+  - Expose `Loci.Commands.set_move_speed(entity_id, speed)` to allow Lua scripts to configure per-entity movement speed at runtime.
+
+### Português
+* [ ] **Despacho de Ações/Habilidades:**
+  - Expandir o `ActionIntent` com campo `target_direction` e rotear para o callback `on_action`.
 * [ ] **Spawn Dinâmico de Entidades:**
-  - Resolver o stub do `SpawnEntity` no CommandBuffer para que os scripts possam criar projéteis e itens dinamicamente durante a partida.
+  - Resolver o stub do `SpawnEntity` no CommandBuffer.
 * [ ] **Configuração de Física por Entidade:**
-  - Expor `Loci.Commands.set_move_speed(entity_id, speed)` para permitir que scripts Lua configurem a velocidade de movimento por entidade em tempo de execução (resolve [Issue #4](https://github.com/lamfsantos/loci2d/issues/4)).
+  - Expor `Loci.Commands.set_move_speed(entity_id, speed)` (resolve [Issue #4](https://github.com/lamfsantos/loci2d/issues/4)).
 
 ---
 
