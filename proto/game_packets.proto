@@ -61,6 +61,12 @@ enum EntityType {
   PROP = 2;
 }
 
+// Phase 6.5.0: Entity Properties
+message Property {
+  string key = 1;
+  string value = 2;
+}
+
 // Individual Entity State in World Snapshot
 message EntityState {
   uint64 id = 1;
@@ -68,6 +74,7 @@ message EntityState {
   Vector2 position = 3;
   Vector2 velocity = 4;
   EntityType entity_type = 5;
+  repeated Property properties = 6;
 }
 
 // Full Authoritative World Snapshot
@@ -75,6 +82,7 @@ message WorldState {
   uint64 tick = 1;
   uint64 timestamp = 2;
   repeated EntityState entities = 3;
+  repeated Property globals = 4;
 }
 
 // Direct Acknowledgment / Server Response

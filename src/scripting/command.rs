@@ -17,9 +17,14 @@ pub enum Command {
         entity_id: u64,
         velocity: DeterministicVector2,
     },
-    ApplyDamage {
+    SetEntityProperty {
         entity_id: u64,
-        amount: i32,
+        key: String,
+        value: String,
+    },
+    SetGlobalProperty {
+        key: String,
+        value: String,
     },
     SendEvent {
         event_name: String,
@@ -46,6 +51,7 @@ impl CommandBuffer {
         for command in self.commands.drain(..) {
             match command {
                 Command::SpawnEntity { blueprint, position } => {
+                    // TODO(Phase X): Implement actual entity spawning from blueprint
                     if instance.logging_enabled {
                         println!(
                             "[CommandBuffer] Spawning entity from blueprint '{}' at ({}, {})",
@@ -68,15 +74,16 @@ impl CommandBuffer {
                         entity.velocity = velocity;
                     }
                 }
-                Command::ApplyDamage { entity_id, amount } => {
-                    if instance.logging_enabled {
-                        println!(
-                            "[CommandBuffer] Entity {} received {} damage",
-                            entity_id, amount
-                        );
+                Command::SetEntityProperty { entity_id, key, value } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        entity.properties.insert(key, value);
                     }
                 }
+                Command::SetGlobalProperty { key, value } => {
+                    instance.globals.insert(key, value);
+                }
                 Command::SendEvent { event_name, data } => {
+                    // TODO(Phase X): Implement actual event broadcasting to clients
                     if instance.logging_enabled {
                         println!(
                             "[CommandBuffer] Broadcasting event '{}' with data '{}'",

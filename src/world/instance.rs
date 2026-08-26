@@ -2,7 +2,7 @@ use super::entity::{Entity, EntityType};
 use super::physics::{MapBounds, StaticObstacle, TriggerEvent};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::{
-    ClientIntent, EntityState, EntityType as ProtoEntityType, ReplayIntentEntry, WorldState,
+    ClientIntent, EntityState, EntityType as ProtoEntityType, Property, ReplayIntentEntry, WorldState,
 };
 use crate::network::packets::client_intent::Intent;
 use crate::scripting::{CommandBuffer, ScriptEngine};
@@ -35,6 +35,7 @@ pub struct Instance {
     // Phase 6 Additions:
     pub script_engine: ScriptEngine,
     pub script_hash: String,
+    pub globals: BTreeMap<String, String>,
     next_entity_id: u64,
     next_session_id: u64,
 }
@@ -56,6 +57,7 @@ impl Instance {
             logging_enabled: false,
             script_engine: ScriptEngine::new(seed).expect("Failed to initialize ScriptEngine"),
             script_hash: String::new(),
+            globals: BTreeMap::new(),
             next_entity_id: 1,
             next_session_id: 1,
         }
@@ -286,6 +288,14 @@ impl Instance {
                     EntityType::NPC => ProtoEntityType::Npc as i32,
                     EntityType::Prop => ProtoEntityType::Prop as i32,
                 },
+                properties: e
+                    .properties
+                    .iter()
+                    .map(|(k, v)| Property {
+                        key: k.clone(),
+                        value: v.clone(),
+                    })
+                    .collect(),
             })
             .collect();
 
@@ -298,6 +308,14 @@ impl Instance {
             tick,
             timestamp,
             entities,
+            globals: self
+                .globals
+                .iter()
+                .map(|(k, v)| Property {
+                    key: k.clone(),
+                    value: v.clone(),
+                })
+                .collect(),
         }
     }
 
@@ -694,5 +712,63 @@ mod tests {
             entity.velocity,
             DeterministicVector2::new(I16F16::ZERO, I16F16::from_num(-2))
         );
+    }
+
+    #[test]
+    fn test_property_commands() {
+        use crate::scripting::command::{Command, CommandBuffer};
+
+        let mut instance = Instance::new(1, 30, 10, 42);
+        let e = Entity::new(1, "Player1".to_string(), EntityType::Player);
+        instance.add_entity(e);
+
+        let mut cmd_buf = CommandBuffer::new();
+        cmd_buf.push(Command::SetEntityProperty {
+            entity_id: 1,
+            key: "health".to_string(),
+            value: "100".to_string(),
+        });
+        cmd_buf.push(Command::SetGlobalProperty {
+            key: "round_number".to_string(),
+            value: "2".to_string(),
+        });
+
+        cmd_buf.flush_and_apply(&mut instance);
+
+        assert_eq!(
+            instance.get_entity(1).unwrap().properties.get("health").unwrap(),
+            "100"
+        );
+        assert_eq!(
+            instance.globals.get("round_number").unwrap(),
+            "2"
+        );
+    }
+
+    #[test]
+    fn test_hash_stability() {
+        use prost::Message;
+
+        let mut instance1 = Instance::new(1, 30, 10, 42);
+        let mut e1 = Entity::new(1, "Player1".to_string(), EntityType::Player);
+        e1.properties.insert("health".to_string(), "100".to_string());
+        e1.properties.insert("team".to_string(), "red".to_string());
+        instance1.add_entity(e1);
+        let snap1 = instance1.create_snapshot(1);
+        let mut buf1 = Vec::new();
+        snap1.encode(&mut buf1).unwrap();
+
+        let mut instance2 = Instance::new(1, 30, 10, 42);
+        let mut e2 = Entity::new(1, "Player1".to_string(), EntityType::Player);
+        // Insert in reverse order to ensure BTreeMap sorts it internally
+        e2.properties.insert("team".to_string(), "red".to_string());
+        e2.properties.insert("health".to_string(), "100".to_string());
+        instance2.add_entity(e2);
+        let snap2 = instance2.create_snapshot(1);
+        let mut buf2 = Vec::new();
+        snap2.encode(&mut buf2).unwrap();
+
+        // Prove ADR-0007 compliance: iteration order and hence serialization bytes are identical
+        assert_eq!(buf1, buf2);
     }
 }

@@ -73,6 +73,22 @@ where
         })?;
         loci_table.set("get_entity_position", get_entity_position)?;
 
+        // Loci.get_entity_property(id, key)
+        let get_entity_property = scope.create_function(|_, (id, key): (u64, String)| {
+            if let Some(entity) = instance.get_entity(id) {
+                Ok(entity.properties.get(&key).cloned())
+            } else {
+                Ok(None)
+            }
+        })?;
+        loci_table.set("get_entity_property", get_entity_property)?;
+
+        // Loci.get_global(key)
+        let get_global = scope.create_function(|_, key: String| {
+            Ok(instance.globals.get(&key).cloned())
+        })?;
+        loci_table.set("get_global", get_global)?;
+
         // Loci.Commands
         let commands_table = lua.create_table()?;
         
@@ -121,15 +137,26 @@ where
         })?;
         commands_table.set("set_velocity", set_velocity)?;
 
-        let cmd_buf_damage = Rc::clone(&cmd_buffer_rc);
-        let apply_damage = scope.create_function(move |_, (id, amount): (u64, i32)| {
-            cmd_buf_damage.borrow_mut().push(Command::ApplyDamage {
+        let cmd_buf_set_prop = Rc::clone(&cmd_buffer_rc);
+        let set_property = scope.create_function(move |_, (id, key, value): (u64, String, String)| {
+            cmd_buf_set_prop.borrow_mut().push(Command::SetEntityProperty {
                 entity_id: id,
-                amount,
+                key,
+                value,
             });
             Ok(())
         })?;
-        commands_table.set("apply_damage", apply_damage)?;
+        commands_table.set("set_property", set_property)?;
+
+        let cmd_buf_set_global = Rc::clone(&cmd_buffer_rc);
+        let set_global = scope.create_function(move |_, (key, value): (String, String)| {
+            cmd_buf_set_global.borrow_mut().push(Command::SetGlobalProperty {
+                key,
+                value,
+            });
+            Ok(())
+        })?;
+        commands_table.set("set_global", set_global)?;
 
         let cmd_buf_event = Rc::clone(&cmd_buffer_rc);
         let send_event = scope.create_function(move |_, (event_name, data): (String, String)| {

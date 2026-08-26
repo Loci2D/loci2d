@@ -3,6 +3,7 @@ use super::physics::{
     ColliderShape, CollisionFilter, DeterministicAABB, DeterministicCircle, NavigationComponent,
 };
 use fixed::types::I16F16;
+use std::collections::BTreeMap;
 
 // [2026-08-08] Allowed dead_code: fields like id and entity_type are part of the core domain model
 // and will be read during snapshot serialization (Phase 3) and collision/event systems (Phases 4-6).
@@ -18,6 +19,8 @@ pub struct Entity {
     pub collider: Option<ColliderShape>,
     pub collision_filter: CollisionFilter,
     pub navigation: Option<NavigationComponent>,
+    // Phase 6.5.0 Additions (Data-Driven Properties)
+    pub properties: BTreeMap<String, String>,
 }
 
 impl Entity {
@@ -31,6 +34,7 @@ impl Entity {
             collider: None,
             collision_filter: CollisionFilter::default_player(),
             navigation: None,
+            properties: BTreeMap::new(),
         }
     }
 

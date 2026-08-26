@@ -97,6 +97,7 @@ mod tests {
             payload: Some(server_packet::Payload::WorldState(WorldState {
                 tick: 100,
                 timestamp: 1723140000000,
+                globals: vec![],
                 entities: vec![
                     EntityState {
                         id: 1,
@@ -110,6 +111,7 @@ mod tests {
                             y_bits: 0,
                         }),
                         entity_type: EntityType::Player as i32,
+                        properties: vec![],
                     },
                     EntityState {
                         id: 2,
@@ -123,6 +125,7 @@ mod tests {
                             y_bits: 0,
                         }),
                         entity_type: EntityType::Npc as i32,
+                        properties: vec![],
                     },
                 ],
             })),
