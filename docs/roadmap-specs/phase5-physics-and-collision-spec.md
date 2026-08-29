@@ -1,6 +1,6 @@
 # Implementation Spec — Phase 5: Deterministic Physics & Collision Engine
 
-> **Status:** Ready to Implement  
+> **Status:** Completed  
 > **Roadmap Phase:** Phase 5 — Deterministic Physics & Collision Engine  
 > **Reference ADRs:** [ADR-0001](../adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](../adr/en/0002-instance-based-architecture.md) · [ADR-0003](../adr/en/0003-2d-map-only.md) · [ADR-0005](../adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0008](../adr/en/0008-session-lifecycle-and-client-identity.md) · [ADR-0010](../adr/en/0010-event-sourced-replay-format.md) · [ADR-0011](../adr/en/0011-authoritative-spectator-replay-broadcasting.md) · [ADR-0012](../adr/en/0012-deterministic-2d-collision-and-kinematic-resolution.md) · [ADR-0013](../adr/en/0013-server-authoritative-destination-steering-and-navigation.md)
 

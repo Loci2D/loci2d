@@ -1,5 +1,6 @@
 use crate::world::instance::DeterministicVector2;
 use crate::world::instance::{ActiveTimer, Instance, MatchState};
+use fixed::types::I16F16;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     SpawnEntity {
@@ -16,6 +17,10 @@ pub enum Command {
     SetVelocity {
         entity_id: u64,
         velocity: DeterministicVector2,
+    },
+    SetMoveSpeed {
+        entity_id: u64,
+        speed: I16F16,
     },
     SetEntityProperty {
         entity_id: u64,
@@ -63,10 +68,23 @@ impl CommandBuffer {
                     blueprint,
                     position,
                 } => {
-                    // TODO(Phase X): Implement actual entity spawning from blueprint
+                    let entity_id = instance.next_entity_id;
+                    instance.next_entity_id += 1;
+                    
+                    let mut entity = crate::world::entity::Entity::new(
+                        entity_id,
+                        blueprint.clone(),
+                        crate::world::entity::EntityType::Prop, // Assume Prop for spawned entities for now, or use blueprint to decide
+                    )
+                    .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1));
+                    entity.position = position;
+                    
+                    instance.entities.insert(entity_id, entity);
+                    
                     if instance.logging_enabled {
                         println!(
-                            "[CommandBuffer] Spawning entity from blueprint '{}' at ({}, {})",
+                            "[CommandBuffer] Spawned entity {} from blueprint '{}' at ({}, {})",
+                            entity_id,
                             blueprint,
                             position.x.to_num::<f64>(),
                             position.y.to_num::<f64>()
@@ -90,6 +108,13 @@ impl CommandBuffer {
                 } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         entity.velocity = velocity;
+                    }
+                }
+                Command::SetMoveSpeed { entity_id, speed } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        if let Some(ref mut nav) = entity.navigation {
+                            nav.move_speed = speed;
+                        }
                     }
                 }
                 Command::SetEntityProperty {

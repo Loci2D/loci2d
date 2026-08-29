@@ -1,6 +1,6 @@
 # Implementation Spec — Phase 6: Embedded Scripting & Game Logic (Lua Engine)
 
-> **Status:** Ready to Implement  
+> **Status:** Completed  
 > **Roadmap Phase:** Phase 6 — Embedded Scripting & Game Logic (Lua Engine)  
 > **Reference ADRs:** [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md) · [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0010](../adr/en/0010-event-sourced-replay-format.md)
 

@@ -1,6 +1,6 @@
 # Implementation Spec — Phase 1: Game Loop & Single-Instance Core
 
-> **Status:** Done / Completed  
+> **Status:** Completed  
 > **Roadmap Phase:** Phase 1 — Game Loop & Single-Instance Core  
 > **Reference ADRs:** [ADR-0001](../adr/en/0001-authoritative-server-archoitecture.md) · [ADR-0002](../adr/en/0002-instance-based-architecture.md) · [ADR-0005](../adr/en/0005-cross-language-binary-serialization.md) · [ADR-0006](../adr/en/0006-two-thread-network-gameloop-separation.md)
 

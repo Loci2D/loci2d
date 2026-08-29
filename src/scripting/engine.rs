@@ -275,6 +275,25 @@ impl ScriptEngine {
         })
     }
 
+    pub fn on_action(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        ability_id: u32,
+        dir_x: f64,
+        dir_y: f64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_action_fn) = globals.get::<mlua::Function>("on_action") {
+                on_action_fn.call::<()>((entity_id, ability_id, dir_x, dir_y))?;
+            }
+            Ok(())
+        })
+    }
+
     pub fn on_player_leave(
         &self,
         instance: &Instance,

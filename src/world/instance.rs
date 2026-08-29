@@ -52,8 +52,8 @@ pub struct Instance {
     pub globals: BTreeMap<String, String>,
     pub state: MatchState,
     pub active_timers: BTreeMap<String, ActiveTimer>,
-    next_entity_id: u64,
-    next_session_id: u64,
+    pub next_entity_id: u64,
+    pub next_session_id: u64,
 }
 
 impl Instance {
@@ -470,6 +470,7 @@ mod tests {
         let action_intent = ClientIntent {
             intent: Some(client_intent::Intent::Action(ActionIntent {
                 ability_id: 1,
+                target_direction: None,
             })),
         };
         instance.apply_intent(addr, action_intent);
@@ -529,6 +530,7 @@ mod tests {
         let action_intent = ClientIntent {
             intent: Some(client_intent::Intent::Action(ActionIntent {
                 ability_id: 42,
+                target_direction: None,
             })),
         };
         instance.apply_intent(addr, action_intent);
@@ -932,6 +934,7 @@ mod tests {
         let action_intent = ClientIntent {
             intent: Some(client_intent::Intent::Action(ActionIntent {
                 ability_id: 1,
+                target_direction: None,
             })),
         };
 

@@ -150,6 +150,17 @@ where
             })?;
         commands_table.set("set_velocity", set_velocity)?;
 
+        let cmd_buf_set_speed = Rc::clone(&cmd_buffer_rc);
+        let set_move_speed =
+            scope.create_function(move |_, (id, speed): (u64, f64)| {
+                cmd_buf_set_speed.borrow_mut().push(Command::SetMoveSpeed {
+                    entity_id: id,
+                    speed: fixed::types::I16F16::from_num(speed),
+                });
+                Ok(())
+            })?;
+        commands_table.set("set_move_speed", set_move_speed)?;
+
         let cmd_buf_set_prop = Rc::clone(&cmd_buffer_rc);
         let set_property =
             scope.create_function(move |_, (id, key, value): (u64, String, String)| {

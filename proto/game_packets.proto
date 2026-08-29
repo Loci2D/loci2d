@@ -29,6 +29,7 @@ message MoveToPositionIntent {
 
 message ActionIntent {
   uint32 ability_id = 1;
+  Vector2 target_direction = 2; // Normalized aim direction from client input
 }
 
 message PingIntent {}

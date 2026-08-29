@@ -74,7 +74,7 @@ pub fn apply_resolved_intent(
             }
         }
         Intent::Action(action_intent) => {
-            if let Some(entity) = instance.entities.get_mut(&entity_id) {
+            if let Some(entity) = instance.entities.get(&entity_id) {
                 if instance.logging_enabled {
                     println!(
                         "[Intent] Entity {} ({}) executed action {}",
@@ -82,6 +82,28 @@ pub fn apply_resolved_intent(
                     );
                 }
             }
+
+            let (dir_x, dir_y) = match &action_intent.target_direction {
+                Some(dir) => {
+                    let vec = DeterministicVector2::from_proto(dir);
+                    (vec.x.to_num::<f64>(), vec.y.to_num::<f64>())
+                }
+                None => (0.0, 0.0),
+            };
+
+            let mut cmd_buffer = CommandBuffer::new();
+            instance
+                .script_engine
+                .on_action(
+                    instance,
+                    entity_id,
+                    action_intent.ability_id,
+                    dir_x,
+                    dir_y,
+                    &mut cmd_buffer,
+                )
+                .map_err(|e| e.to_string())?;
+            cmd_buffer.flush_and_apply(instance);
         }
         Intent::Ping(_) => {
             // Heartbeat, no state mutation

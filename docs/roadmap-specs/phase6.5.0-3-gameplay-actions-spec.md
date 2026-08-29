@@ -1,5 +1,5 @@
 # Implementation Spec — Phase 6.5.0-3: Gameplay Actions & Physics
-> **Status:** Ready to review
+> **Status:** Completed
 > **Roadmap Phase:** Phase 6.5.0-3
 > **Reference ADRs:** [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0014](../adr/en/0014-embedded-lua-scripting-and-command-buffer.md)
 

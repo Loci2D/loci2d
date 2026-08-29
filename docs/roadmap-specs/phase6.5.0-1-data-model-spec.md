@@ -1,5 +1,5 @@
 # Implementation Spec — Phase 6.5.0-1: Entity Data Model
-> **Status:** Ready to review
+> **Status:** Completed  
 > **Roadmap Phase:** Phase 6.5.0-1
 > **Reference ADRs:** [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0014](../adr/en/0014-embedded-lua-scripting-and-command-buffer.md) · [ADR-0015](../adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md) · [ADR-0016](../adr/en/0016-data-driven-entity-properties-and-engine-agnosticism.md)
 

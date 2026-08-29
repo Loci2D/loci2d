@@ -328,7 +328,7 @@ fn main() {
                 } else {
                     1
                 };
-                client_intent::Intent::Action(ActionIntent { ability_id })
+                client_intent::Intent::Action(ActionIntent { ability_id, target_direction: None })
             }
             _ => {
                 println!(

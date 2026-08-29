@@ -1,6 +1,6 @@
 [package]
 name = "loci2d"
-version = "0.6.5-transition.2"
+version = "0.6.5-transition.3"
 edition = "2024"
 default-run = "loci2d"
 
