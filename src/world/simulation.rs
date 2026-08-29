@@ -243,6 +243,11 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
 
     // 5. Check for timed out clients
     let timed_out = instance.check_timeouts();
+    for (entity_id, _) in &timed_out {
+        let _ = instance
+            .script_engine
+            .on_player_leave(instance, *entity_id, &mut cmd_buffer);
+    }
 
     cmd_buffer.flush_and_apply(instance);
 

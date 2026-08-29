@@ -126,6 +126,8 @@ impl CommandBuffer {
                     timer_id,
                     remaining_ticks,
                 } => {
+                    // Note: If a timer with the same timer_id already exists, it is silently overwritten.
+                    // This allows scripts to easily reset or restart active timers.
                     instance.active_timers.insert(
                         timer_id.clone(),
                         ActiveTimer {

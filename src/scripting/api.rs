@@ -208,6 +208,13 @@ where
 
         let cmd_buf_timer = Rc::clone(&cmd_buffer_rc);
         let start_timer = scope.create_function(move |_, (timer_id, ticks): (String, u32)| {
+            if ticks == 0 {
+                return Err(mlua::Error::RuntimeError(
+                    "Timer remaining_ticks must be strictly greater than 0".to_string(),
+                ));
+            }
+            // Note: If a timer with the same timer_id already exists, it is silently overwritten.
+            // This allows scripts to easily reset or restart active timers.
             cmd_buf_timer.borrow_mut().push(Command::StartTimer {
                 timer_id,
                 remaining_ticks: ticks,

@@ -784,7 +784,8 @@ mod tests {
             .insert("health".to_string(), "100".to_string());
         e1.properties.insert("team".to_string(), "red".to_string());
         instance1.add_entity(e1);
-        let snap1 = instance1.create_snapshot(1);
+        let mut snap1 = instance1.create_snapshot(1);
+        snap1.timestamp = 0;
         let mut buf1 = Vec::new();
         snap1.encode(&mut buf1).unwrap();
 
@@ -795,7 +796,8 @@ mod tests {
         e2.properties
             .insert("health".to_string(), "100".to_string());
         instance2.add_entity(e2);
-        let snap2 = instance2.create_snapshot(1);
+        let mut snap2 = instance2.create_snapshot(1);
+        snap2.timestamp = 0;
         let mut buf2 = Vec::new();
         snap2.encode(&mut buf2).unwrap();
 
@@ -935,7 +937,9 @@ mod tests {
         };
 
         let action_intent = ClientIntent {
-            intent: Some(client_intent::Intent::Action(ActionIntent { ability_id: 1 })),
+            intent: Some(client_intent::Intent::Action(ActionIntent {
+                ability_id: 1,
+            })),
         };
 
         let move_intent = ClientIntent {
