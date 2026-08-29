@@ -33,7 +33,14 @@ fn test_live_match_recording_flow() {
     let loop_path_str = replay_path_str.clone();
 
     let mut game_loop = GameLoop::new(60);
-    game_loop.enable_recording(1, 42, "arena_test".to_string(), 5, loop_path_str, "".to_string());
+    game_loop.enable_recording(
+        1,
+        42,
+        "arena_test".to_string(),
+        5,
+        loop_path_str,
+        "".to_string(),
+    );
     let running: Arc<AtomicBool> = game_loop.running_handle();
 
     let loop_handle = thread::spawn(move || {

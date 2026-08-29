@@ -208,10 +208,18 @@ fn main() {
             );
 
             // In verify mode, load the local script to enable hash verification
-            let mut instance = loci2d::world::instance::Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
+            let mut instance = loci2d::world::instance::Instance::new(
+                header.instance_id,
+                header.tick_rate,
+                60,
+                header.random_seed,
+            );
             let script_path = format!("scripts/{}/main.lua", header.map_name);
             if let Ok(script_content) = std::fs::read_to_string(&script_path) {
-                println!("[Verify] Loading local script from '{}' for hash verification", script_path);
+                println!(
+                    "[Verify] Loading local script from '{}' for hash verification",
+                    script_path
+                );
                 if let Err(e) = instance.load_script(&script_content) {
                     eprintln!("[Verify] Failed to load script: {}", e);
                     process::exit(1);
@@ -319,10 +327,16 @@ fn main() {
                 eprintln!("[Script] Failed to load script: {}", e);
                 process::exit(1);
             }
-            println!("[Script] Script loaded successfully (hash: {})", temp_instance.script_hash);
+            println!(
+                "[Script] Script loaded successfully (hash: {})",
+                temp_instance.script_hash
+            );
             temp_instance.script_hash.clone()
         } else {
-            println!("[Script] No script found at '{}', running without game logic", script_path);
+            println!(
+                "[Script] No script found at '{}', running without game logic",
+                script_path
+            );
             "".to_string()
         }
     };
@@ -335,7 +349,14 @@ fn main() {
             "[Replay] Live match recording enabled -> '{}' (checkpoint interval: {} ticks)",
             record_path, checkpoint_interval
         );
-        game_loop.enable_recording(1, seed, map_name.clone(), checkpoint_interval, record_path, script_hash);
+        game_loop.enable_recording(
+            1,
+            seed,
+            map_name.clone(),
+            checkpoint_interval,
+            record_path,
+            script_hash,
+        );
     }
 
     // Ctrl+C handler for graceful match saving

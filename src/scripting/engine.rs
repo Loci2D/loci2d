@@ -1,12 +1,12 @@
-use mlua::prelude::*;
-use mlua::VmState;
-use std::fmt;
-use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use crate::scripting::api::{setup_base_api, with_scoped_api};
 use crate::scripting::command::CommandBuffer;
 use crate::world::instance::Instance;
+use mlua::VmState;
+use mlua::prelude::*;
+use std::fmt;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Default maximum Lua instructions per callback before interrupting/aborting (DoS protection).
 // TODO(Phase 6.5): Calibrate against real tick budget measurements (tick_rate × budget_µs).
@@ -25,8 +25,6 @@ impl fmt::Debug for ScriptEngine {
             .finish_non_exhaustive()
     }
 }
-
-
 
 impl ScriptEngine {
     /// Creates a new sandboxed `ScriptEngine`.
@@ -104,49 +102,62 @@ impl ScriptEngine {
 
         // 2. Overwrite `math.random` with a deterministic LCG PRNG
         let math_table: mlua::Table = globals.get("math")?;
-        
-        let prng_state = Arc::new(AtomicU64::new(seed));
-        let random_fn = self.lua.create_function(move |_, (min, max): (Option<i32>, Option<i32>)| {
-            // Knuth multiplicative LCG: fast, portable, sufficient quality for game scripting.
-            // Not cryptographically secure, but deterministic cross-platform by construction.
-            let mut state = prng_state.load(Ordering::Relaxed);
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            prng_state.store(state, Ordering::Relaxed);
-            
-            let rand_val = (state >> 32) as u32;
 
-            match (min, max) {
-                (None, None) => {
-                    Ok(mlua::Value::Number((rand_val as f64) / (std::u32::MAX as f64 + 1.0)))
-                }
-                (Some(m), None) => {
-                    if m < 1 {
-                        return Err(mlua::Error::RuntimeError("bad argument #1 to 'random' (interval is empty)".to_string()));
+        let prng_state = Arc::new(AtomicU64::new(seed));
+        let random_fn =
+            self.lua
+                .create_function(move |_, (min, max): (Option<i32>, Option<i32>)| {
+                    // Knuth multiplicative LCG: fast, portable, sufficient quality for game scripting.
+                    // Not cryptographically secure, but deterministic cross-platform by construction.
+                    let mut state = prng_state.load(Ordering::Relaxed);
+                    state = state
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);
+                    prng_state.store(state, Ordering::Relaxed);
+
+                    let rand_val = (state >> 32) as u32;
+
+                    match (min, max) {
+                        (None, None) => Ok(mlua::Value::Number(
+                            (rand_val as f64) / (std::u32::MAX as f64 + 1.0),
+                        )),
+                        (Some(m), None) => {
+                            if m < 1 {
+                                return Err(mlua::Error::RuntimeError(
+                                    "bad argument #1 to 'random' (interval is empty)".to_string(),
+                                ));
+                            }
+                            // Note: modulo bias exists for non-power-of-2 ranges. Acceptable for game scripting.
+                            let res = 1 + (rand_val % (m as u32)) as i32;
+                            Ok(mlua::Value::Integer(res as i64))
+                        }
+                        (Some(m), Some(n)) => {
+                            if m > n {
+                                return Err(mlua::Error::RuntimeError(
+                                    "bad argument #2 to 'random' (interval is empty)".to_string(),
+                                ));
+                            }
+                            let range = (n as u32).wrapping_sub(m as u32).wrapping_add(1);
+                            let res = m.wrapping_add((rand_val % range) as i32);
+                            Ok(mlua::Value::Integer(res as i64))
+                        }
+                        _ => Err(mlua::Error::RuntimeError(
+                            "invalid arguments to 'random'".to_string(),
+                        )),
                     }
-                    // Note: modulo bias exists for non-power-of-2 ranges. Acceptable for game scripting.
-                    let res = 1 + (rand_val % (m as u32)) as i32;
-                    Ok(mlua::Value::Integer(res as i64))
-                }
-                (Some(m), Some(n)) => {
-                    if m > n {
-                        return Err(mlua::Error::RuntimeError("bad argument #2 to 'random' (interval is empty)".to_string()));
-                    }
-                    let range = (n as u32).wrapping_sub(m as u32).wrapping_add(1);
-                    let res = m.wrapping_add((rand_val % range) as i32);
-                    Ok(mlua::Value::Integer(res as i64))
-                }
-                _ => Err(mlua::Error::RuntimeError("invalid arguments to 'random'".to_string())),
-            }
-        })?;
+                })?;
 
         math_table.set("random", random_fn)?;
-        
+
         // Neutralize `math.randomseed` so users don't get confused
-        math_table.set("randomseed", self.lua.create_function(|_, _: mlua::Value| {
-            // Deterministic PRNG is seeded by the Instance at initialization.
-            // Calling math.randomseed() from Lua has no effect.
-            Ok(())
-        })?)?;
+        math_table.set(
+            "randomseed",
+            self.lua.create_function(|_, _: mlua::Value| {
+                // Deterministic PRNG is seeded by the Instance at initialization.
+                // Calling math.randomseed() from Lua has no effect.
+                Ok(())
+            })?,
+        )?;
 
         Ok(())
     }
@@ -216,7 +227,12 @@ impl ScriptEngine {
         })
     }
 
-    pub fn on_tick(&self, instance: &Instance, current_tick: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+    pub fn on_tick(
+        &self,
+        instance: &Instance,
+        current_tick: u64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
@@ -227,7 +243,28 @@ impl ScriptEngine {
         })
     }
 
-    pub fn on_player_join(&self, instance: &Instance, entity_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+    pub fn on_timer_complete(
+        &self,
+        instance: &Instance,
+        timer_id: String,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_timer_complete_fn) = globals.get::<mlua::Function>("on_timer_complete") {
+                on_timer_complete_fn.call::<()>(timer_id)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_player_join(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
@@ -238,7 +275,12 @@ impl ScriptEngine {
         })
     }
 
-    pub fn on_player_leave(&self, instance: &Instance, entity_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+    pub fn on_player_leave(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
@@ -249,7 +291,13 @@ impl ScriptEngine {
         })
     }
 
-    pub fn on_collision(&self, instance: &Instance, entity_a: u64, entity_b: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+    pub fn on_collision(
+        &self,
+        instance: &Instance,
+        entity_a: u64,
+        entity_b: u64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
@@ -260,7 +308,13 @@ impl ScriptEngine {
         })
     }
 
-    pub fn on_trigger_enter(&self, instance: &Instance, entity_id: u64, trigger_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+    pub fn on_trigger_enter(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        trigger_id: u64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
@@ -271,7 +325,13 @@ impl ScriptEngine {
         })
     }
 
-    pub fn on_trigger_stay(&self, instance: &Instance, entity_id: u64, trigger_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+    pub fn on_trigger_stay(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        trigger_id: u64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
@@ -282,7 +342,13 @@ impl ScriptEngine {
         })
     }
 
-    pub fn on_trigger_exit(&self, instance: &Instance, entity_id: u64, trigger_id: u64, cmd_buffer: &mut CommandBuffer) -> LuaResult<()> {
+    pub fn on_trigger_exit(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        trigger_id: u64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();

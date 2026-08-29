@@ -134,7 +134,8 @@ fn test_1000_tick_multi_player_replay_determinism() {
 
 #[test]
 fn test_rejoin_entity_state_preservation_determinism() {
-    let mut recorder = ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, "".to_string());
+    let mut recorder =
+        ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, "".to_string());
     let mut live_instance = Instance::new(1, 30, 60, 42);
     let addr = "127.0.0.1:20000".parse().unwrap();
 
@@ -224,7 +225,14 @@ fn test_inactivity_timeout_disconnect_synchronization() {
     let loop_socket = Arc::clone(&socket);
     let mut game_loop = GameLoop::new(60);
     // 0-second timeout so it times out immediately on the next sweep
-    game_loop.enable_recording(1, 42, "timeout_arena".to_string(), 5, replay_path_str, "".to_string());
+    game_loop.enable_recording(
+        1,
+        42,
+        "timeout_arena".to_string(),
+        5,
+        replay_path_str,
+        "".to_string(),
+    );
     let running: Arc<AtomicBool> = game_loop.running_handle();
 
     let loop_handle = thread::spawn(move || {

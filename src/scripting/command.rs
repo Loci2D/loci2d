@@ -1,5 +1,5 @@
 use crate::world::instance::DeterministicVector2;
-use crate::world::instance::Instance;
+use crate::world::instance::{ActiveTimer, Instance, MatchState};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     SpawnEntity {
@@ -30,6 +30,15 @@ pub enum Command {
         event_name: String,
         data: String,
     },
+    StartMatch,
+    PauseMatch,
+    EndMatch {
+        winner_data: String,
+    },
+    StartTimer {
+        timer_id: String,
+        remaining_ticks: u32,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -50,7 +59,10 @@ impl CommandBuffer {
     pub fn flush_and_apply(&mut self, instance: &mut Instance) {
         for command in self.commands.drain(..) {
             match command {
-                Command::SpawnEntity { blueprint, position } => {
+                Command::SpawnEntity {
+                    blueprint,
+                    position,
+                } => {
                     // TODO(Phase X): Implement actual entity spawning from blueprint
                     if instance.logging_enabled {
                         println!(
@@ -64,17 +76,27 @@ impl CommandBuffer {
                 Command::DestroyEntity { entity_id } => {
                     instance.entities.remove(&entity_id);
                 }
-                Command::SetPosition { entity_id, position } => {
+                Command::SetPosition {
+                    entity_id,
+                    position,
+                } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         entity.position = position;
                     }
                 }
-                Command::SetVelocity { entity_id, velocity } => {
+                Command::SetVelocity {
+                    entity_id,
+                    velocity,
+                } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         entity.velocity = velocity;
                     }
                 }
-                Command::SetEntityProperty { entity_id, key, value } => {
+                Command::SetEntityProperty {
+                    entity_id,
+                    key,
+                    value,
+                } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         entity.properties.insert(key, value);
                     }
@@ -90,6 +112,27 @@ impl CommandBuffer {
                             event_name, data
                         );
                     }
+                }
+                Command::StartMatch => {
+                    instance.state = MatchState::Running;
+                }
+                Command::PauseMatch => {
+                    instance.state = MatchState::Paused;
+                }
+                Command::EndMatch { winner_data } => {
+                    instance.state = MatchState::Ended { winner_data };
+                }
+                Command::StartTimer {
+                    timer_id,
+                    remaining_ticks,
+                } => {
+                    instance.active_timers.insert(
+                        timer_id.clone(),
+                        ActiveTimer {
+                            timer_id,
+                            remaining_ticks,
+                        },
+                    );
                 }
             }
         }

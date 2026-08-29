@@ -140,7 +140,14 @@ mod tests {
 
     #[test]
     fn test_replay_recorder_roundtrip() {
-        let mut recorder = ReplayRecorder::new(1, 30, 12345, "custom_map".to_string(), 60, "dummy_hash".to_string());
+        let mut recorder = ReplayRecorder::new(
+            1,
+            30,
+            12345,
+            "custom_map".to_string(),
+            60,
+            "dummy_hash".to_string(),
+        );
 
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {

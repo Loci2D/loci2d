@@ -112,7 +112,8 @@ impl ReplayPlayer {
     /// Reads and verifies all frames, applying them to a newly created empty instance.
     pub fn verify_determinism(&mut self) -> Result<VerificationReport, DesyncReport> {
         let header = self.replay.header.as_ref().unwrap();
-        let mut instance = Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
+        let mut instance =
+            Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
         self.verify_determinism_with_instance(&mut instance)
     }
 
@@ -130,7 +131,9 @@ impl ReplayPlayer {
                 actual_hash: instance.script_hash.clone(),
                 expected_entities: 0,
                 actual_entities: 0,
-                entity_summary: vec!["Script version mismatch (hash). Replay playback aborted.".to_string()],
+                entity_summary: vec![
+                    "Script version mismatch (hash). Replay playback aborted.".to_string(),
+                ],
             });
         }
 
@@ -221,7 +224,8 @@ impl ReplayPlayer {
         const TERMINAL_FRAME_DELAY_MS: u64 = 15;
 
         let header = self.replay.header.as_ref().unwrap();
-        let mut instance = Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
+        let mut instance =
+            Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
 
         let original_speed = speed;
         let speed = if speed <= 0.0 {
@@ -399,7 +403,8 @@ mod tests {
     #[test]
     fn test_replay_player_verify_success() {
         // Note: Empty script hash is acceptable in this unit test since script hash verification logic is tested separately.
-        let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
+        let mut recorder =
+            ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
 
         // Tick 1: Join Alice
         recorder.record_tick(
@@ -458,7 +463,8 @@ mod tests {
 
     #[test]
     fn test_replay_player_detects_desync() {
-        let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 5, "".to_string());
+        let mut recorder =
+            ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 5, "".to_string());
 
         recorder.record_tick(
             1,

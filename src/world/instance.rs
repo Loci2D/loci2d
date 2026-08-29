@@ -1,10 +1,11 @@
 use super::entity::{Entity, EntityType};
 use super::physics::{MapBounds, StaticObstacle, TriggerEvent};
 use super::session::{ClientSession, SessionState};
-use crate::network::packets::{
-    ClientIntent, EntityState, EntityType as ProtoEntityType, Property, ReplayIntentEntry, WorldState,
-};
 use crate::network::packets::client_intent::Intent;
+use crate::network::packets::{
+    ClientIntent, EntityState, EntityType as ProtoEntityType, Property, ReplayIntentEntry,
+    WorldState,
+};
 use crate::scripting::{CommandBuffer, ScriptEngine};
 use fixed::types::I16F16;
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,6 +15,19 @@ use std::path::Path;
 // Re-export Vector2 from network and DeterministicVector2 from fixed_point
 pub use super::fixed_point::DeterministicVector2;
 pub use crate::network::packets::Vector2;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MatchState {
+    Paused,
+    Running,
+    Ended { winner_data: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveTimer {
+    pub timer_id: String,
+    pub remaining_ticks: u32,
+}
 
 // [2026-08-08] Allowed dead_code: fields like id and tick_rate are essential metadata for multi-room management (Phase 5).
 #[allow(dead_code)]
@@ -36,6 +50,8 @@ pub struct Instance {
     pub script_engine: ScriptEngine,
     pub script_hash: String,
     pub globals: BTreeMap<String, String>,
+    pub state: MatchState,
+    pub active_timers: BTreeMap<String, ActiveTimer>,
     next_entity_id: u64,
     next_session_id: u64,
 }
@@ -58,6 +74,8 @@ impl Instance {
             script_engine: ScriptEngine::new(seed).expect("Failed to initialize ScriptEngine"),
             script_hash: String::new(),
             globals: BTreeMap::new(),
+            state: MatchState::Running,
+            active_timers: BTreeMap::new(),
             next_entity_id: 1,
             next_session_id: 1,
         }
@@ -66,9 +84,11 @@ impl Instance {
     /// Evaluates a Lua script content string inside the instance's script engine.
     pub fn load_script(&mut self, script_content: &str) -> Result<(), String> {
         self.script_engine.load_script(script_content)?;
-        
+
         let mut cmd_buffer = CommandBuffer::new();
-        self.script_engine.on_init(self, &mut cmd_buffer).map_err(|e| e.to_string())?;
+        self.script_engine
+            .on_init(self, &mut cmd_buffer)
+            .map_err(|e| e.to_string())?;
         cmd_buffer.flush_and_apply(self);
 
         use sha2::{Digest, Sha256};
@@ -93,11 +113,19 @@ impl Instance {
         addr: SocketAddr,
         intent: ClientIntent,
     ) -> Result<Option<ReplayIntentEntry>, String> {
-
         let inner_intent = match intent.intent.as_ref() {
             Some(i) => i,
             None => return Ok(None),
         };
+
+        if matches!(self.state, MatchState::Ended { .. }) {
+            if matches!(
+                inner_intent,
+                Intent::Action(_) | Intent::Move(_) | Intent::MoveToPos(_)
+            ) {
+                return Ok(None);
+            }
+        }
 
         let (entity_id, player_name) = match inner_intent {
             Intent::Join(join_intent) => {
@@ -326,7 +354,6 @@ impl Instance {
 
     /// Applies a recorded replay intent entry directly by entity_id without requiring network sockets.
     pub fn apply_replay_entry(&mut self, entry: &ReplayIntentEntry) {
-
         let Some(ClientIntent {
             intent: Some(ref inner_intent),
         }) = entry.intent
@@ -736,13 +763,15 @@ mod tests {
         cmd_buf.flush_and_apply(&mut instance);
 
         assert_eq!(
-            instance.get_entity(1).unwrap().properties.get("health").unwrap(),
+            instance
+                .get_entity(1)
+                .unwrap()
+                .properties
+                .get("health")
+                .unwrap(),
             "100"
         );
-        assert_eq!(
-            instance.globals.get("round_number").unwrap(),
-            "2"
-        );
+        assert_eq!(instance.globals.get("round_number").unwrap(), "2");
     }
 
     #[test]
@@ -751,7 +780,8 @@ mod tests {
 
         let mut instance1 = Instance::new(1, 30, 10, 42);
         let mut e1 = Entity::new(1, "Player1".to_string(), EntityType::Player);
-        e1.properties.insert("health".to_string(), "100".to_string());
+        e1.properties
+            .insert("health".to_string(), "100".to_string());
         e1.properties.insert("team".to_string(), "red".to_string());
         instance1.add_entity(e1);
         let snap1 = instance1.create_snapshot(1);
@@ -762,7 +792,8 @@ mod tests {
         let mut e2 = Entity::new(1, "Player1".to_string(), EntityType::Player);
         // Insert in reverse order to ensure BTreeMap sorts it internally
         e2.properties.insert("team".to_string(), "red".to_string());
-        e2.properties.insert("health".to_string(), "100".to_string());
+        e2.properties
+            .insert("health".to_string(), "100".to_string());
         instance2.add_entity(e2);
         let snap2 = instance2.create_snapshot(1);
         let mut buf2 = Vec::new();
@@ -770,5 +801,166 @@ mod tests {
 
         // Prove ADR-0007 compliance: iteration order and hence serialization bytes are identical
         assert_eq!(buf1, buf2);
+    }
+
+    #[test]
+    fn test_timer_determinism_and_execution_order() {
+        use crate::world::instance::ActiveTimer;
+        use crate::world::instance::MatchState;
+
+        let mut instance = Instance::new(1, 30, 10, 12345);
+        instance.state = MatchState::Running;
+
+        // Add timers out of alphabetical order
+        instance.active_timers.insert(
+            "timer_B".to_string(),
+            ActiveTimer {
+                timer_id: "timer_B".to_string(),
+                remaining_ticks: 1,
+            },
+        );
+        instance.active_timers.insert(
+            "timer_A".to_string(),
+            ActiveTimer {
+                timer_id: "timer_A".to_string(),
+                remaining_ticks: 1,
+            },
+        );
+
+        // Add a script that logs timer completion
+        instance
+            .script_engine
+            .load_script(
+                r#"
+            _G.timer_log = _G.timer_log or {}
+            function on_timer_complete(timer_id)
+                table.insert(_G.timer_log, timer_id)
+            end
+        "#,
+            )
+            .unwrap();
+
+        let _ = instance.tick(1);
+
+        assert!(instance.active_timers.is_empty());
+
+        // Verify execution order in Lua
+        instance
+            .script_engine
+            .lua()
+            .scope(|_scope| {
+                let log: mlua::Table = instance
+                    .script_engine
+                    .lua()
+                    .globals()
+                    .get("timer_log")
+                    .unwrap();
+                let first: String = log.get(1).unwrap();
+                let second: String = log.get(2).unwrap();
+
+                assert_eq!(first, "timer_A");
+                assert_eq!(second, "timer_B");
+                Ok::<(), mlua::Error>(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_match_state_machine_lock() {
+        use crate::world::instance::MatchState;
+
+        let mut instance = Instance::new(1, 30, 10, 12345);
+        instance.state = MatchState::Paused;
+
+        // Load a script to track callbacks
+        instance
+            .script_engine
+            .load_script(
+                r#"
+            _G.tick_called = false
+            _G.join_called = false
+            
+            function on_tick(tick)
+                _G.tick_called = true
+            end
+            
+            function on_player_join(entity_id)
+                _G.join_called = true
+            end
+        "#,
+            )
+            .unwrap();
+
+        let _ = instance.tick(1);
+
+        // Tick should be skipped because we're paused
+        let tick_called: bool = instance
+            .script_engine
+            .lua()
+            .globals()
+            .get("tick_called")
+            .unwrap();
+        assert!(!tick_called);
+
+        // But join events should still process
+        use crate::network::packets::{ClientIntent, JoinIntent, client_intent};
+        let join_intent = ClientIntent {
+            intent: Some(client_intent::Intent::Join(JoinIntent {
+                player_name: "Alice".to_string(),
+            })),
+        };
+        let _ = instance
+            .apply_intent("127.0.0.1:1234".parse().unwrap(), join_intent)
+            .unwrap();
+
+        let join_called: bool = instance
+            .script_engine
+            .lua()
+            .globals()
+            .get("join_called")
+            .unwrap();
+        assert!(join_called);
+    }
+
+    #[test]
+    fn test_intent_filtering_when_ended() {
+        use crate::network::packets::{
+            ActionIntent, ClientIntent, MoveIntent, PingIntent, Vector2, client_intent,
+        };
+        use crate::world::instance::MatchState;
+
+        let mut instance = Instance::new(1, 30, 10, 12345);
+        instance.state = MatchState::Ended {
+            winner_data: "Alice".to_string(),
+        };
+
+        let action_intent = ClientIntent {
+            intent: Some(client_intent::Intent::Action(ActionIntent { ability_id: 1 })),
+        };
+
+        let move_intent = ClientIntent {
+            intent: Some(client_intent::Intent::Move(MoveIntent {
+                direction: Some(Vector2 {
+                    x_bits: 1,
+                    y_bits: 0,
+                }),
+            })),
+        };
+
+        let ping_intent = ClientIntent {
+            intent: Some(client_intent::Intent::Ping(PingIntent {})),
+        };
+
+        let addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+
+        // These should be ignored and return Ok(None)
+        let res_action = instance.apply_intent(addr, action_intent).unwrap();
+        assert!(res_action.is_none());
+
+        let res_move = instance.apply_intent(addr, move_intent).unwrap();
+        assert!(res_move.is_none());
+
+        let res_ping = instance.apply_intent(addr, ping_intent);
+        assert!(res_ping.is_ok());
     }
 }

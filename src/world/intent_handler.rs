@@ -1,10 +1,10 @@
 use crate::network::packets::client_intent::Intent;
 use crate::scripting::command::CommandBuffer;
 use crate::world::entity::{Entity, EntityType};
-use fixed::types::I16F16;
 use crate::world::fixed_point::DeterministicVector2;
 use crate::world::instance::Instance;
 use crate::world::physics::navigation::NavigationComponent;
+use fixed::types::I16F16;
 
 /// Applies a resolved intent to the instance. This is used by both live client intents
 /// and replay playback to ensure identical behavior and identical Lua callback invocation.

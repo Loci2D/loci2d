@@ -52,14 +52,14 @@ fn test_lua_determinism_different_seeds() {
 
     let r1: i32 = get_rand_1.call(()).unwrap();
     let r2: i32 = get_rand_2.call(()).unwrap();
-    
+
     assert_ne!(r1, r2, "Different seeds should produce different sequences");
 }
 
 #[test]
 fn test_lua_determinism_no_pairs() {
     let mut inst = Instance::new(1, 30, 10, 42);
-    
+
     let script = r#"
         local t = {a=1, b=2}
         for k, v in pairs(t) do
@@ -69,7 +69,10 @@ fn test_lua_determinism_no_pairs() {
 
     let res = inst.load_script(script);
     assert!(res.is_err());
-    assert!(res.unwrap_err().contains("attempt to call a nil value (global 'pairs')"));
+    assert!(
+        res.unwrap_err()
+            .contains("attempt to call a nil value (global 'pairs')")
+    );
 }
 
 #[test]
@@ -84,14 +87,14 @@ fn test_lua_script_hash() {
 
     inst.load_script(script2).unwrap();
     let hash2 = inst.script_hash.clone();
-    
+
     assert_ne!(hash1, hash2, "Different scripts must have different hashes");
 }
 
 #[test]
 fn test_lua_deterministic_iteration() {
     let mut inst = Instance::new(1, 30, 10, 42);
-    
+
     let script = r#"
         local t = {
             z_last = 100,
@@ -113,9 +116,9 @@ fn test_lua_deterministic_iteration() {
     inst.load_script(script).unwrap();
     let globals = inst.script_engine.lua().globals();
     let get_result: mlua::Function = globals.get("get_result").unwrap();
-    
+
     let output: String = get_result.call(()).unwrap();
-    
+
     // We expect lexicographical sorting of keys:
     // "1_number" < "a_first" < "m_middle" < "z_last"
     assert_eq!(output, "1_number:999,a_first:1,m_middle:50,z_last:100");

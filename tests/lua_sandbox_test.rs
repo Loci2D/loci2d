@@ -1,7 +1,7 @@
 use loci2d::scripting::ScriptEngine;
 use loci2d::world::instance::Instance;
-use tempfile::NamedTempFile;
 use std::io::Write;
+use tempfile::NamedTempFile;
 
 #[test]
 fn test_io_library_disabled() {
@@ -85,7 +85,10 @@ fn test_dos_protection_infinite_loop() {
     "#;
 
     let result = engine.load_script(infinite_loop_script);
-    assert!(result.is_err(), "Infinite loop script should have been interrupted!");
+    assert!(
+        result.is_err(),
+        "Infinite loop script should have been interrupted!"
+    );
     let err = result.unwrap_err();
     assert!(
         err.contains("Execution limit exceeded"),
@@ -109,11 +112,19 @@ fn test_dos_protection_resets_per_invocation() {
 
     // First call should succeed
     let res1 = engine.load_script(normal_script);
-    assert!(res1.is_ok(), "First script execution failed: {:?}", res1.err());
+    assert!(
+        res1.is_ok(),
+        "First script execution failed: {:?}",
+        res1.err()
+    );
 
     // Second call should also succeed because counter resets per invocation
     let res2 = engine.load_script(normal_script);
-    assert!(res2.is_ok(), "Second script execution failed due to unreset counter: {:?}", res2.err());
+    assert!(
+        res2.is_ok(),
+        "Second script execution failed due to unreset counter: {:?}",
+        res2.err()
+    );
 }
 
 #[test]

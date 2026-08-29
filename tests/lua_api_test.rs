@@ -1,7 +1,7 @@
 #![allow(unused_must_use)]
-use loci2d::scripting::{ScriptEngine, Command, CommandBuffer};
 use loci2d::scripting::api::with_scoped_api;
-use loci2d::world::instance::{Instance, DeterministicVector2};
+use loci2d::scripting::{Command, CommandBuffer, ScriptEngine};
+use loci2d::world::instance::{DeterministicVector2, Instance};
 
 #[test]
 fn test_deterministic_vector2_userdata() {
@@ -24,15 +24,15 @@ fn test_deterministic_vector2_userdata() {
 fn test_command_buffer_and_entity_api() {
     let engine = ScriptEngine::new(42).unwrap();
     let mut instance = Instance::new(1, 30, 10, 42);
-    
+
     // Add an entity
     instance.handle_join("127.0.0.1:12345".parse().unwrap(), "Alice".to_string());
-    
+
     // Position it
     if let Some(entity) = instance.entities.values_mut().next() {
         entity.position = DeterministicVector2::from_f32(10.0, 20.0);
     }
-    
+
     let mut command_buffer = CommandBuffer::new();
 
     let script = r#"
@@ -56,12 +56,16 @@ fn test_command_buffer_and_entity_api() {
 
     with_scoped_api(engine.lua(), &instance, &mut command_buffer, || {
         func.call::<()>(())
-    }).unwrap();
+    })
+    .unwrap();
 
     assert_eq!(command_buffer.commands.len(), 1);
-    
+
     match &command_buffer.commands[0] {
-        Command::SpawnEntity { blueprint, position } => {
+        Command::SpawnEntity {
+            blueprint,
+            position,
+        } => {
             assert_eq!(blueprint, "box");
             assert_eq!(position.to_f32(), (15.0, 20.0));
         }

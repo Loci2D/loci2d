@@ -1,10 +1,14 @@
-use loci2d::network::{ClientIntent, JoinIntent, MoveIntent, MoveToPositionIntent, ReplayIntentEntry, client_intent};
+use fixed::types::I16F16;
+use loci2d::network::{
+    ClientIntent, JoinIntent, MoveIntent, MoveToPositionIntent, ReplayIntentEntry, client_intent,
+};
 use loci2d::replay::player::ReplayPlayer;
 use loci2d::replay::recorder::ReplayRecorder;
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::instance::Instance;
-use loci2d::world::physics::{ColliderShape, DeterministicCircle, DeterministicAABB, MapBounds, StaticObstacle};
-use fixed::types::I16F16;
+use loci2d::world::physics::{
+    ColliderShape, DeterministicAABB, DeterministicCircle, MapBounds, StaticObstacle,
+};
 use std::net::SocketAddr;
 use std::time::Instant;
 
@@ -19,7 +23,7 @@ fn main() {
     println!("1. Running Performance Benchmark (100 active entities, 10,000 ticks)...");
     let mut bench_instance = Instance::new(1, 30, 60, 42);
     bench_instance.set_map_bounds(MapBounds::default_arena());
-    
+
     bench_instance.add_static_obstacle(StaticObstacle::solid_wall(
         1000,
         ColliderShape::AABB(DeterministicAABB::from_center_half_extents(
@@ -130,7 +134,9 @@ fn main() {
                     let inner_intent = if pid % 2 == 0 {
                         // Even players use click-to-move
                         client_intent::Intent::MoveToPos(MoveToPositionIntent {
-                            target_position: Some(DeterministicVector2::from_f32(dx * 50.0, dy * 50.0).to_proto()),
+                            target_position: Some(
+                                DeterministicVector2::from_f32(dx * 50.0, dy * 50.0).to_proto(),
+                            ),
                         })
                     } else {
                         // Odd players use direct velocity
@@ -144,7 +150,8 @@ fn main() {
                     };
 
                     let addr: SocketAddr = format!("127.0.0.1:{}", 20000 + pid).parse().unwrap();
-                    if let Ok(Some(entry)) = sim_instance.apply_intent(addr, client_intent_payload) {
+                    if let Ok(Some(entry)) = sim_instance.apply_intent(addr, client_intent_payload)
+                    {
                         tick_entries.push(entry);
                     }
                 }

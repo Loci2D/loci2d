@@ -91,7 +91,10 @@ impl GameLoop {
                         }
                         Ok(None) => {}
                         Err(e) => {
-                            eprintln!("[Server] Script Error during apply_intent: {}. Aborting instance.", e);
+                            eprintln!(
+                                "[Server] Script Error during apply_intent: {}. Aborting instance.",
+                                e
+                            );
                             self.running.store(false, Ordering::Relaxed);
                             break;
                         }
@@ -111,16 +114,21 @@ impl GameLoop {
                 let timed_out = match instance.tick(tick_count) {
                     Ok(t) => t,
                     Err(e) => {
-                        eprintln!("[Server] Script Error during tick: {}. Aborting instance.", e);
+                        eprintln!(
+                            "[Server] Script Error during tick: {}. Aborting instance.",
+                            e
+                        );
                         self.running.store(false, Ordering::Relaxed);
                         // Attempt to broadcast disconnect
                         out_buf.clear();
                         let packet = ServerPacket {
                             sequence_id: tick_count,
-                            payload: Some(server_packet::Payload::Response(crate::network::packets::ServerResponse {
-                                sequence_id: tick_count,
-                                status: "Disconnect: Server Error".to_string(),
-                            })),
+                            payload: Some(server_packet::Payload::Response(
+                                crate::network::packets::ServerResponse {
+                                    sequence_id: tick_count,
+                                    status: "Disconnect: Server Error".to_string(),
+                                },
+                            )),
                         };
                         if let Ok(()) = packet.encode(&mut out_buf) {
                             for client_addr in instance.get_broadcast_addresses() {
@@ -130,6 +138,18 @@ impl GameLoop {
                         break;
                     }
                 };
+
+                if matches!(
+                    instance.state,
+                    crate::world::instance::MatchState::Ended { .. }
+                ) {
+                    if self.recorder.is_some() {
+                        println!(
+                            "[Server] MatchState::Ended reached. Triggering graceful shutdown to finalize replay."
+                        );
+                    }
+                    self.running.store(false, Ordering::Relaxed);
+                }
 
                 // If any sessions timed out, record synthetic disconnects in the replay stream
                 if let Some(ref mut recorder) = self.recorder {
