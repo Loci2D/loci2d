@@ -327,10 +327,7 @@ impl Instance {
             })
             .collect();
 
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let timestamp = tick * (1000 / self.tick_rate as u64);
 
         WorldState {
             tick,
@@ -589,7 +586,6 @@ mod tests {
     fn test_instance_map_bounds_clamping_on_tick() {
         use crate::world::physics::MapBounds;
         use fixed::types::I16F16;
-
         let mut instance = Instance::new(1, 30, 10, 42);
         instance.set_map_bounds(MapBounds::new(
             DeterministicVector2::new(I16F16::from_num(-100), I16F16::from_num(-100)),
@@ -679,7 +675,6 @@ mod tests {
     #[test]
     fn test_explicit_move_to_pos_intent_and_preemption() {
         use crate::network::packets::MoveToPositionIntent;
-
         let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
 
@@ -785,7 +780,6 @@ mod tests {
         e1.properties.insert("team".to_string(), "red".to_string());
         instance1.add_entity(e1);
         let mut snap1 = instance1.create_snapshot(1);
-        snap1.timestamp = 0;
         let mut buf1 = Vec::new();
         snap1.encode(&mut buf1).unwrap();
 
@@ -797,7 +791,6 @@ mod tests {
             .insert("health".to_string(), "100".to_string());
         instance2.add_entity(e2);
         let mut snap2 = instance2.create_snapshot(1);
-        snap2.timestamp = 0;
         let mut buf2 = Vec::new();
         snap2.encode(&mut buf2).unwrap();
 

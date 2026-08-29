@@ -44,7 +44,7 @@ fn test_live_match_recording_flow() {
     let running: Arc<AtomicBool> = game_loop.running_handle();
 
     let loop_handle = thread::spawn(move || {
-        let instance = Instance::new(1, 60, 5, 42);
+        let mut instance = Instance::new(1, 60, 5, 42);
         game_loop.start(instance, intent_rx, loop_socket);
     });
 

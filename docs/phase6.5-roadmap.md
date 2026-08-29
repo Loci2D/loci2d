@@ -17,19 +17,19 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 > **Spec:** [phase6.5.0-1-data-model-spec.md](roadmap-specs/phase6.5.0-1-data-model-spec.md)
 
 ### English
-* [ ] **Entity Property System (Data-Driven Design):**
+* [x] **Entity Property System (Data-Driven Design):**
   - Add a flexible key-value property map to the `Entity` struct in Rust.
-* [ ] **Lua Property Interface:**
+* [x] **Lua Property Interface:**
   - Expose `Loci.get_entity_property` and `Loci.Commands.set_property` to Lua scripts.
-* [ ] **Global Match Metadata:**
+* [x] **Global Match Metadata:**
   - Allow Lua to manage global match variables (e.g., match score, player count) via the generic property system (`globals`).
 
 ### Português
-* [ ] **Sistema de Propriedades de Entidade:**
+* [x] **Sistema de Propriedades de Entidade:**
   - Adicionar um mapa chave-valor flexível na struct `Entity` no Rust.
-* [ ] **Interface de Propriedades no Lua:**
+* [x] **Interface de Propriedades no Lua:**
   - Expor `Loci.get_entity_property` e `Loci.Commands.set_property`.
-* [ ] **Metadados Globais da Partida:**
+* [x] **Metadados Globais da Partida:**
   - Permitir que o Lua gerencie variáveis globais (placar, etc.) via o sistema de propriedades genéricas (`globals`).
 
 ---
@@ -39,17 +39,17 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 > **Spec:** [phase6.5.0-2-match-lifecycle-spec.md](roadmap-specs/phase6.5.0-2-match-lifecycle-spec.md)
 
 ### English
-* [ ] **Match Lifecycle State Machine:**
+* [x] **Match Lifecycle State Machine:**
   - Introduce a `Paused`/`Running`/`Ended` state machine to the server instance.
   - Expose `Loci.Commands.start_match()`, `Loci.Commands.pause_match()`, and `Loci.Commands.end_match()` to Lua scripts.
-* [ ] **Timer & Cooldown System:**
+* [x] **Timer & Cooldown System:**
   - Expose `Loci.Commands.start_timer(timer_id, delay_ticks)` and route expiration to a new Lua callback `on_timer_complete(timer_id)`.
 
 ### Português
-* [ ] **Máquina de Estado do Ciclo de Vida da Partida:**
+* [x] **Máquina de Estado do Ciclo de Vida da Partida:**
   - Introduzir uma máquina de estados `Pausado`/`Em Execução`/`Encerrado` para a instância.
   - Expor comandos de `start_match`, `pause_match` e `end_match`.
-* [ ] **Sistema de Timers e Cooldowns:**
+* [x] **Sistema de Timers e Cooldowns:**
   - Expor `Loci.Commands.start_timer` e o callback `on_timer_complete`.
 
 ---
