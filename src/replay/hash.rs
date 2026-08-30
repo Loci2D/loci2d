@@ -86,7 +86,7 @@ mod tests {
         let hash2 = compute_canonical_state_hash(&inst, 2); // Different tick
         assert_ne!(hash1, hash2);
 
-        inst.tick(2); // Position advances by velocity
+        let _ = inst.tick(2); // Position advances by velocity
         let hash3 = compute_canonical_state_hash(&inst, 2);
         assert_ne!(hash2, hash3);
     }

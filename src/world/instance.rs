@@ -395,7 +395,7 @@ mod tests {
                 player_name: "Alice".to_string(),
             })),
         };
-        instance.apply_intent(addr, join_intent);
+        let _ = instance.apply_intent(addr, join_intent);
 
         assert_eq!(instance.sessions.len(), 1);
         assert_eq!(instance.entities.len(), 1);
@@ -417,13 +417,13 @@ mod tests {
                 direction: Some(DeterministicVector2::from_f32(2.5, -1.0).to_proto()),
             })),
         };
-        instance.apply_intent(addr, move_intent);
+        let _ = instance.apply_intent(addr, move_intent);
 
         let entity = instance.get_entity(entity_id).unwrap();
         assert_eq!(entity.velocity.to_f32(), (2.5, -1.0));
 
         // 3. Tick
-        instance.tick(1);
+        let _ = instance.tick(1);
 
         let updated_entity = instance.get_entity(entity_id).unwrap();
         assert_eq!(updated_entity.position.to_f32(), (2.5, -1.0));
@@ -440,7 +440,7 @@ mod tests {
                 player_name: "Bob".to_string(),
             })),
         };
-        instance.apply_intent(addr, join_intent);
+        let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
         assert_eq!(instance.entities.len(), 1);
 
@@ -450,7 +450,7 @@ mod tests {
                 reason: "Leaving match".to_string(),
             })),
         };
-        instance.apply_intent(addr, disconnect_intent);
+        let _ = instance.apply_intent(addr, disconnect_intent);
 
         assert_eq!(instance.sessions.len(), 0);
         assert_eq!(instance.entities.len(), 0);
@@ -468,7 +468,7 @@ mod tests {
                 direction: Some(DeterministicVector2::from_f32(1.0, 1.0).to_proto()),
             })),
         };
-        instance.apply_intent(addr, move_intent);
+        let _ = instance.apply_intent(addr, move_intent);
 
         assert_eq!(instance.sessions.len(), 0);
         assert_eq!(instance.entities.len(), 0);
@@ -480,7 +480,7 @@ mod tests {
                 target_direction: None,
             })),
         };
-        instance.apply_intent(addr, action_intent);
+        let _ = instance.apply_intent(addr, action_intent);
         assert_eq!(instance.sessions.len(), 0);
         assert_eq!(instance.entities.len(), 0);
 
@@ -488,7 +488,7 @@ mod tests {
         let ping_intent = ClientIntent {
             intent: Some(client_intent::Intent::Ping(PingIntent {})),
         };
-        instance.apply_intent(addr, ping_intent);
+        let _ = instance.apply_intent(addr, ping_intent);
         assert_eq!(instance.sessions.len(), 0);
         assert_eq!(instance.entities.len(), 0);
     }
@@ -503,12 +503,12 @@ mod tests {
                 player_name: "Charlie".to_string(),
             })),
         };
-        instance.apply_intent(addr, join_intent);
+        let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
         assert_eq!(instance.entities.len(), 1);
 
         // Advance tick, should trigger check_timeouts and clean up
-        instance.tick(1);
+        let _ = instance.tick(1);
 
         assert_eq!(instance.sessions.len(), 0);
         assert_eq!(instance.entities.len(), 0);
@@ -525,13 +525,13 @@ mod tests {
                 player_name: "Dave".to_string(),
             })),
         };
-        instance.apply_intent(addr, join_intent);
+        let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
 
         let ping_intent = ClientIntent {
             intent: Some(client_intent::Intent::Ping(PingIntent {})),
         };
-        instance.apply_intent(addr, ping_intent);
+        let _ = instance.apply_intent(addr, ping_intent);
         assert_eq!(instance.sessions.len(), 1);
 
         let action_intent = ClientIntent {
@@ -540,7 +540,7 @@ mod tests {
                 target_direction: None,
             })),
         };
-        instance.apply_intent(addr, action_intent);
+        let _ = instance.apply_intent(addr, action_intent);
         assert_eq!(instance.sessions.len(), 1);
     }
 
@@ -623,7 +623,7 @@ mod tests {
         e3.velocity = DeterministicVector2::new(I16F16::from_num(-30), I16F16::from_num(0)); // would reach -110, 0
         instance.add_entity(e3);
 
-        instance.tick(1);
+        let _ = instance.tick(1);
 
         // e1 clamped to (100, 100)
         let updated_e1 = instance.get_entity(1).unwrap();
@@ -788,7 +788,7 @@ mod tests {
             .insert("health".to_string(), "100".to_string());
         e1.properties.insert("team".to_string(), "red".to_string());
         instance1.add_entity(e1);
-        let mut snap1 = instance1.create_snapshot(1);
+        let snap1 = instance1.create_snapshot(1);
         let mut buf1 = Vec::new();
         snap1.encode(&mut buf1).unwrap();
 
@@ -799,7 +799,7 @@ mod tests {
         e2.properties
             .insert("health".to_string(), "100".to_string());
         instance2.add_entity(e2);
-        let mut snap2 = instance2.create_snapshot(1);
+        let snap2 = instance2.create_snapshot(1);
         let mut buf2 = Vec::new();
         snap2.encode(&mut buf2).unwrap();
 

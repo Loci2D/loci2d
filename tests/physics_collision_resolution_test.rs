@@ -126,7 +126,7 @@ fn test_instance_static_wall_blocking_and_sliding() {
     // Integration: position -> (50, 5). Circle edge at X = 55 penetrates wall (min.x = 50) by 5 units.
     // Collision resolution pushes player out to X = 45 (contact normal = (-1, 0)).
     // Velocity along X is zeroed, velocity along Y (5) is preserved for sliding!
-    instance.tick(1);
+    let _ = instance.tick(1);
 
     let p = instance.get_entity(1).unwrap();
     assert_eq!(p.position.x, I16F16::from_num(45));
@@ -136,7 +136,7 @@ fn test_instance_static_wall_blocking_and_sliding() {
 
     // Tick 2:
     // Slides along wall from Y = 5 to Y = 10, staying at X = 45
-    instance.tick(2);
+    let _ = instance.tick(2);
 
     let p2 = instance.get_entity(1).unwrap();
     assert_eq!(p2.position.x, I16F16::from_num(45));
@@ -167,7 +167,7 @@ fn test_instance_dynamic_entity_collision() {
     // Normal from B (+2) to A (-2) is (-1, 0).
     // 50/50 pushback separates them by 3 each: p1 to (-5, 0), p2 to (+5, 0).
     // Inward velocities (4 and -4) are canceled to 0.
-    instance.tick(1);
+    let _ = instance.tick(1);
 
     let p1_after = instance.get_entity(1).unwrap();
     let p2_after = instance.get_entity(2).unwrap();
@@ -201,7 +201,7 @@ fn test_trigger_zones_lifecycle_enter_stay_exit() {
 
     // Tick 1: Player moves to (110, 150) -> Inside trigger zone!
     // Should emit Enter event
-    instance.tick(1);
+    let _ = instance.tick(1);
 
     assert_eq!(instance.trigger_events.len(), 1);
     assert_eq!(instance.trigger_events[0].trigger_id, 500);
@@ -215,7 +215,7 @@ fn test_trigger_zones_lifecycle_enter_stay_exit() {
 
     // Tick 2: Player moves to (140, 150) -> Still inside trigger zone!
     // Should emit Stay event
-    instance.tick(2);
+    let _ = instance.tick(2);
 
     assert_eq!(instance.trigger_events.len(), 1);
     assert_eq!(instance.trigger_events[0].trigger_id, 500);
@@ -228,7 +228,7 @@ fn test_trigger_zones_lifecycle_enter_stay_exit() {
     assert!(instance.active_trigger_overlaps.contains(&(500, 1)));
 
     // Tick 3: Player moves to (170, 150) -> Still inside
-    instance.tick(3);
+    let _ = instance.tick(3);
     assert_eq!(
         instance.trigger_events[0].event_type,
         TriggerEventType::Stay
@@ -239,7 +239,7 @@ fn test_trigger_zones_lifecycle_enter_stay_exit() {
     if let Some(p) = instance.entities.get_mut(&1) {
         p.velocity = DeterministicVector2::new(I16F16::from_num(50), I16F16::ZERO);
     }
-    instance.tick(4);
+    let _ = instance.tick(4);
 
     assert_eq!(instance.trigger_events.len(), 1);
     assert_eq!(instance.trigger_events[0].trigger_id, 500);
@@ -253,7 +253,7 @@ fn test_trigger_zones_lifecycle_enter_stay_exit() {
 
     // Tick 5: Player is at (270, 150) -> Far outside
     // No trigger events emitted
-    instance.tick(5);
+    let _ = instance.tick(5);
     assert_eq!(instance.trigger_events.len(), 0);
 }
 
@@ -295,7 +295,7 @@ fn test_multiple_triggers_and_entities_deterministic_ordering() {
     instance.add_entity(e1);
     instance.add_entity(e2);
 
-    instance.tick(1);
+    let _ = instance.tick(1);
 
     // Events must be ordered strictly by (trigger_id, entity_id):
     // (10, 1), (10, 2), (10, 3), (20, 1), (20, 2), (20, 3)

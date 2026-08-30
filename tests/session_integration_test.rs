@@ -28,7 +28,7 @@ fn test_end_to_end_session_lifecycle() {
     // Spawn game loop thread
     let loop_socket = Arc::clone(&socket);
     thread::spawn(move || {
-        let mut instance = Instance::new(1, 60, 2, 42);
+        let instance = Instance::new(1, 60, 2, 42);
         let mut game_loop = GameLoop::new(60);
         game_loop.start(instance, intent_rx, loop_socket);
     });

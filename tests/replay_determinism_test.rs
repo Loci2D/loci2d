@@ -236,7 +236,7 @@ fn test_inactivity_timeout_disconnect_synchronization() {
     let running: Arc<AtomicBool> = game_loop.running_handle();
 
     let loop_handle = thread::spawn(move || {
-        let mut instance = Instance::new(1, 60, 0, 42); // 0s timeout
+        let instance = Instance::new(1, 60, 0, 42); // 0s timeout
         game_loop.start(instance, intent_rx, loop_socket);
     });
 

@@ -1,6 +1,6 @@
 use fixed::types::I16F16;
 use loci2d::network::{
-    ClientIntent, JoinIntent, MoveIntent, MoveToPositionIntent, ReplayIntentEntry, client_intent,
+    ClientIntent, JoinIntent, MoveIntent, MoveToPositionIntent, client_intent,
 };
 use loci2d::replay::player::ReplayPlayer;
 use loci2d::replay::recorder::ReplayRecorder;
@@ -125,7 +125,7 @@ fn main() {
         // Change player movement directions periodically
         if tick % 15 == 0 {
             for pid in 1..=player_count {
-                if let Some(entity) = sim_instance.entities.get_mut(&pid) {
+                if let Some(_entity) = sim_instance.entities.get_mut(&pid) {
                     let angle = ((tick * pid * 13) % 360) as f32;
                     let dx = (angle.to_radians()).cos() * 3.5;
                     let dy = (angle.to_radians()).sin() * 3.5;

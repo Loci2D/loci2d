@@ -59,20 +59,20 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 > **Spec:** [phase6.5.0-3-gameplay-actions-spec.md](roadmap-specs/phase6.5.0-3-gameplay-actions-spec.md)
 
 ### English
-* [ ] **Action/Ability Dispatch:**
+* [x] **Action/Ability Dispatch:**
   - Expand `ActionIntent` with a `target_direction` field for directional abilities.
   - Route the intent to a new Lua callback `on_action(entity_id, ability_id, dir_x, dir_y)`.
-* [ ] **Dynamic Entity Spawning:**
+* [x] **Dynamic Entity Spawning:**
   - Resolve the `SpawnEntity` CommandBuffer stub so scripts can dynamically spawn projectiles.
-* [ ] **Entity Physics Configuration:**
+* [x] **Entity Physics Configuration:**
   - Expose `Loci.Commands.set_move_speed(entity_id, speed)` to allow Lua scripts to configure per-entity movement speed at runtime.
 
 ### Português
-* [ ] **Despacho de Ações/Habilidades:**
+* [x] **Despacho de Ações/Habilidades:**
   - Expandir o `ActionIntent` com campo `target_direction` e rotear para o callback `on_action`.
-* [ ] **Spawn Dinâmico de Entidades:**
+* [x] **Spawn Dinâmico de Entidades:**
   - Resolver o stub do `SpawnEntity` no CommandBuffer.
-* [ ] **Configuração de Física por Entidade:**
+* [x] **Configuração de Física por Entidade:**
   - Expor `Loci.Commands.set_move_speed(entity_id, speed)` (resolve [Issue #4](https://github.com/lamfsantos/loci2d/issues/4)).
 
 ---

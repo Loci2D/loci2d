@@ -25,7 +25,7 @@ fn start_test_server(tick_rate: u32, timeout_secs: u64) -> (std::net::SocketAddr
 
     let loop_socket = Arc::clone(&socket);
     thread::spawn(move || {
-        let mut instance = Instance::new(1, tick_rate, timeout_secs, 42);
+        let instance = Instance::new(1, tick_rate, timeout_secs, 42);
         let mut game_loop = GameLoop::new(tick_rate);
         game_loop.start(instance, intent_rx, loop_socket);
     });

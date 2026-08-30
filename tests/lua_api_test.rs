@@ -80,7 +80,7 @@ use fixed::types::I16F16;
 fn test_on_action_direction_passthrough() {
     let mut instance = Instance::new(1, 30, 10, 42);
     let addr = "127.0.0.1:12345".parse().unwrap();
-    let alice_id = instance.handle_join(addr, "Alice".to_string());
+    let _alice_id = instance.handle_join(addr, "Alice".to_string());
 
     let script = r#"
         ACTION_DIR_X = 0
