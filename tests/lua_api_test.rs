@@ -72,3 +72,87 @@ fn test_command_buffer_and_entity_api() {
         _ => panic!("Expected SpawnEntity command"),
     }
 }
+
+use loci2d::network::{ClientIntent, client_intent, ActionIntent, Vector2};
+use fixed::types::I16F16;
+
+#[test]
+fn test_on_action_direction_passthrough() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let alice_id = instance.handle_join(addr, "Alice".to_string());
+
+    let script = r#"
+        ACTION_DIR_X = 0
+        ACTION_DIR_Y = 0
+        function on_action(entity_id, ability_id, dir_x, dir_y)
+            ACTION_DIR_X = dir_x
+            ACTION_DIR_Y = dir_y
+        end
+    "#;
+    instance.script_engine.load_script(script).unwrap();
+
+    let action_intent = ClientIntent {
+        intent: Some(client_intent::Intent::Action(ActionIntent {
+            ability_id: 1,
+            target_direction: Some(Vector2 {
+                x_bits: (1.5f32 * 65536.0) as i32,
+                y_bits: (-0.5f32 * 65536.0) as i32,
+            }),
+        })),
+    };
+    instance.apply_intent(addr, action_intent).unwrap();
+
+    let globals = instance.script_engine.lua().globals();
+    let dir_x: f64 = globals.get("ACTION_DIR_X").unwrap();
+    let dir_y: f64 = globals.get("ACTION_DIR_Y").unwrap();
+    
+    assert_eq!(dir_x, 1.5);
+    assert_eq!(dir_y, -0.5);
+}
+
+#[test]
+fn test_set_move_speed_command() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    
+    let script = r#"
+        function on_player_join(entity_id)
+            Loci.Commands.set_move_speed(entity_id, 3.0)
+        end
+    "#;
+    instance.script_engine.load_script(script).unwrap();
+
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    
+    let join_intent = ClientIntent {
+        intent: Some(client_intent::Intent::Join(loci2d::network::JoinIntent {
+            player_name: "Bob".to_string(),
+        }))
+    };
+    instance.apply_intent(addr, join_intent).unwrap();
+    
+    let entity_id = instance.sessions.get(&addr).unwrap().entity_id;
+    let entity = instance.get_entity(entity_id).unwrap();
+    
+    assert_eq!(entity.navigation.as_ref().unwrap().move_speed, I16F16::from_num(3.0));
+}
+
+#[test]
+fn test_spawn_entity_round_trip() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let initial_count = instance.entities.len();
+    
+    let mut command_buffer = CommandBuffer::new();
+    command_buffer.push(Command::SpawnEntity {
+        blueprint: "magic_missile".to_string(),
+        position: DeterministicVector2::from_f64(10.0, 10.0),
+    });
+    
+    command_buffer.flush_and_apply(&mut instance);
+    
+    assert_eq!(instance.entities.len(), initial_count + 1);
+    
+    let spawned_entity = instance.entities.values().find(|e| e.name == "magic_missile").unwrap();
+    assert_eq!(spawned_entity.position.to_f32(), (10.0, 10.0));
+    assert_eq!(spawned_entity.entity_type, loci2d::world::entity::EntityType::Prop);
+}

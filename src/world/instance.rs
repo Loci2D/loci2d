@@ -52,11 +52,18 @@ pub struct Instance {
     pub globals: BTreeMap<String, String>,
     pub state: MatchState,
     pub active_timers: BTreeMap<String, ActiveTimer>,
-    pub next_entity_id: u64,
-    pub next_session_id: u64,
+    next_entity_id: u64,
+    next_session_id: u64,
 }
 
 impl Instance {
+    /// Allocates and returns a unique deterministic entity ID.
+    pub fn allocate_entity_id(&mut self) -> u64 {
+        let id = self.next_entity_id;
+        self.next_entity_id += 1;
+        id
+    }
+
     pub fn new(id: u64, tick_rate: u32, client_timeout_secs: u64, seed: u64) -> Self {
         Self {
             id,

@@ -288,6 +288,8 @@ impl ScriptEngine {
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
             if let Ok(on_action_fn) = globals.get::<mlua::Function>("on_action") {
+                // Note: ability_id is uint32 from protobuf. mlua marshals this as an i64.
+                // Values > 2^31 will still be safely represented as positive integers in Lua.
                 on_action_fn.call::<()>((entity_id, ability_id, dir_x, dir_y))?;
             }
             Ok(())

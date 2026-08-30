@@ -1,5 +1,6 @@
 use crate::world::instance::DeterministicVector2;
 use crate::world::instance::{ActiveTimer, Instance, MatchState};
+
 use fixed::types::I16F16;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -68,15 +69,15 @@ impl CommandBuffer {
                     blueprint,
                     position,
                 } => {
-                    let entity_id = instance.next_entity_id;
-                    instance.next_entity_id += 1;
+                    let entity_id = instance.allocate_entity_id();
                     
                     let mut entity = crate::world::entity::Entity::new(
                         entity_id,
                         blueprint.clone(),
-                        crate::world::entity::EntityType::Prop, // Assume Prop for spawned entities for now, or use blueprint to decide
+                        crate::world::entity::EntityType::Prop, // TODO: resolve entity type from blueprint registry
                     )
                     .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1));
+                    let pos_for_log = position;
                     entity.position = position;
                     
                     instance.entities.insert(entity_id, entity);
@@ -86,8 +87,8 @@ impl CommandBuffer {
                             "[CommandBuffer] Spawned entity {} from blueprint '{}' at ({}, {})",
                             entity_id,
                             blueprint,
-                            position.x.to_num::<f64>(),
-                            position.y.to_num::<f64>()
+                            pos_for_log.x.to_num::<f64>(),
+                            pos_for_log.y.to_num::<f64>()
                         );
                     }
                 }
