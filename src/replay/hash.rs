@@ -59,6 +59,29 @@ pub fn compute_canonical_state_hash(instance: &Instance, tick: u64) -> [u8; 32] 
         let type_id = entity.entity_type.as_u8();
         hasher.update([type_id]);
 
+        // Hash navigation component
+        if let Some(nav) = &entity.navigation {
+            hasher.update([1]);
+            if let Some(t) = nav.target {
+                hasher.update([1]);
+                hasher.update(t.x.to_bits().to_be_bytes());
+                hasher.update(t.y.to_bits().to_be_bytes());
+            } else {
+                hasher.update([0]);
+            }
+            hasher.update(nav.arrival_tolerance.to_bits().to_be_bytes());
+            hasher.update(nav.move_speed.to_bits().to_be_bytes());
+            
+            hasher.update((nav.waypoints.len() as u32).to_be_bytes());
+            for wp in &nav.waypoints {
+                hasher.update(wp.x.to_bits().to_be_bytes());
+                hasher.update(wp.y.to_bits().to_be_bytes());
+            }
+            hasher.update((nav.current_waypoint_index as u32).to_be_bytes());
+        } else {
+            hasher.update([0]);
+        }
+
         // Hash entity properties
         hasher.update((entity.properties.len() as u32).to_be_bytes());
         for (k, v) in &entity.properties {
