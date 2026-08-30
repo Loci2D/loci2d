@@ -85,16 +85,18 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
 * [ ] **Safe Dispatch Layer:**
   - Implement a safe command/intent dispatch layer for Lua scripts to prevent unauthorized state corruption and ensure deterministic replay integrity.
-* [ ] **Determinism CI Suite:**
+* [ ] **Determinism CI Suite & Benchmarks:**
   - Establish a rigorous cross-platform continuous integration (CI) test suite to mathematically prove `I16F16` fixed-point determinism across ARM64 and x86_64 architectures.
+  - Update `benchmark.rs` and core tests to stress-test Lua Gameplay Actions and ensure they maintain determinism.
 
 ### Português
 * [ ] **Separação Estrita entre Estado e Scripting:**
   - Desacoplar o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
 * [ ] **Camada Segura de Despacho:**
   - Implementar uma camada segura de envio de comandos/intenções para scripts Lua, evitando corrupção direta de estado e preservando a integridade dos replays.
-* [ ] **Suíte CI de Determinismo:**
+* [ ] **Suíte CI de Determinismo & Benchmarks:**
   - Estabelecer uma suíte de testes de Integração Contínua (CI) rigorosa multiplataforma para provar matematicamente o determinismo do ponto-fixo `I16F16` entre arquiteturas ARM64 e x86_64.
+  - Atualizar o `benchmark.rs` e os testes base para estressar as Ações de Gameplay em Lua e garantir que o determinismo seja mantido.
 
 ---
 
