@@ -12,11 +12,39 @@ pub fn compute_canonical_state_hash(instance: &Instance, tick: u64) -> [u8; 32] 
     // 1. Hash tick number (big-endian)
     hasher.update(tick.to_be_bytes());
 
-    // 2. Hash active entity count
+    // 2. Hash MatchState
+    match &instance.state {
+        crate::world::instance::MatchState::Paused => hasher.update([0]),
+        crate::world::instance::MatchState::Running => hasher.update([1]),
+        crate::world::instance::MatchState::Ended { winner_data } => {
+            hasher.update([2]);
+            hasher.update((winner_data.len() as u32).to_be_bytes());
+            hasher.update(winner_data.as_bytes());
+        }
+    }
+
+    // 3. Hash globals
+    hasher.update((instance.globals.len() as u32).to_be_bytes());
+    for (k, v) in &instance.globals {
+        hasher.update((k.len() as u32).to_be_bytes());
+        hasher.update(k.as_bytes());
+        hasher.update((v.len() as u32).to_be_bytes());
+        hasher.update(v.as_bytes());
+    }
+
+    // 4. Hash active_timers
+    hasher.update((instance.active_timers.len() as u32).to_be_bytes());
+    for (timer_id, timer) in &instance.active_timers {
+        hasher.update((timer_id.len() as u32).to_be_bytes());
+        hasher.update(timer_id.as_bytes());
+        hasher.update(timer.remaining_ticks.to_be_bytes());
+    }
+
+    // 5. Hash active entity count
     let entity_count = instance.entities.len() as u32;
     hasher.update(entity_count.to_be_bytes());
 
-    // 3. Iterate through entities in strict BTreeMap key order (1, 2, 3...)
+    // 6. Iterate through entities in strict BTreeMap key order (1, 2, 3...)
     for (entity_id, entity) in &instance.entities {
         hasher.update(entity_id.to_be_bytes());
         hasher.update((entity.name.len() as u32).to_be_bytes());
@@ -30,6 +58,15 @@ pub fn compute_canonical_state_hash(instance: &Instance, tick: u64) -> [u8; 32] 
 
         let type_id = entity.entity_type.as_u8();
         hasher.update([type_id]);
+
+        // Hash entity properties
+        hasher.update((entity.properties.len() as u32).to_be_bytes());
+        for (k, v) in &entity.properties {
+            hasher.update((k.len() as u32).to_be_bytes());
+            hasher.update(k.as_bytes());
+            hasher.update((v.len() as u32).to_be_bytes());
+            hasher.update(v.as_bytes());
+        }
     }
 
     let result = hasher.finalize();
