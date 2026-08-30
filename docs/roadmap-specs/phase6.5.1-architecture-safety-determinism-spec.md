@@ -1,45 +1,109 @@
 # Implementation Spec — Phase 6.5.1: Architecture, Safety & Determinism Validation
-> **Status:** Pending
+
+> **Status:** Ready to implement
 > **Roadmap Phase:** Phase 6.5.1
 > **Reference ADRs:** [ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md) · [ADR-0014](../adr/en/0014-embedded-lua-scripting-and-command-buffer.md) · [ADR-0015](../adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md)
 
 ---
 
-## 1. Context & Technical Motivation
+## 1. Context & Current State
 
-Phase 6.5.1 focuses on hardening the engine architecture by fully decoupling the canonical game state (deterministic physics, spatial data) from Lua script execution. As outlined in [ADR-0014](../adr/en/0014-embedded-lua-scripting-and-command-buffer.md), allowing user scripts to mutate state directly mid-tick poses stability risks, such as iterator invalidation during physics resolution.
+Phase 6.5.1 focuses on hardening the engine architecture by fully decoupling the canonical game state (deterministic physics, spatial data) from Lua script execution, and proving event-sourced replay integrity across different architectures.
 
-Additionally, to guarantee event-sourced replay integrity across different operating systems and hardware architectures (x86_64, ARM64), we must mathematically prove that our `I16F16` fixed-point arithmetic ([ADR-0007](../adr/en/0007-deterministic-simulation-and-fixed-point.md)) is deterministic through an automated Continuous Integration (CI) suite.
-
----
-
-## 2. Technical Implementation Modules
-
-### 2.1 Strict State vs. Scripting Separation
-
-The canonical match state, managed by the Rust core, must be strictly isolated from the embedded Lua runtime. 
-* **Immutable Access:** During a tick (e.g., in `on_tick` or `on_collision` callbacks), Lua scripts should only have read-only access to the current physics state or spatial data.
-* **Decoupling Validation:** Ensure that no Rust iterators over entities or physics components can be invalidated by Lua script execution (e.g., deleting an entity during collision resolution).
-
-### 2.2 Safe Dispatch Layer (Command Buffer)
-
-Implement a safe command/intent dispatch layer (Command Buffer) to enforce the separation defined above.
-* **Deferred Execution:** Any state mutations requested by Lua (such as destroying entities, spawning entities, or altering physics parameters) must be pushed into a deferred Command Buffer.
-* **End-of-Tick Application:** The Rust engine must flush and apply these queued commands sequentially at the end of the tick cycle, ensuring all iterators are dropped before state mutations occur.
-* **API Ergonomics:** To maintain a good Developer Experience (DX), entity creation commands should pre-allocate and return an ID synchronously, allowing scripts to continue referencing the new entity within the same tick.
-
-### 2.3 Determinism CI Suite & Benchmarks
-
-Establish a rigorous testing environment to guarantee deterministic execution across architectures.
-* **Cross-Platform CI:** Configure a GitHub Actions (or similar) CI matrix that compiles and runs the physics/scripting tests on both `x86_64` (e.g., standard runners) and `ARM64` (e.g., macOS ARM runners or QEMU) architectures.
-* **Mathematical Proof:** The CI must run simulations utilizing the `I16F16` fixed-point math and hash the final world states. The hashes *must* match exactly across all architectures to pass.
-* **Stress Testing:** Update `benchmark.rs` and core tests to aggressively stress-test Lua Gameplay Actions (spawning, collisions, movement adjustments) to ensure they do not introduce non-determinism or desyncs under heavy load.
+| Component | Current state | Problem |
+|---|---|---|
+| `src/scripting/api.rs` | Lua API `spawn_entity` pushes command but returns nothing | Bad DX: Scripts cannot reference the newly spawned entity in the same tick |
+| `src/scripting/command.rs` | `CommandBuffer` applies `SpawnEntity` and generates ID at flush time | Violates API ergonomics; ID must be known synchronously |
+| `tests/` | Basic unit tests | Lacks tests that verify iterators aren't invalidated by Lua during collisions |
+| `benches/benchmark.rs` | Standard loop benchmarking | Doesn't heavily stress Lua gameplay actions (spawns, collisions) for determinism |
+| `CI (GitHub Actions)` | Non-existent or standard `cargo test` | Doesn't cross-validate `I16F16` hashing across `x86_64` and `ARM64` architectures |
 
 ---
 
-## 3. Testing & Verification
+## 2. Phase 6.5.1 Goal
 
-1. **Iterator Safety:** Write a test that attempts to destroy an entity from Lua during an `on_collision` callback. Verify that the command is deferred and does not cause a Rust panic/iterator invalidation.
-2. **Command Application:** Verify that queued commands from the Command Buffer are applied in the correct deterministic order at the end of the tick.
-3. **Cross-Architecture Hash Matching:** Run the core deterministic tests on an `x86_64` machine and an `ARM64` machine. Verify that for identical inputs and seeds, the final state hashes are mathematically identical.
-4. **Benchmark Stability:** Ensure `benchmark.rs` runs without crashing and maintains consistent state resolution when executing a large volume of Lua intents over multiple ticks.
+Harden the architecture by fully decoupling Lua execution from canonical state iteration, ensuring a safe Command Buffer dispatch, and mathematically proving cross-platform determinism.
+
+```mermaid
+flowchart TD
+    M1["Strict State vs.<br>Scripting Separation"] --> M2["Safe Dispatch Layer<br>(Command Buffer)"]
+    M2 --> M3["Determinism CI Suite<br>& Benchmarks"]
+```
+
+* **Immutable Access:** During a tick (e.g., in `on_tick` or `on_collision` callbacks), Lua scripts must not be able to invalidate Rust iterators over entities or physics components.
+* **Safe Dispatch:** All state mutations requested by Lua must be deferred to the Command Buffer and applied strictly at the end of the tick.
+* **Cross-Platform Proof:** The `I16F16` math must be proven to yield identical hashes on both x86_64 and ARM64 via CI.
+
+---
+
+## 3. Detailed Technical Design & Changes per File
+
+### 3.1 `src/scripting/command.rs` — Update Command Enums
+
+**Before:** `SpawnEntity` allocates the ID internally during `flush_and_apply`.
+**After:** `SpawnEntity` receives the pre-allocated ID to apply.
+
+```rust
+pub enum Command {
+    SpawnEntity { entity_id: u64, blueprint: String, position: DeterministicVector2 },
+    DestroyEntity { entity_id: u64 },
+    SetMoveSpeed { entity_id: u64, speed: I16F16 },
+}
+```
+
+### 3.2 `src/scripting/api.rs` — Synchronous ID Allocation
+
+Update the `spawn_entity` Lua binding to allocate the ID synchronously and return it to Lua.
+
+* Require interior mutability for ID generation (e.g., passing a shared reference to the ID counter to the Lua scope, or allowing the `Instance` to generate IDs while immutably borrowed via `Cell<u64>`).
+* Return the generated `u64` to Lua.
+
+### 3.3 `tests/iterator_safety_test.rs` (New File)
+
+Create a test simulating a Lua `on_collision` callback that attempts to destroy one of the colliding entities.
+* Verify that the command is successfully deferred to the `CommandBuffer`.
+* Verify that Rust does not panic due to modifying a collection while iterating.
+
+### 3.4 `benches/benchmark.rs` & `tests/replay_determinism_test.rs`
+
+Update the benchmarks to heavily stress Lua Gameplay Actions.
+* Spam entity spawns, movement speed adjustments, and collisions.
+* Ensure no desyncs occur under heavy load.
+
+### 3.5 `.github/workflows/ci.yml` (New File)
+
+Configure a GitHub Actions CI matrix.
+* **Runners:** `ubuntu-latest` (x86_64) and `macos-latest` (or an ARM64 ubuntu runner if available).
+* **Execution:** Run the `replay_determinism_test` and assert that the final world state SHA-256 hashes match exactly across both architectures.
+
+---
+
+## 4. Implementation Checklist
+
+- [ ] **`src/scripting/command.rs`** — Update `Command::SpawnEntity` to contain `entity_id`.
+- [ ] **`src/world/instance.rs`** — Refactor `next_entity_id` to use `Cell<u64>` (or similar) to allow synchronous ID allocation without a mutable instance borrow.
+- [ ] **`src/scripting/api.rs`** — Update `Loci.Commands.spawn_entity` to return the pre-allocated ID synchronously.
+- [ ] **`tests/iterator_safety_test.rs`** — Create test for decoupling validation (Lua attempting deletion during collision).
+- [ ] **`benches/benchmark.rs`** — Add stress tests for Lua actions (spawns, speeds).
+- [ ] **`.github/workflows/ci.yml`** — Create cross-platform determinism CI workflow matrix (`x86_64` and `ARM64`).
+
+---
+
+## 5. Phase 6.5.1 Completion Criteria
+
+1. **Clean Build & Tests:** `cargo build` and `cargo test` pass with no errors or warnings.
+2. **API Ergonomics:** `Loci.Commands.spawn_entity` returns an integer ID in Lua immediately upon calling, allowing scripts to use that ID in the same tick.
+3. **Iterator Safety:** Attempting to destroy an entity from inside `on_collision` successfully defers the destruction and does not cause a Rust panic.
+4. **Mathematical Determinism:** The GitHub Actions CI matrix passes on both `x86_64` and `ARM64` runners, outputting the exact same SHA-256 hash for a heavy integration test match replay.
+
+---
+
+## 6. Out of Scope for This Phase (Future Work)
+
+| Feature | Phase |
+|---|---|
+| Client SDK wrappers (Godot/Love2D) | Phase 6.5.2 |
+| Reference Examples & Templates | Phase 6.5.3 |
+| Multi-instance / room manager | Phase 7 |
+| Network security & anti-tamper | Phase 8 |
+| Hot-reloading of Lua scripts | Phase 9 |

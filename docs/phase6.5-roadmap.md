@@ -104,6 +104,8 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 ## 6.5.2: SDKs & Wrappers para Clientes
 
 ### English
+* [ ] **[BLOCKING] API Review & Stabilization:**
+  - Audit and stabilize the Protobuf schema (`game_packets.proto`) and Lua Engine API (`Loci.Commands`) before building client wrappers to ensure ergonomic consumption.
 * [ ] **Godot 4 Wrapper (`LociClient.gd`):**
   - Build an ergonomic GDScript client module to eliminate boilerplate UDP socket/Protobuf parsing for end users.
 * [ ] **Love2D Wrapper (`loci_client.lua`):**
@@ -114,6 +116,8 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Expose intuitive, high-level signals/callbacks for state updates (e.g., `on_entity_updated`, `on_match_event`).
 
 ### Português
+* [ ] **[BLOQUEANTE] Revisão & Estabilização da API:**
+  - Auditar e estabilizar o esquema do Protobuf (`game_packets.proto`) e a API do Motor Lua (`Loci.Commands`) antes de construir os wrappers de cliente, garantindo um consumo ergonômico.
 * [ ] **Wrapper para Godot 4 (`LociClient.gd`):**
   - Construir um módulo cliente ergonômico em GDScript para eliminar o boilerplate de sockets UDP e decodificação Protobuf para os usuários finais.
 * [ ] **Wrapper para Love2D (`loci_client.lua`):**

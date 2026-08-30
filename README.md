@@ -1,23 +1,54 @@
 # loci2d
 
-### English
-An authoritative, instance-based UDP game server in Rust using **Protocol Buffers (Protobuf v3)** for cross-language binary packet serialization.
+**loci2d elimina a parte mais difícil de fazer um jogo multiplayer — a rede — pra você focar no jogo em si.**
 
-Designed for real-time 2D multiplayer games (e.g. MOBAs) and educational environments where clients can be built using any game engine or programming language, including **Godot (GDScript/C#)**, **Love2D (Lua)**, **Python**, or custom C++/WebAssembly clients.
+### English
+Ever shelved a co-op or PvP game idea because "the networking is too hard"? That's exactly the problem loci2d exists to solve. It's an authoritative, deterministic 2D multiplayer game server written in Rust that sits in front of any client engine — Godot, Love2D, Python, or your own C++/WASM client. Your engine handles rendering and feel; loci2d owns the simulation, synchronization, and fairness.
+
+**Why loci2d?**
+- **Bring your own engine.** loci2d speaks Protobuf over UDP, so it doesn't care whether your client is Godot, Love2D, Python, or something else — build the game feel in whatever tool you already know. *(Coming soon: Official SDKs/wrappers for Godot 4 and Love2D)*
+- **You don't write netcode.** Clients send *intentions* ("move this way", "use ability 1"); the authoritative server handles all physics, collision, and state sync. No client-side prediction or reconciliation to debug.
+- **Game rules live in a sandboxed Lua script, not in the server.** The Rust core stays generic — health, teams, abilities, and win conditions are defined by you in Lua, without touching Rust or recompiling the server.
+- **Deterministic by design.** Every match runs on fixed-point math, so the exact same match replays bit-for-bit on a different machine — enabling live spectating, verifiable replays, and tournament-grade trust in results.
+
+**Who is this for?**
+- Students building their first multiplayer game without learning networking first
+- Game jam teams where each person wants to work in the engine they're fastest in
+- Indie devs prototyping a multiplayer idea without months of infrastructure work
+
+loci2d is engine-agnostic and flexible for any session-based 2D game — brawlers, arenas, co-op prototypes, party games. It's currently in active development (v0.6.x), heading toward its first real-world validation with student teams.
 
 ### Português
-Um servidor de jogos UDP autoritativo e baseado em instâncias escrito em Rust, utilizando **Protocol Buffers (Protobuf v3)** para serialização binária de pacotes entre diferentes linguagens.
+Já engavetou uma ideia de jogo cooperativo ou PvP porque "a parte de rede é complicada demais"? É exatamente esse problema que o loci2d resolve. Ele é um servidor de jogos 2D multiplayer autoritativo e determinístico, escrito em Rust, que você conecta com qualquer engine cliente — Godot, Love2D, Python, ou seu próprio cliente em C++/WASM. Sua engine cuida da renderização e da movimentação do jogo; o loci2d cuida da simulação, da sincronização e das regras da partida.
 
-Projetado para jogos multiplayer 2D em tempo real (ex: MOBAs) e ambientes educacionais, permitindo que clientes sejam desenvolvidos em qualquer engine ou linguagem de programação, incluindo **Godot (GDScript/C#)**, **Love2D (Lua)**, **Python** ou clientes customizados em C++/WebAssembly.
+**Por que o loci2d?**
+- **Use a engine que quiser.** O loci2d fala Protobuf sobre UDP, então não importa se seu cliente é Godot, Love2D, Python ou qualquer outra coisa — construa a experiência do jogo na ferramenta que você já domina. *(Em breve: SDKs e templates oficiais para Godot 4 e Love2D)*
+- **Você não escreve netcode.** Os clientes enviam *intenções* (ex: "mover nessa direção", "usar habilidade 1"); o servidor autoritativo cuida de toda a física, colisão e sincronização de estado. Nenhum cliente precisa prever ou reconciliar nada.
+- **As regras do jogo vivem num script Lua sandboxed, não no servidor.** O núcleo em Rust permanece genérico — vida, times, habilidades e condições de vitória são definidas por você em Lua, sem tocar em Rust nem recompilar o servidor.
+- **Determinístico por design.** Toda partida roda em matemática de ponto fixo, então a mesma partida pode ser reproduzida byte a byte em outra máquina — habilitando espectadores ao vivo, replays verificáveis e confiança de nível competitivo nos resultados.
+
+**Pra quem é esse projeto?**
+- Estudantes construindo seu primeiro jogo multiplayer sem precisar aprender rede antes
+- Equipes de game jam onde cada pessoa quer trabalhar na engine em que é mais rápida
+- Devs indie prototipando uma ideia multiplayer sem meses de trabalho de infraestrutura
+
+O loci2d é agnóstico em relação à engine e flexível pra qualquer jogo 2D baseado em partidas — brawlers, arenas, protótipos cooperativos, party games. Está atualmente em desenvolvimento ativo (v0.6.x), a caminho da primeira validação real com equipes de estudantes.
 
 ---
 
 ## How It Works / Como Funciona
 
-```
-[ Client (Godot / Love2D) ]  ---( 1. Send Intent: "Move Left" )---> [ loci2d Server ]
-                                                                        | ( 2. Process Physics/Tick )
-[ All Clients ]              <---( 3. Broadcast World State )-----------+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Client (Godot / Love2D)
+    participant Server as loci2d Server
+    participant Others as Other Clients
+
+    Client->>Server: Send Intent: "Move Left"
+    Note over Server: Process Physics/Tick
+    Server->>Client: Broadcast World State
+    Server->>Others: Broadcast World State
 ```
 
 ### English
