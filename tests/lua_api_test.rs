@@ -63,6 +63,7 @@ fn test_command_buffer_and_entity_api() {
 
     match &command_buffer.commands[0] {
         Command::SpawnEntity {
+            entity_id: _,
             blueprint,
             position,
         } => {
@@ -144,6 +145,7 @@ fn test_spawn_entity_round_trip() {
     
     let mut command_buffer = CommandBuffer::new();
     command_buffer.push(Command::SpawnEntity {
+        entity_id: 2,
         blueprint: "magic_missile".to_string(),
         position: DeterministicVector2::from_f64(10.0, 10.0),
     });

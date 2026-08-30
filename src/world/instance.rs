@@ -52,15 +52,19 @@ pub struct Instance {
     pub globals: BTreeMap<String, String>,
     pub state: MatchState,
     pub active_timers: BTreeMap<String, ActiveTimer>,
-    next_entity_id: u64,
+    // NOTE: Cell<u64> is intentionally not PartialEq-comparable. Instance equality
+    // must be established via canonical_hash(), not structural comparison.
+    // TODO(Phase 7+): If Instance is ever moved to a multi-threaded runtime,
+    // replace Cell<u64> with AtomicU64 for Send + Sync compliance.
+    next_entity_id: std::cell::Cell<u64>,
     next_session_id: u64,
 }
 
 impl Instance {
     /// Allocates and returns a unique deterministic entity ID.
-    pub fn allocate_entity_id(&mut self) -> u64 {
-        let id = self.next_entity_id;
-        self.next_entity_id += 1;
+    pub fn allocate_entity_id(&self) -> u64 {
+        let id = self.next_entity_id.get();
+        self.next_entity_id.set(id + 1);
         id
     }
 
@@ -83,7 +87,7 @@ impl Instance {
             globals: BTreeMap::new(),
             state: MatchState::Running,
             active_timers: BTreeMap::new(),
-            next_entity_id: 1,
+            next_entity_id: std::cell::Cell::new(1),
             next_session_id: 1,
         }
     }
@@ -137,7 +141,7 @@ impl Instance {
         let (entity_id, player_name) = match inner_intent {
             Intent::Join(join_intent) => {
                 let player_name = if join_intent.player_name.trim().is_empty() {
-                    format!("Player_{}", self.next_entity_id)
+                    format!("Player_{}", self.next_entity_id.get())
                 } else {
                     join_intent.player_name.clone()
                 };
@@ -199,8 +203,7 @@ impl Instance {
             return session.entity_id;
         }
 
-        let entity_id = self.next_entity_id;
-        self.next_entity_id += 1;
+        let entity_id = self.allocate_entity_id();
 
         let session_id = self.next_session_id;
         self.next_session_id += 1;

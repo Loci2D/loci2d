@@ -109,11 +109,14 @@ where
             let position_ud: mlua::AnyUserData = args.get("position")?;
             let position = *position_ud.borrow::<DeterministicVector2>()?;
 
+            let entity_id = instance.allocate_entity_id();
+
             cmd_buf_spawn.borrow_mut().push(Command::SpawnEntity {
+                entity_id,
                 blueprint,
                 position,
             });
-            Ok(())
+            Ok(entity_id)
         })?;
         commands_table.set("spawn_entity", spawn_entity)?;
 

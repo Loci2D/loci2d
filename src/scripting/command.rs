@@ -5,6 +5,7 @@ use fixed::types::I16F16;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     SpawnEntity {
+        entity_id: u64,
         blueprint: String,
         position: DeterministicVector2,
     },
@@ -66,10 +67,10 @@ impl CommandBuffer {
         for command in self.commands.drain(..) {
             match command {
                 Command::SpawnEntity {
+                    entity_id,
                     blueprint,
                     position,
                 } => {
-                    let entity_id = instance.allocate_entity_id();
                     
                     let mut entity = crate::world::entity::Entity::new(
                         entity_id,
