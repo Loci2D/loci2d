@@ -156,3 +156,147 @@ fn test_spawn_entity_round_trip() {
     assert_eq!(spawned_entity.position.to_f32(), (10.0, 10.0));
     assert_eq!(spawned_entity.entity_type, loci2d::world::entity::EntityType::Prop);
 }
+
+#[test]
+fn test_timer_lifecycle() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        TIMER_COMPLETED = false
+        function on_init()
+            Loci.Commands.start_timer("my_timer", 2)
+        end
+        function on_timer_complete(timer_id)
+            if timer_id == "my_timer" then
+                TIMER_COMPLETED = true
+            end
+        end
+    "#;
+    instance.load_script(script).unwrap();
+    assert_eq!(instance.active_timers.len(), 1);
+    assert_eq!(instance.active_timers.get("my_timer").unwrap().remaining_ticks, 2);
+    
+    instance.tick(1).unwrap();
+    assert_eq!(instance.active_timers.get("my_timer").unwrap().remaining_ticks, 1);
+    
+    let globals = instance.script_engine.lua().globals();
+    assert_eq!(globals.get::<bool>("TIMER_COMPLETED").unwrap(), false);
+    
+    instance.tick(2).unwrap();
+    assert_eq!(instance.active_timers.len(), 0);
+    assert_eq!(globals.get::<bool>("TIMER_COMPLETED").unwrap(), true);
+}
+
+#[test]
+fn test_match_state_transitions() {
+    use loci2d::world::instance::MatchState;
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        TICK_COUNT = 0
+        function on_tick(tick)
+            TICK_COUNT = TICK_COUNT + 1
+        end
+    "#;
+    instance.load_script(script).unwrap();
+    
+    instance.tick(1).unwrap();
+    let globals = instance.script_engine.lua().globals();
+    assert_eq!(globals.get::<i32>("TICK_COUNT").unwrap(), 1);
+    
+    // Pause via command buffer
+    let mut cmd_buffer = CommandBuffer::new();
+    cmd_buffer.push(Command::PauseMatch);
+    cmd_buffer.flush_and_apply(&mut instance);
+    assert_eq!(instance.state, MatchState::Paused);
+    
+    instance.tick(2).unwrap(); // Should skip on_tick
+    assert_eq!(globals.get::<i32>("TICK_COUNT").unwrap(), 1);
+    
+    // End via command buffer
+    cmd_buffer.push(Command::EndMatch { winner_data: "red_team".to_string() });
+    cmd_buffer.flush_and_apply(&mut instance);
+    assert_eq!(instance.state, MatchState::Ended { winner_data: "red_team".to_string() });
+    
+    instance.tick(3).unwrap(); // Should skip on_tick
+    assert_eq!(globals.get::<i32>("TICK_COUNT").unwrap(), 1);
+}
+
+#[test]
+fn test_properties_api() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let entity_id = instance.handle_join(addr, "Charlie".to_string());
+    
+    let script = r#"
+        PROP_VALUE = nil
+        function set_initial_prop(id)
+            Loci.Commands.set_property(id, "health", "100")
+        end
+        function read_prop(id)
+            PROP_VALUE = Loci.get_entity_property(id, "health")
+        end
+    "#;
+    instance.script_engine.load_script(script).unwrap();
+    
+    let globals = instance.script_engine.lua().globals();
+    let set_fn: mlua::Function = globals.get("set_initial_prop").unwrap();
+    let read_fn: mlua::Function = globals.get("read_prop").unwrap();
+    
+    let mut cmd_buffer = CommandBuffer::new();
+    loci2d::scripting::api::with_scoped_api(instance.script_engine.lua(), &instance, &mut cmd_buffer, || {
+        set_fn.call::<()>(entity_id)
+    }).unwrap();
+    cmd_buffer.flush_and_apply(&mut instance);
+    
+    // Validate Rust side
+    assert_eq!(instance.get_entity(entity_id).unwrap().properties.get("health").unwrap(), "100");
+    
+    // Validate Lua side read
+    loci2d::scripting::api::with_scoped_api(instance.script_engine.lua(), &instance, &mut cmd_buffer, || {
+        read_fn.call::<()>(entity_id)
+    }).unwrap();
+    assert_eq!(globals.get::<String>("PROP_VALUE").unwrap(), "100");
+    
+    // Validate Snapshot
+    let snapshot = instance.create_snapshot(1);
+    let entity_state = snapshot.entities.iter().find(|e| e.id == entity_id).unwrap();
+    let prop = entity_state.properties.iter().find(|p| p.key == "health").unwrap();
+    assert_eq!(prop.value, "100");
+}
+
+#[test]
+fn test_on_player_leave_can_access_entity() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let entity_id = instance.handle_join(addr, "Dave".to_string());
+    
+    let script = r#"
+        LAST_X = 0
+        function on_player_leave(id)
+            local pos = Loci.get_entity_position(id)
+            if pos then
+                LAST_X = pos:x_float()
+            end
+        end
+    "#;
+    instance.script_engine.load_script(script).unwrap();
+    
+    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+        entity.position = DeterministicVector2::from_f64(12.0, 0.0);
+    }
+    
+    // Trigger disconnect via intent
+    let disconnect_intent = loci2d::network::ClientIntent {
+        intent: Some(loci2d::network::client_intent::Intent::Disconnect(loci2d::network::DisconnectIntent {
+            reason: "test".to_string(),
+        })),
+    };
+    instance.apply_intent(addr, disconnect_intent).unwrap();
+    
+    // The entity should be destroyed now
+    assert!(instance.get_entity(entity_id).is_none());
+    
+    // But the script should have captured the position before destruction
+    let globals = instance.script_engine.lua().globals();
+    let last_x: f64 = globals.get("LAST_X").unwrap();
+    assert_eq!(last_x, 12.0);
+}

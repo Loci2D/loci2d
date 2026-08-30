@@ -226,7 +226,8 @@ impl Instance {
         if let Some(mut session) = self.sessions.remove(&addr) {
             session.state = SessionState::Disconnected;
             self.entity_to_addr.remove(&session.entity_id);
-            self.entities.remove(&session.entity_id);
+            // We do not remove the entity from self.entities here, to allow on_player_leave
+            // to access its properties. The intent handler will issue a DestroyEntity command.
             let display_reason = if reason.trim().is_empty() {
                 "normal quit"
             } else {
@@ -262,7 +263,9 @@ impl Instance {
         for (addr, entity_id, player_name) in timed_out_addrs {
             self.sessions.remove(&addr);
             self.entity_to_addr.remove(&entity_id);
-            self.entities.remove(&entity_id);
+            // We do not remove the entity from self.entities here.
+            // simulation.rs will dispatch on_player_leave and push a DestroyEntity command.
+            // removed -> self.entities.remove(&session.entity_id);
             timed_out_entities.push((entity_id, player_name.clone()));
             println!(
                 "[Timeout] Client {} ('{}', EntityId {}) timed out after {}s of inactivity",

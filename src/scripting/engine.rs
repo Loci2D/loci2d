@@ -159,6 +159,19 @@ impl ScriptEngine {
             })?,
         )?;
 
+        // 3. Neutralize `tostring` memory address leaks to preserve determinism
+        let orig_tostring: mlua::Function = globals.get("tostring")?;
+        let safe_tostring = self.lua.create_function(move |_, val: mlua::Value| {
+            match val {
+                mlua::Value::Table(_) => Ok("table (address hidden)".to_string()),
+                mlua::Value::Function(_) => Ok("function (address hidden)".to_string()),
+                mlua::Value::Thread(_) => Ok("thread (address hidden)".to_string()),
+                mlua::Value::UserData(_) => Ok("userdata (address hidden)".to_string()),
+                _ => orig_tostring.call::<String>(val),
+            }
+        })?;
+        globals.set("tostring", safe_tostring)?;
+
         Ok(())
     }
 

@@ -39,13 +39,12 @@ pub fn apply_resolved_intent(
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Disconnect(_) => {
-            instance.entities.remove(&entity_id);
-
             let mut cmd_buffer = CommandBuffer::new();
             instance
                 .script_engine
                 .on_player_leave(instance, entity_id, &mut cmd_buffer)
                 .map_err(|e| e.to_string())?;
+            cmd_buffer.push(crate::scripting::command::Command::DestroyEntity { entity_id });
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Move(move_intent) => {

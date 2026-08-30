@@ -247,6 +247,7 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
         let _ = instance
             .script_engine
             .on_player_leave(instance, *entity_id, &mut cmd_buffer);
+        cmd_buffer.push(crate::scripting::command::Command::DestroyEntity { entity_id: *entity_id });
     }
 
     cmd_buffer.flush_and_apply(instance);
