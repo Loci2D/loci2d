@@ -130,6 +130,15 @@ fn test_1000_tick_multi_player_replay_determinism() {
         (total_ticks / checkpoint_interval) as usize
     );
     assert!(!report.final_hash.is_empty());
+
+    // Explicit Cross-Architecture Mathematical Proof:
+    // This hash must be identical on both x86_64 and ARM64.
+    // If floating-point non-determinism leaks in, this will fail on one of the runners.
+    assert_eq!(
+        report.final_hash,
+        "6c6372d8f9a4ba152501391e2dc09728872e4fa52661f9caf4d38651c8850a6e",
+        "Cross-architecture determinism compromised!"
+    );
 }
 
 #[test]
