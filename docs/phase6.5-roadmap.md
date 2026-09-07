@@ -81,27 +81,52 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 ## 6.5.1: Arquitetura, Segurança & Validação de Determinismo
 
 ### English
-* [ ] **Strict State vs. Scripting Separation:**
+* [x] **Strict State vs. Scripting Separation:**
   - Decouple canonical match state (pure deterministic physics, spatial data) from Lua script execution.
-* [ ] **Safe Dispatch Layer:**
+* [x] **Safe Dispatch Layer:**
   - Implement a safe command/intent dispatch layer for Lua scripts to prevent unauthorized state corruption and ensure deterministic replay integrity.
-* [ ] **Determinism CI Suite & Benchmarks:**
+* [x] **Determinism CI Suite & Benchmarks:**
   - Establish a rigorous cross-platform continuous integration (CI) test suite to mathematically prove `I16F16` fixed-point determinism across ARM64 and x86_64 architectures.
   - Update `benchmark.rs` and core tests to stress-test Lua Gameplay Actions and ensure they maintain determinism.
 
 ### Português
-* [ ] **Separação Estrita entre Estado e Scripting:**
+* [x] **Separação Estrita entre Estado e Scripting:**
   - Desacoplar o estado canônico da partida (física determinística pura, dados espaciais) da execução dos scripts Lua.
-* [ ] **Camada Segura de Despacho:**
+* [x] **Camada Segura de Despacho:**
   - Implementar uma camada segura de envio de comandos/intenções para scripts Lua, evitando corrupção direta de estado e preservando a integridade dos replays.
-* [ ] **Suíte CI de Determinismo & Benchmarks:**
+* [x] **Suíte CI de Determinismo & Benchmarks:**
   - Estabelecer uma suíte de testes de Integração Contínua (CI) rigorosa multiplataforma para provar matematicamente o determinismo do ponto-fixo `I16F16` entre arquiteturas ARM64 e x86_64.
   - Atualizar o `benchmark.rs` e os testes base para estressar as Ações de Gameplay em Lua e garantir que o determinismo seja mantido.
 
 ---
 
-## 6.5.2: Client SDKs & Wrappers
-## 6.5.2: SDKs & Wrappers para Clientes
+## 6.5.2: API Refinement & SDK Preparation
+## 6.5.2: Refinamento da API & Preparação para SDKs
+
+### English
+* [ ] **Strict Intent Interception (Safe Layer Fix):**
+  - Refactor `intent_handler.rs` so `Intent::Move` and `Intent::MoveToPos` do not directly mutate Entity velocity and navigation.
+  - Expose new Lua hooks (`on_move_intent(entity_id, dir_x, dir_y)`) allowing scripts to validate and apply movement via `Loci.Commands`.
+* [ ] **Lua API Consistency & Getters:**
+  - Standardize Vector2 arguments across the Lua API (e.g., `on_action`, `set_position`) so they accept consistent formats.
+  - Implement basic Getters (`get_velocity`, `get_move_speed`, `get_entity_name`) to prevent state duplication in Lua.
+* [ ] **Blueprint Extensibility:**
+  - Enhance `SpawnEntity` to accept configuration parameters (or integrate a registry) rather than hardcoding EntityType and Components.
+
+### Português
+* [ ] **Interceptação Estrita de Intents (Correção da Camada Segura):**
+  - Refatorar `intent_handler.rs` para que `Intent::Move` e `Intent::MoveToPos` não mutem diretamente a velocidade e navegação da Entidade.
+  - Expor novos hooks Lua (`on_move_intent(entity_id, dir_x, dir_y)`) permitindo que scripts validem e apliquem movimento via `Loci.Commands`.
+* [ ] **Consistência da API Lua & Getters:**
+  - Padronizar argumentos Vector2 na API Lua (ex: `on_action`, `set_position`) para que aceitem formatos consistentes.
+  - Implementar Getters básicos (`get_velocity`, `get_move_speed`, `get_entity_name`) para evitar duplicação de estado no Lua.
+* [ ] **Extensibilidade de Blueprints:**
+  - Melhorar `SpawnEntity` para aceitar parâmetros de configuração (ou integrar um registry) em vez de fixar (hardcode) EntityType e Componentes.
+
+---
+
+## 6.5.3: Client SDKs & Wrappers
+## 6.5.3: SDKs & Wrappers para Clientes
 
 ### English
 * [ ] **[BLOCKING] API Review & Stabilization:**
@@ -129,8 +154,8 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 
 ---
 
-## 6.5.3: Reference Examples & Templates
-## 6.5.3: Exemplos de Referência & Templates
+## 6.5.4: Reference Examples & Templates
+## 6.5.4: Exemplos de Referência & Templates
 
 ### English
 * [ ] **Standard Lua Game Template:** Create a boilerplate `main.lua` file with heavily documented callbacks (`on_init`, `on_player_join`, etc.) establishing the official structure for students to build game rules.
@@ -148,8 +173,8 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 
 ---
 
-## 6.5.4: User-Friendly Documentation
-## 6.5.4: Documentação Acessível
+## 6.5.5: User-Friendly Documentation
+## 6.5.5: Documentação Acessível
 
 ### English
 * [ ] **Quickstart Tutorial:**
@@ -165,8 +190,8 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 
 ---
 
-## 6.5.5: LAN Playtesting & Empirical Feedback
-## 6.5.5: Playtesting em LAN & Feedback Empírico
+## 6.5.6: LAN Playtesting & Empirical Feedback
+## 6.5.6: Playtesting em LAN & Feedback Empírico
 
 ### English
 * [ ] **Multi-Device Sessions:**
