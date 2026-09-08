@@ -86,7 +86,15 @@ impl CommandBuffer {
                     let parsed_type = match entity_type.as_str() {
                         "Player" => crate::world::entity::EntityType::Player,
                         "Enemy" | "NPC" => crate::world::entity::EntityType::NPC,
-                        _ => crate::world::entity::EntityType::Prop,
+                        unknown => {
+                            if instance.logging_enabled {
+                                println!(
+                                    "[CommandBuffer] Unknown entity_type '{}', defaulting to Prop",
+                                    unknown
+                                );
+                            }
+                            crate::world::entity::EntityType::Prop
+                        }
                     };
                     
                     let mut entity = crate::world::entity::Entity::new(
@@ -130,8 +138,11 @@ impl CommandBuffer {
                 Command::SetNavigationTarget { entity_id, target } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         let nav = entity.navigation.get_or_insert_with(|| {
+                            if instance.logging_enabled {
+                                eprintln!("[Loci] WARNING: SetNavigationTarget called on entity {} without a NavigationComponent. Creating one with speed 0.0.", entity_id);
+                            }
                             crate::world::physics::navigation::NavigationComponent::new(
-                                I16F16::from_num(1),
+                                I16F16::from_num(0),
                                 I16F16::from_num(1),
                             )
                         });
@@ -150,11 +161,10 @@ impl CommandBuffer {
                     }
                 }
                 Command::SetMoveSpeed { entity_id, speed } => {
-                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
-                        if let Some(ref mut nav) = entity.navigation {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id)
+                        && let Some(ref mut nav) = entity.navigation {
                             nav.move_speed = speed;
                         }
-                    }
                 }
                 Command::SetEntityProperty {
                     entity_id,

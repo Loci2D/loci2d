@@ -167,7 +167,7 @@ impl ReplayPlayer {
 
             // 3. Check for state hash checkpoint verification
             if let Some(checkpoint) = checkpoints_by_tick.get(&tick) {
-                let actual_hash = compute_canonical_state_hash(&instance, tick);
+                let actual_hash = compute_canonical_state_hash(instance, tick);
                 if actual_hash.as_slice() != checkpoint.state_sha256.as_slice() {
                     let entity_summary = instance
                         .entities
@@ -194,7 +194,7 @@ impl ReplayPlayer {
             }
         }
 
-        let final_hash = hex_encode(&compute_canonical_state_hash(&instance, end_tick));
+        let final_hash = hex_encode(&compute_canonical_state_hash(instance, end_tick));
 
         Ok(VerificationReport {
             total_ticks: end_tick,
@@ -224,6 +224,9 @@ impl ReplayPlayer {
         const TERMINAL_FRAME_DELAY_MS: u64 = 15;
 
         let header = self.replay.header.as_ref().unwrap();
+        // TODO: Before Phase 7, the replay header will likely need to store the script source
+        // or a reference to it so that `broadcast_live` can load it into the instance here.
+        // Currently, without a script, spectator replay instances will drop movement intents.
         let mut instance =
             Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
 
@@ -396,7 +399,7 @@ pub fn hex_encode(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::network::packets::{
-        ClientIntent, JoinIntent, MoveIntent, ReplayIntentEntry, Vector2, client_intent,
+        ClientIntent, JoinIntent, ReplayIntentEntry, client_intent,
     };
     use crate::replay::ReplayRecorder;
 

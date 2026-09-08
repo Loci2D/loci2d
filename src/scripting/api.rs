@@ -14,8 +14,8 @@ fn extract_vector2(value: mlua::Value) -> LuaResult<DeterministicVector2> {
             }
         }
         mlua::Value::Table(t) => {
-            let x: f64 = t.get("x")?;
-            let y: f64 = t.get("y")?;
+            let x: f64 = t.get("x").map_err(|_| mlua::Error::RuntimeError("Table missing 'x' field or it is not a number".to_string()))?;
+            let y: f64 = t.get("y").map_err(|_| mlua::Error::RuntimeError("Table missing 'y' field or it is not a number".to_string()))?;
             Ok(DeterministicVector2::from_f64(x, y))
         }
         _ => Err(mlua::Error::RuntimeError("Expected Loci.Vector2 or table with x, y".to_string())),
@@ -106,9 +106,12 @@ where
         // Loci.get_velocity(id)
         let get_velocity = scope.create_function(|lua, id: u64| {
             if let Some(entity) = instance.get_entity(id) {
-                (entity.velocity.x.to_num::<f64>(), entity.velocity.y.to_num::<f64>()).into_lua_multi(lua)
+                let vel_table = lua.create_table()?;
+                vel_table.set("x", entity.velocity.x.to_num::<f64>())?;
+                vel_table.set("y", entity.velocity.y.to_num::<f64>())?;
+                Ok(Some(vel_table))
             } else {
-                ().into_lua_multi(lua)
+                Ok(None)
             }
         })?;
         loci_table.set("get_velocity", get_velocity)?;
@@ -158,6 +161,10 @@ where
         let cmd_buf_spawn = Rc::clone(&cmd_buffer_rc);
         let spawn_entity = scope.create_function(move |_, args: mlua::Table| {
             let blueprint: String = args.get("blueprint")?;
+            if blueprint.trim().is_empty() {
+                return Err(mlua::Error::RuntimeError("spawn_entity: blueprint cannot be empty".to_string()));
+            }
+
             let position_val: mlua::Value = args.get("position")?;
             let position = extract_vector2(position_val)?;
             

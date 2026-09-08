@@ -119,7 +119,7 @@ impl ScriptEngine {
 
                     match (min, max) {
                         (None, None) => Ok(mlua::Value::Number(
-                            (rand_val as f64) / (std::u32::MAX as f64 + 1.0),
+                            (rand_val as f64) / (u32::MAX as f64 + 1.0),
                         )),
                         (Some(m), None) => {
                             if m < 1 {
@@ -181,8 +181,10 @@ impl ScriptEngine {
             let max_inst = self.max_instructions;
             let counter = Arc::clone(&self.instruction_counter);
 
-            let mut triggers = mlua::HookTriggers::default();
-            triggers.every_nth_instruction = Some(100);
+            let triggers = mlua::HookTriggers {
+                every_nth_instruction: Some(100),
+                ..Default::default()
+            };
 
             self.lua.set_hook(triggers, move |_, _| {
                 // Single-threaded VM; Relaxed ordering is sufficient.
@@ -299,8 +301,11 @@ impl ScriptEngine {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
-            if let Ok(on_move_fn) = globals.get::<mlua::Function>("on_move_intent") {
-                on_move_fn.call::<()>((entity_id, dir_x, dir_y))?;
+            if globals.contains_key("on_move_intent")? {
+                let func: mlua::Function = globals.get("on_move_intent")?;
+                func.call::<()>((entity_id, dir_x, dir_y))?;
+            } else if instance.logging_enabled {
+                eprintln!("[Loci] WARNING: on_move_intent received but no handler defined. Entity {} will not move.", entity_id);
             }
             Ok(())
         })
@@ -317,8 +322,11 @@ impl ScriptEngine {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
-            if let Ok(on_nav_fn) = globals.get::<mlua::Function>("on_nav_intent") {
-                on_nav_fn.call::<()>((entity_id, target_x, target_y))?;
+            if globals.contains_key("on_nav_intent")? {
+                let func: mlua::Function = globals.get("on_nav_intent")?;
+                func.call::<()>((entity_id, target_x, target_y))?;
+            } else if instance.logging_enabled {
+                eprintln!("[Loci] WARNING: on_nav_intent received but no handler defined. Entity {} will not navigate.", entity_id);
             }
             Ok(())
         })

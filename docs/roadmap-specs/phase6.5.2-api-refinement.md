@@ -1,6 +1,6 @@
 # Implementation Spec — Phase 6.5.2: API Refinement & SDK Preparation
 
-> **Status:** Ready to implement
+> **Status:** Implemented
 > **Roadmap Phase:** Phase 6.5.2
 > **Reference ADRs:** [ADR-0014](../adr/en/0014-embedded-lua-scripting-and-command-buffer.md) · [ADR-0015](../adr/en/0015-dedicated-roadmap-structure-phase6.5-validation-dx.md) · [ADR-0016](../adr/en/0016-data-driven-entity-properties-and-engine-agnosticism.md)
 

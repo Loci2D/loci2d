@@ -36,7 +36,7 @@ fn test_commands_deferred_during_entity_iteration() {
     // Simulate iterating through entities during physics resolution
     // We want to ensure calling Lua doesn't invalidate the iterator
     // or borrow checker.
-    for (id, _entity) in &instance.entities {
+    for id in instance.entities.keys() {
         let globals = instance.script_engine.lua().globals();
         if let Ok(on_col) = globals.get::<Function>("on_collision") {
             let other_id = if *id == 1 { 2 } else { 1 };

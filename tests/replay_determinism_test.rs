@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+mod common;
 
 #[test]
 fn test_1000_tick_multi_player_replay_determinism() {
@@ -23,14 +24,7 @@ fn test_1000_tick_multi_player_replay_determinism() {
     let seed = 99999u64;
 
     let mut author_instance = Instance::new(1, tick_rate, 60, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
+    let script = common::PASSTHROUGH_MOVEMENT_SCRIPT;
     author_instance.load_script(script).unwrap();
 
     let mut recorder = ReplayRecorder::new(
@@ -131,14 +125,7 @@ fn test_1000_tick_multi_player_replay_determinism() {
 
     let mut player = ReplayPlayer::load_from_file(&file_path).expect("Failed to load ReplayPlayer");
     let mut verify_instance = Instance::new(1, tick_rate, 60, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
+    let script = common::PASSTHROUGH_MOVEMENT_SCRIPT;
     verify_instance.load_script(script).unwrap();
     let report = player
         .verify_determinism_with_instance(&mut verify_instance)
@@ -164,15 +151,7 @@ fn test_1000_tick_multi_player_replay_determinism() {
 #[test]
 fn test_rejoin_entity_state_preservation_determinism() {
     let mut live_instance = Instance::new(1, 30, 60, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
-    live_instance.load_script(script).unwrap();
+    live_instance.load_script(common::PASSTHROUGH_MOVEMENT_SCRIPT).unwrap();
     let mut recorder =
         ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, live_instance.script_hash.clone());
     let addr = "127.0.0.1:20000".parse().unwrap();
@@ -238,14 +217,7 @@ fn test_rejoin_entity_state_preservation_determinism() {
     let bytes = recorder.to_bytes().unwrap();
     let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
     let mut verify_instance = Instance::new(1, 30, 60, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
+    let script = common::PASSTHROUGH_MOVEMENT_SCRIPT;
     verify_instance.load_script(script).unwrap();
     let report = player
         .verify_determinism_with_instance(&mut verify_instance)
@@ -387,14 +359,7 @@ fn test_click_to_move_replay_determinism() {
     let seed = 123456789u64;
 
     let mut author_instance = Instance::new(1, tick_rate, 60, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
+    let script = common::PASSTHROUGH_MOVEMENT_SCRIPT;
     author_instance.load_script(script).unwrap();
 
     let mut recorder = ReplayRecorder::new(
@@ -488,14 +453,7 @@ fn test_click_to_move_replay_determinism() {
     let bytes = recorder.to_bytes().unwrap();
     let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
     let mut verify_instance = Instance::new(1, tick_rate, 60, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
+    let script = common::PASSTHROUGH_MOVEMENT_SCRIPT;
     verify_instance.load_script(script).unwrap();
     let report = player
         .verify_determinism_with_instance(&mut verify_instance)

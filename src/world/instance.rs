@@ -129,14 +129,13 @@ impl Instance {
             None => return Ok(None),
         };
 
-        if matches!(self.state, MatchState::Ended { .. }) {
-            if matches!(
+        if matches!(self.state, MatchState::Ended { .. })
+            && matches!(
                 inner_intent,
                 Intent::Action(_) | Intent::Move(_) | Intent::MoveToPos(_)
             ) {
                 return Ok(None);
             }
-        }
 
         let (entity_id, player_name) = match inner_intent {
             Intent::Join(join_intent) => {

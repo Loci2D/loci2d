@@ -83,14 +83,13 @@ pub fn apply_resolved_intent(
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Action(action_intent) => {
-            if let Some(entity) = instance.entities.get(&entity_id) {
-                if instance.logging_enabled {
+            if let Some(entity) = instance.entities.get(&entity_id)
+                && instance.logging_enabled {
                     println!(
                         "[Intent] Entity {} ({}) executed action {}",
                         entity_id, entity.name, action_intent.ability_id
                     );
                 }
-            }
 
             let (dir_x, dir_y) = match &action_intent.target_direction {
                 Some(dir) => {

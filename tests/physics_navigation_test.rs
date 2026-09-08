@@ -10,6 +10,7 @@ use loci2d::world::physics::{
     ColliderShape, CollisionFilter, DeterministicAABB, MapBounds, NavigationComponent,
     StaticObstacle, deterministic_distance,
 };
+mod common;
 use std::net::SocketAddr;
 
 #[test]
@@ -159,14 +160,7 @@ fn test_multi_waypoint_path_traversal() {
 #[test]
 fn test_wasd_move_preempts_navigation() {
     let mut instance = Instance::new(1, 30, 10, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
+    let script = common::PASSTHROUGH_MOVEMENT_SCRIPT;
     instance.load_script(script).unwrap();
     let addr: SocketAddr = "127.0.0.1:20001".parse().unwrap();
 
@@ -230,14 +224,7 @@ fn test_wasd_move_preempts_navigation() {
 #[test]
 fn test_new_moveto_preempts_prior_target() {
     let mut instance = Instance::new(1, 30, 10, 42);
-    let script = r#"
-        function on_move_intent(id, x, y)
-            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
-        end
-        function on_nav_intent(id, x, y)
-            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
-        end
-    "#;
+    let script = common::PASSTHROUGH_MOVEMENT_SCRIPT;
     instance.load_script(script).unwrap();
     let addr: SocketAddr = "127.0.0.1:20002".parse().unwrap();
 

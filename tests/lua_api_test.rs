@@ -186,11 +186,11 @@ fn test_timer_lifecycle() {
     assert_eq!(instance.active_timers.get("my_timer").unwrap().remaining_ticks, 1);
     
     let globals = instance.script_engine.lua().globals();
-    assert_eq!(globals.get::<bool>("TIMER_COMPLETED").unwrap(), false);
+    assert!(!globals.get::<bool>("TIMER_COMPLETED").unwrap());
     
     instance.tick(2).unwrap();
     assert_eq!(instance.active_timers.len(), 0);
-    assert_eq!(globals.get::<bool>("TIMER_COMPLETED").unwrap(), true);
+    assert!(globals.get::<bool>("TIMER_COMPLETED").unwrap());
 }
 
 #[test]
