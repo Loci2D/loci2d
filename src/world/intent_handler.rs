@@ -3,7 +3,7 @@ use crate::scripting::command::CommandBuffer;
 use crate::world::entity::{Entity, EntityType};
 use crate::world::fixed_point::DeterministicVector2;
 use crate::world::instance::Instance;
-use crate::world::physics::navigation::NavigationComponent;
+
 use fixed::types::I16F16;
 
 /// Applies a resolved intent to the instance. This is used by both live client intents
@@ -48,29 +48,39 @@ pub fn apply_resolved_intent(
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Move(move_intent) => {
-            if let Some(entity) = instance.entities.get_mut(&entity_id) {
-                if let Some(dir) = &move_intent.direction {
-                    entity.velocity = DeterministicVector2::from_proto(dir);
+            let (dir_x, dir_y) = match &move_intent.direction {
+                Some(dir) => {
+                    let vec = DeterministicVector2::from_proto(dir);
+                    (vec.x.to_num::<f64>(), vec.y.to_num::<f64>())
                 }
-                if let Some(ref mut nav) = entity.navigation {
-                    nav.clear();
-                }
-            }
+                None => (0.0, 0.0),
+            };
+
+            let mut cmd_buffer = CommandBuffer::new();
+            instance
+                .script_engine
+                .on_move_intent(instance, entity_id, dir_x, dir_y, &mut cmd_buffer)
+                .map_err(|e| e.to_string())?;
+            cmd_buffer.flush_and_apply(instance);
         }
         Intent::MoveToPos(move_to_pos_intent) => {
-            if let (Some(target), Some(entity)) = (
-                &move_to_pos_intent.target_position,
-                instance.entities.get_mut(&entity_id),
-            ) {
-                let target_vec = DeterministicVector2::new(
-                    I16F16::from_bits(target.x_bits),
-                    I16F16::from_bits(target.y_bits),
-                );
-                let nav = entity.navigation.get_or_insert_with(|| {
-                    NavigationComponent::new(I16F16::from_num(1), I16F16::from_num(1))
-                });
-                nav.set_target(target_vec);
-            }
+            let (target_x, target_y) = match &move_to_pos_intent.target_position {
+                Some(target) => {
+                    let vec = DeterministicVector2::new(
+                        I16F16::from_bits(target.x_bits),
+                        I16F16::from_bits(target.y_bits),
+                    );
+                    (vec.x.to_num::<f64>(), vec.y.to_num::<f64>())
+                }
+                None => (0.0, 0.0),
+            };
+
+            let mut cmd_buffer = CommandBuffer::new();
+            instance
+                .script_engine
+                .on_nav_intent(instance, entity_id, target_x, target_y, &mut cmd_buffer)
+                .map_err(|e| e.to_string())?;
+            cmd_buffer.flush_and_apply(instance);
         }
         Intent::Action(action_intent) => {
             if let Some(entity) = instance.entities.get(&entity_id) {

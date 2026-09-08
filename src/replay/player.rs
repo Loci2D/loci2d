@@ -420,19 +420,14 @@ mod tests {
             }],
         );
 
-        // Tick 2: Move Alice
+        // Tick 2: Ping
         recorder.record_tick(
             2,
             vec![ReplayIntentEntry {
                 entity_id: 1,
                 player_name: String::new(),
                 intent: Some(ClientIntent {
-                    intent: Some(client_intent::Intent::Move(MoveIntent {
-                        direction: Some(Vector2 {
-                            x_bits: (2.0f32 * 65536.0) as i32,
-                            y_bits: (1.0f32 * 65536.0) as i32,
-                        }),
-                    })),
+                    intent: Some(client_intent::Intent::Ping(crate::network::packets::PingIntent {})),
                 }),
             }],
         );
@@ -442,8 +437,6 @@ mod tests {
         sim_instance.handle_join("127.0.0.1:1000".parse().unwrap(), "Alice".to_string());
         sim_instance.tick(1).unwrap();
 
-        sim_instance.entities.get_mut(&1).unwrap().velocity =
-            crate::world::fixed_point::DeterministicVector2::from_f32(2.0, 1.0);
         for t in 2..=10 {
             sim_instance.tick(t).unwrap();
         }

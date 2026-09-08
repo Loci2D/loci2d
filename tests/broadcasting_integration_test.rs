@@ -25,7 +25,16 @@ fn start_test_server(tick_rate: u32, timeout_secs: u64) -> (std::net::SocketAddr
 
     let loop_socket = Arc::clone(&socket);
     thread::spawn(move || {
-        let instance = Instance::new(1, tick_rate, timeout_secs, 42);
+        let mut instance = Instance::new(1, tick_rate, timeout_secs, 42);
+        let script = r#"
+            function on_move_intent(id, x, y)
+                Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+            end
+            function on_nav_intent(id, x, y)
+                Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+            end
+        "#;
+        instance.load_script(script).unwrap();
         let mut game_loop = GameLoop::new(tick_rate);
         game_loop.start(instance, intent_rx, loop_socket);
     });

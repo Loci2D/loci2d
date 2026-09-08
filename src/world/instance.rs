@@ -395,6 +395,14 @@ mod tests {
         let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
 
+        // 0. Load movement Lua stub
+        let script = r#"
+            function on_move_intent(id, x, y)
+                Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+            end
+        "#;
+        instance.load_script(script).unwrap();
+
         // 1. Explicit Join
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
@@ -692,6 +700,17 @@ mod tests {
         use crate::network::packets::MoveToPositionIntent;
         let mut instance = Instance::new(1, 30, 10, 42);
         let addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+
+        // 0. Load navigation Lua stub
+        let script = r#"
+            function on_move_intent(id, x, y)
+                Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+            end
+            function on_nav_intent(id, x, y)
+                Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+            end
+        "#;
+        instance.load_script(script).unwrap();
 
         // 1. Join
         let join_intent = ClientIntent {

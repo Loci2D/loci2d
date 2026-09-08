@@ -288,6 +288,42 @@ impl ScriptEngine {
         })
     }
 
+    pub fn on_move_intent(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        dir_x: f64,
+        dir_y: f64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_move_fn) = globals.get::<mlua::Function>("on_move_intent") {
+                on_move_fn.call::<()>((entity_id, dir_x, dir_y))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_nav_intent(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        target_x: f64,
+        target_y: f64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_nav_fn) = globals.get::<mlua::Function>("on_nav_intent") {
+                on_nav_fn.call::<()>((entity_id, target_x, target_y))?;
+            }
+            Ok(())
+        })
+    }
+
     pub fn on_action(
         &self,
         instance: &Instance,

@@ -8,6 +8,10 @@ pub enum Command {
         entity_id: u64,
         blueprint: String,
         position: DeterministicVector2,
+        entity_type: String,
+        move_speed: I16F16,
+        radius: I16F16,
+        properties: std::collections::BTreeMap<String, String>,
     },
     DestroyEntity {
         entity_id: u64,
@@ -23,6 +27,10 @@ pub enum Command {
     SetMoveSpeed {
         entity_id: u64,
         speed: I16F16,
+    },
+    SetNavigationTarget {
+        entity_id: u64,
+        target: DeterministicVector2,
     },
     SetEntityProperty {
         entity_id: u64,
@@ -70,14 +78,29 @@ impl CommandBuffer {
                     entity_id,
                     blueprint,
                     position,
+                    entity_type,
+                    move_speed,
+                    radius,
+                    properties,
                 } => {
+                    let parsed_type = match entity_type.as_str() {
+                        "Player" => crate::world::entity::EntityType::Player,
+                        "Enemy" | "NPC" => crate::world::entity::EntityType::NPC,
+                        _ => crate::world::entity::EntityType::Prop,
+                    };
                     
                     let mut entity = crate::world::entity::Entity::new(
                         entity_id,
                         blueprint.clone(),
-                        crate::world::entity::EntityType::Prop, // TODO: resolve entity type from blueprint registry
+                        parsed_type,
                     )
-                    .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1));
+                    .with_default_navigation(move_speed, I16F16::from_num(1))
+                    .with_circle_collider(radius);
+                    
+                    for (k, v) in properties {
+                        entity.properties.insert(k, v);
+                    }
+
                     let pos_for_log = position;
                     entity.position = position;
                     
@@ -104,12 +127,26 @@ impl CommandBuffer {
                         entity.position = position;
                     }
                 }
+                Command::SetNavigationTarget { entity_id, target } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        let nav = entity.navigation.get_or_insert_with(|| {
+                            crate::world::physics::navigation::NavigationComponent::new(
+                                I16F16::from_num(1),
+                                I16F16::from_num(1),
+                            )
+                        });
+                        nav.set_target(target);
+                    }
+                }
                 Command::SetVelocity {
                     entity_id,
                     velocity,
                 } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         entity.velocity = velocity;
+                        if let Some(ref mut nav) = entity.navigation {
+                            nav.clear();
+                        }
                     }
                 }
                 Command::SetMoveSpeed { entity_id, speed } => {

@@ -66,6 +66,7 @@ fn test_command_buffer_and_entity_api() {
             entity_id: _,
             blueprint,
             position,
+            ..
         } => {
             assert_eq!(blueprint, "box");
             assert_eq!(position.to_f32(), (15.0, 20.0));
@@ -148,6 +149,10 @@ fn test_spawn_entity_round_trip() {
         entity_id: 2,
         blueprint: "magic_missile".to_string(),
         position: DeterministicVector2::from_f64(10.0, 10.0),
+        entity_type: "Prop".to_string(),
+        move_speed: I16F16::from_num(1.0),
+        radius: I16F16::from_num(2.0),
+        properties: std::collections::BTreeMap::new(),
     });
     
     command_buffer.flush_and_apply(&mut instance);

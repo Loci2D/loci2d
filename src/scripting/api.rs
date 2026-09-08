@@ -4,6 +4,24 @@ use mlua::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+fn extract_vector2(value: mlua::Value) -> LuaResult<DeterministicVector2> {
+    match value {
+        mlua::Value::UserData(ud) => {
+            if let Ok(vec) = ud.borrow::<DeterministicVector2>() {
+                Ok(*vec)
+            } else {
+                Err(mlua::Error::RuntimeError("Expected Loci.Vector2 userdata".to_string()))
+            }
+        }
+        mlua::Value::Table(t) => {
+            let x: f64 = t.get("x")?;
+            let y: f64 = t.get("y")?;
+            Ok(DeterministicVector2::from_f64(x, y))
+        }
+        _ => Err(mlua::Error::RuntimeError("Expected Loci.Vector2 or table with x, y".to_string())),
+    }
+}
+
 /// Sets up the base Loci global API which doesn't require an active Instance context.
 /// This includes the Loci.Vector2 constructor and basic logging.
 pub fn setup_base_api(lua: &Lua) -> LuaResult<()> {
@@ -85,6 +103,40 @@ where
         })?;
         loci_table.set("get_entity_position", get_entity_position)?;
 
+        // Loci.get_velocity(id)
+        let get_velocity = scope.create_function(|lua, id: u64| {
+            if let Some(entity) = instance.get_entity(id) {
+                (entity.velocity.x.to_num::<f64>(), entity.velocity.y.to_num::<f64>()).into_lua_multi(lua)
+            } else {
+                ().into_lua_multi(lua)
+            }
+        })?;
+        loci_table.set("get_velocity", get_velocity)?;
+
+        // Loci.get_move_speed(id)
+        let get_move_speed = scope.create_function(|_, id: u64| {
+            if let Some(entity) = instance.get_entity(id) {
+                if let Some(nav) = &entity.navigation {
+                    Ok(Some(nav.move_speed.to_num::<f64>()))
+                } else {
+                    Ok(None)
+                }
+            } else {
+                Ok(None)
+            }
+        })?;
+        loci_table.set("get_move_speed", get_move_speed)?;
+
+        // Loci.get_entity_name(id)
+        let get_entity_name = scope.create_function(|_, id: u64| {
+            if let Some(entity) = instance.get_entity(id) {
+                Ok(Some(entity.name.clone()))
+            } else {
+                Ok(None)
+            }
+        })?;
+        loci_table.set("get_entity_name", get_entity_name)?;
+
         // Loci.get_entity_property(id, key)
         let get_entity_property = scope.create_function(|_, (id, key): (u64, String)| {
             if let Some(entity) = instance.get_entity(id) {
@@ -106,8 +158,20 @@ where
         let cmd_buf_spawn = Rc::clone(&cmd_buffer_rc);
         let spawn_entity = scope.create_function(move |_, args: mlua::Table| {
             let blueprint: String = args.get("blueprint")?;
-            let position_ud: mlua::AnyUserData = args.get("position")?;
-            let position = *position_ud.borrow::<DeterministicVector2>()?;
+            let position_val: mlua::Value = args.get("position")?;
+            let position = extract_vector2(position_val)?;
+            
+            let entity_type: String = args.get("entity_type").unwrap_or_else(|_| "Prop".to_string());
+            let move_speed: f64 = args.get("move_speed").unwrap_or(1.0);
+            let radius: f64 = args.get("radius").unwrap_or(2.0);
+            
+            let mut properties = std::collections::BTreeMap::new();
+            if let Ok(props_table) = args.get::<mlua::Table>("properties") {
+                for pair in props_table.pairs::<String, String>() {
+                    let (k, v) = pair?;
+                    properties.insert(k, v);
+                }
+            }
 
             let entity_id = instance.allocate_entity_id();
 
@@ -115,6 +179,10 @@ where
                 entity_id,
                 blueprint,
                 position,
+                entity_type,
+                move_speed: fixed::types::I16F16::from_num(move_speed),
+                radius: fixed::types::I16F16::from_num(radius),
+                properties,
             });
             Ok(entity_id)
         })?;
@@ -131,8 +199,8 @@ where
 
         let cmd_buf_set_pos = Rc::clone(&cmd_buffer_rc);
         let set_position =
-            scope.create_function(move |_, (id, position_ud): (u64, mlua::AnyUserData)| {
-                let position = *position_ud.borrow::<DeterministicVector2>()?;
+            scope.create_function(move |_, (id, position_val): (u64, mlua::Value)| {
+                let position = extract_vector2(position_val)?;
                 cmd_buf_set_pos.borrow_mut().push(Command::SetPosition {
                     entity_id: id,
                     position,
@@ -143,8 +211,8 @@ where
 
         let cmd_buf_set_vel = Rc::clone(&cmd_buffer_rc);
         let set_velocity =
-            scope.create_function(move |_, (id, velocity_ud): (u64, mlua::AnyUserData)| {
-                let velocity = *velocity_ud.borrow::<DeterministicVector2>()?;
+            scope.create_function(move |_, (id, velocity_val): (u64, mlua::Value)| {
+                let velocity = extract_vector2(velocity_val)?;
                 cmd_buf_set_vel.borrow_mut().push(Command::SetVelocity {
                     entity_id: id,
                     velocity,
@@ -152,6 +220,18 @@ where
                 Ok(())
             })?;
         commands_table.set("set_velocity", set_velocity)?;
+
+        let cmd_buf_set_nav = Rc::clone(&cmd_buffer_rc);
+        let set_navigation_target =
+            scope.create_function(move |_, (id, target_val): (u64, mlua::Value)| {
+                let target = extract_vector2(target_val)?;
+                cmd_buf_set_nav.borrow_mut().push(Command::SetNavigationTarget {
+                    entity_id: id,
+                    target,
+                });
+                Ok(())
+            })?;
+        commands_table.set("set_navigation_target", set_navigation_target)?;
 
         let cmd_buf_set_speed = Rc::clone(&cmd_buffer_rc);
         let set_move_speed =

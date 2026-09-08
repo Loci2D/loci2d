@@ -22,15 +22,25 @@ fn test_1000_tick_multi_player_replay_determinism() {
     let checkpoint_interval = 50u64;
     let seed = 99999u64;
 
+    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
+    let script = r#"
+        function on_move_intent(id, x, y)
+            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+        end
+        function on_nav_intent(id, x, y)
+            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+        end
+    "#;
+    author_instance.load_script(script).unwrap();
+
     let mut recorder = ReplayRecorder::new(
         1,
         tick_rate,
         seed,
         "determinism_arena".to_string(),
         checkpoint_interval,
-        "".to_string(),
+        author_instance.script_hash.clone(),
     );
-    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
 
     // Schedule 10 players joining and moving over 1000 ticks
     let player_count = 10;
@@ -120,8 +130,18 @@ fn test_1000_tick_multi_player_replay_determinism() {
     std::fs::write(&file_path, &bytes).unwrap();
 
     let mut player = ReplayPlayer::load_from_file(&file_path).expect("Failed to load ReplayPlayer");
+    let mut verify_instance = Instance::new(1, tick_rate, 60, 42);
+    let script = r#"
+        function on_move_intent(id, x, y)
+            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+        end
+        function on_nav_intent(id, x, y)
+            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+        end
+    "#;
+    verify_instance.load_script(script).unwrap();
     let report = player
-        .verify_determinism()
+        .verify_determinism_with_instance(&mut verify_instance)
         .expect("1000-tick replay must verify with 0 desyncs");
 
     assert_eq!(report.total_ticks, total_ticks);
@@ -143,9 +163,18 @@ fn test_1000_tick_multi_player_replay_determinism() {
 
 #[test]
 fn test_rejoin_entity_state_preservation_determinism() {
-    let mut recorder =
-        ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, "".to_string());
     let mut live_instance = Instance::new(1, 30, 60, 42);
+    let script = r#"
+        function on_move_intent(id, x, y)
+            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+        end
+        function on_nav_intent(id, x, y)
+            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+        end
+    "#;
+    live_instance.load_script(script).unwrap();
+    let mut recorder =
+        ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, live_instance.script_hash.clone());
     let addr = "127.0.0.1:20000".parse().unwrap();
 
     // 1. Initial Join as "Alice"
@@ -208,8 +237,18 @@ fn test_rejoin_entity_state_preservation_determinism() {
 
     let bytes = recorder.to_bytes().unwrap();
     let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
+    let mut verify_instance = Instance::new(1, 30, 60, 42);
+    let script = r#"
+        function on_move_intent(id, x, y)
+            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+        end
+        function on_nav_intent(id, x, y)
+            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+        end
+    "#;
+    verify_instance.load_script(script).unwrap();
     let report = player
-        .verify_determinism()
+        .verify_determinism_with_instance(&mut verify_instance)
         .expect("Rejoin replay must match live state deterministically");
 
     assert_eq!(report.total_ticks, 10);
@@ -347,15 +386,25 @@ fn test_click_to_move_replay_determinism() {
     let checkpoint_interval = 25u64;
     let seed = 123456789u64;
 
+    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
+    let script = r#"
+        function on_move_intent(id, x, y)
+            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+        end
+        function on_nav_intent(id, x, y)
+            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+        end
+    "#;
+    author_instance.load_script(script).unwrap();
+
     let mut recorder = ReplayRecorder::new(
         1,
         tick_rate,
         seed,
         "nav_replay_arena".to_string(),
         checkpoint_interval,
-        "".to_string(),
+        author_instance.script_hash.clone(),
     );
-    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
 
     let player_count = 5;
 
@@ -438,8 +487,18 @@ fn test_click_to_move_replay_determinism() {
 
     let bytes = recorder.to_bytes().unwrap();
     let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
+    let mut verify_instance = Instance::new(1, tick_rate, 60, 42);
+    let script = r#"
+        function on_move_intent(id, x, y)
+            Loci.Commands.set_velocity(id, Loci.Vector2(x, y))
+        end
+        function on_nav_intent(id, x, y)
+            Loci.Commands.set_navigation_target(id, Loci.Vector2(x, y))
+        end
+    "#;
+    verify_instance.load_script(script).unwrap();
     let report = player
-        .verify_determinism()
+        .verify_determinism_with_instance(&mut verify_instance)
         .expect("Click-to-move replay playback must match author checksums exactly");
 
     assert_eq!(report.total_ticks, total_ticks);
