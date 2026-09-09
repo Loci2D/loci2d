@@ -318,7 +318,7 @@ fn main() {
         run_server(net_socket, intent_tx);
     });
 
-    let script_hash = {
+    let (script_hash, script_payload) = {
         let mut temp_instance = Instance::new(1, tick_rate, client_timeout_secs, seed);
         let script_path = format!("scripts/{}/main.lua", map_name);
         if let Ok(script_content) = std::fs::read_to_string(&script_path) {
@@ -331,13 +331,13 @@ fn main() {
                 "[Script] Script loaded successfully (hash: {})",
                 temp_instance.script_hash
             );
-            temp_instance.script_hash.clone()
+            (temp_instance.script_hash.clone(), temp_instance.script_payload.clone())
         } else {
             println!(
                 "[Script] No script found at '{}', running without game logic",
                 script_path
             );
-            "".to_string()
+            ("".to_string(), "".to_string())
         }
     };
 
@@ -356,6 +356,7 @@ fn main() {
             checkpoint_interval,
             record_path,
             script_hash,
+            script_payload,
         );
     }
 

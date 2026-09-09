@@ -49,6 +49,7 @@ pub struct Instance {
     // Phase 6 Additions:
     pub script_engine: ScriptEngine,
     pub script_hash: String,
+    pub script_payload: String,
     pub globals: BTreeMap<String, String>,
     pub state: MatchState,
     pub active_timers: BTreeMap<String, ActiveTimer>,
@@ -84,6 +85,7 @@ impl Instance {
             logging_enabled: false,
             script_engine: ScriptEngine::new(seed).expect("Failed to initialize ScriptEngine"),
             script_hash: String::new(),
+            script_payload: String::new(),
             globals: BTreeMap::new(),
             state: MatchState::Running,
             active_timers: BTreeMap::new(),
@@ -107,6 +109,7 @@ impl Instance {
         hasher.update(script_content.as_bytes());
         let hash_bytes: [u8; 32] = hasher.finalize().into();
         self.script_hash = hash_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+        self.script_payload = script_content.to_string();
         Ok(())
     }
 

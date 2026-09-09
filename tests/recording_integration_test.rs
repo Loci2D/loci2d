@@ -40,6 +40,7 @@ fn test_live_match_recording_flow() {
         5,
         loop_path_str,
         "".to_string(),
+        "".to_string(),
     );
     let running: Arc<AtomicBool> = game_loop.running_handle();
 

@@ -91,12 +91,12 @@ The `config_table` should support the following optional fields:
 
 ## 4. Implementation Checklist
 
-- [ ] **`src/world/intent_handler.rs`** — Remove direct physics state mutation for `Move` and `MoveToPos`.
-- [ ] **`src/scripting/engine.rs`** — Confirm extensibility and expose `on_move_intent` and `on_nav_intent` callbacks.
-- [ ] **`src/scripting/api.rs`** — Implement `get_velocity`, `get_move_speed`, and `get_entity_name`.
-- [ ] **`src/scripting/api.rs`** — Update `set_position`/`set_velocity` to accept `Table` or `Loci.Vector2` via `mlua::Value`.
-- [ ] **`src/scripting/command.rs`** — Enhance `SpawnEntity` with dynamic configuration parameters.
-- [ ] **`tests/` & `src/world/instance.rs`** — Audit existing tests, create Lua authorization stub, and update test dependencies.
+- [x] **`src/world/intent_handler.rs`** — Remove direct physics state mutation for `Move` and `MoveToPos`.
+- [x] **`src/scripting/engine.rs`** — Confirm extensibility and expose `on_move_intent` and `on_nav_intent` callbacks.
+- [x] **`src/scripting/api.rs`** — Implement `get_velocity`, `get_move_speed`, and `get_entity_name`.
+- [x] **`src/scripting/api.rs`** — Update `set_position`/`set_velocity` to accept `Table` or `Loci.Vector2` via `mlua::Value`.
+- [x] **`src/scripting/command.rs`** — Enhance `SpawnEntity` with dynamic configuration parameters.
+- [x] **`tests/` & `src/world/instance.rs`** — Audit existing tests, create Lua authorization stub, and update test dependencies.
 
 ---
 

@@ -14,6 +14,7 @@ message ReplayHeader {
   uint64 random_seed = 6;       // Deterministic PRNG seed (used to initialize Instance RNG)
   string map_name = 7;          // Map / configuration identifier
   string script_hash = 8;       // Hash SHA-256 of the loaded Lua scripts
+  string script_payload = 9;    // Raw Lua script payload required for spectator replay
 }
 
 // Single logged intent event stamped by entity_id

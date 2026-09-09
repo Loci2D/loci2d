@@ -34,6 +34,7 @@ fn test_1000_tick_multi_player_replay_determinism() {
         "determinism_arena".to_string(),
         checkpoint_interval,
         author_instance.script_hash.clone(),
+        author_instance.script_payload.clone(),
     );
 
     // Schedule 10 players joining and moving over 1000 ticks
@@ -153,7 +154,7 @@ fn test_rejoin_entity_state_preservation_determinism() {
     let mut live_instance = Instance::new(1, 30, 60, 42);
     live_instance.load_script(common::PASSTHROUGH_MOVEMENT_SCRIPT).unwrap();
     let mut recorder =
-        ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, live_instance.script_hash.clone());
+        ReplayRecorder::new(1, 30, 42, "rejoin_arena".to_string(), 10, live_instance.script_hash.clone(), live_instance.script_payload.clone());
     let addr = "127.0.0.1:20000".parse().unwrap();
 
     // 1. Initial Join as "Alice"
@@ -252,6 +253,7 @@ fn test_inactivity_timeout_disconnect_synchronization() {
         5,
         replay_path_str,
         "".to_string(),
+        "".to_string(),
     );
     let running: Arc<AtomicBool> = game_loop.running_handle();
 
@@ -293,7 +295,7 @@ fn test_inactivity_timeout_disconnect_synchronization() {
 
 #[test]
 fn test_desync_diagnostic_report_on_tampered_frame() {
-    let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
+    let mut recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string(), "".to_string());
     let mut instance = Instance::new(1, 30, 60, 42);
 
     instance.handle_join("127.0.0.1:5000".parse().unwrap(), "Alice".to_string());
@@ -336,7 +338,7 @@ fn test_desync_diagnostic_report_on_tampered_frame() {
 
 #[test]
 fn test_corrupted_header_magic_fails_gracefully() {
-    let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
+    let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string(), "".to_string());
     let bytes = recorder.to_bytes().unwrap();
 
     // Tamper with bytes to alter magic string
@@ -369,6 +371,7 @@ fn test_click_to_move_replay_determinism() {
         "nav_replay_arena".to_string(),
         checkpoint_interval,
         author_instance.script_hash.clone(),
+        author_instance.script_payload.clone(),
     );
 
     let player_count = 5;

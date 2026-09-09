@@ -26,6 +26,7 @@ impl ReplayRecorder {
         map_name: String,
         checkpoint_interval: u64,
         script_hash: String,
+        script_payload: String,
     ) -> Self {
         let interval = if checkpoint_interval == 0 {
             DEFAULT_CHECKPOINT_INTERVAL_TICKS
@@ -51,6 +52,7 @@ impl ReplayRecorder {
                 random_seed: seed,
                 map_name: map,
                 script_hash,
+                script_payload,
             },
             frames: Vec::new(),
             checkpoints: Vec::new(),
@@ -147,6 +149,7 @@ mod tests {
             "custom_map".to_string(),
             60,
             "dummy_hash".to_string(),
+            String::new(),
         );
 
         let join_intent = ClientIntent {

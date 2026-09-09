@@ -224,11 +224,14 @@ impl ReplayPlayer {
         const TERMINAL_FRAME_DELAY_MS: u64 = 15;
 
         let header = self.replay.header.as_ref().unwrap();
-        // TODO: Before Phase 7, the replay header will likely need to store the script source
-        // or a reference to it so that `broadcast_live` can load it into the instance here.
-        // Currently, without a script, spectator replay instances will drop movement intents.
         let mut instance =
             Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
+
+        if !header.script_payload.is_empty() {
+            instance
+                .load_script(&header.script_payload)
+                .expect("Failed to load script payload from replay");
+        }
 
         let original_speed = speed;
         let speed = if speed <= 0.0 {
@@ -407,7 +410,7 @@ mod tests {
     fn test_replay_player_verify_success() {
         // Note: Empty script hash is acceptable in this unit test since script hash verification logic is tested separately.
         let mut recorder =
-            ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
+            ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string(), "".to_string());
 
         // Tick 1: Join Alice
         recorder.record_tick(
@@ -460,7 +463,7 @@ mod tests {
     #[test]
     fn test_replay_player_detects_desync() {
         let mut recorder =
-            ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 5, "".to_string());
+            ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 5, "".to_string(), "".to_string());
 
         recorder.record_tick(
             1,
@@ -491,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_replay_player_accessors() {
-        let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string());
+        let recorder = ReplayRecorder::new(1, 30, 42, "test_arena".to_string(), 10, "".to_string(), "".to_string());
         let bytes = recorder.to_bytes().unwrap();
         let player = ReplayPlayer::from_bytes(&bytes).unwrap();
 

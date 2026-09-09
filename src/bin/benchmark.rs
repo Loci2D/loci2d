@@ -91,6 +91,7 @@ fn main() {
         "default_arena".to_string(),
         checkpoint_interval,
         "".to_string(),
+        "".to_string(),
     );
     let mut sim_instance = Instance::new(1, 30, 60, 42);
     sim_instance.set_map_bounds(MapBounds::default_arena());

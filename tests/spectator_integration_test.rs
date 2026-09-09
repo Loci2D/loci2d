@@ -27,6 +27,7 @@ fn test_live_spectator_replay_broadcasting() {
         "spectator_arena".to_string(),
         10,
         "".to_string(),
+        "".to_string(),
     );
     let mut instance = Instance::new(1, tick_rate, 60, 42);
 
