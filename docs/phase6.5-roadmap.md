@@ -104,23 +104,23 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 ## 6.5.2: Refinamento da API & Preparação para SDKs
 
 ### English
-* [ ] **Strict Intent Interception (Safe Layer Fix):**
+* [x] **Strict Intent Interception (Safe Layer Fix):**
   - Refactor `intent_handler.rs` so `Intent::Move` and `Intent::MoveToPos` do not directly mutate Entity velocity and navigation.
   - Expose new Lua hooks (`on_move_intent(entity_id, dir_x, dir_y)`) allowing scripts to validate and apply movement via `Loci.Commands`.
-* [ ] **Lua API Consistency & Getters:**
+* [x] **Lua API Consistency & Getters:**
   - Standardize Vector2 arguments across the Lua API (e.g., `on_action`, `set_position`) so they accept consistent formats.
   - Implement basic Getters (`get_velocity`, `get_move_speed`, `get_entity_name`) to prevent state duplication in Lua.
-* [ ] **Blueprint Extensibility:**
+* [x] **Blueprint Extensibility:**
   - Enhance `SpawnEntity` to accept configuration parameters (or integrate a registry) rather than hardcoding EntityType and Components.
 
 ### Português
-* [ ] **Interceptação Estrita de Intents (Correção da Camada Segura):**
+* [x] **Interceptação Estrita de Intents (Correção da Camada Segura):**
   - Refatorar `intent_handler.rs` para que `Intent::Move` e `Intent::MoveToPos` não mutem diretamente a velocidade e navegação da Entidade.
   - Expor novos hooks Lua (`on_move_intent(entity_id, dir_x, dir_y)`) permitindo que scripts validem e apliquem movimento via `Loci.Commands`.
-* [ ] **Consistência da API Lua & Getters:**
+* [x] **Consistência da API Lua & Getters:**
   - Padronizar argumentos Vector2 na API Lua (ex: `on_action`, `set_position`) para que aceitem formatos consistentes.
   - Implementar Getters básicos (`get_velocity`, `get_move_speed`, `get_entity_name`) para evitar duplicação de estado no Lua.
-* [ ] **Extensibilidade de Blueprints:**
+* [x] **Extensibilidade de Blueprints:**
   - Melhorar `SpawnEntity` para aceitar parâmetros de configuração (ou integrar um registry) em vez de fixar (hardcode) EntityType e Componentes.
 
 ---
