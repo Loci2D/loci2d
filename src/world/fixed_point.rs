@@ -266,7 +266,7 @@ impl mlua::UserData for DeterministicVector2 {
         methods.add_method("x_float", |_, vec, ()| Ok(vec.x.to_num::<f64>()));
         methods.add_method("y_float", |_, vec, ()| Ok(vec.y.to_num::<f64>()));
 
-        // Expose arithmetic. Behind the scenes, everything stays in I16F16.
+        // Expose arithmetic and math. Behind the scenes, everything stays in I16F16.
         methods.add_meta_method(mlua::MetaMethod::Add, |_, vec1, vec2: mlua::AnyUserData| {
             let vec2 = vec2.borrow::<DeterministicVector2>()?;
             Ok(DeterministicVector2::new(vec1.x + vec2.x, vec1.y + vec2.y))
@@ -275,6 +275,19 @@ impl mlua::UserData for DeterministicVector2 {
         methods.add_meta_method(mlua::MetaMethod::Sub, |_, vec1, vec2: mlua::AnyUserData| {
             let vec2 = vec2.borrow::<DeterministicVector2>()?;
             Ok(DeterministicVector2::new(vec1.x - vec2.x, vec1.y - vec2.y))
+        });
+
+        methods.add_method("distance_to", |_, vec1, vec2: mlua::AnyUserData| {
+            let vec2 = vec2.borrow::<DeterministicVector2>()?;
+            Ok(vec1.distance(*vec2).to_num::<f64>())
+        });
+
+        methods.add_method("length", |_, vec, ()| {
+            Ok(vec.length().to_num::<f64>())
+        });
+
+        methods.add_method("normalize", |_, vec, ()| {
+            Ok(vec.normalize_or_zero())
         });
     }
 }

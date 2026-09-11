@@ -112,6 +112,9 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Implement basic Getters (`get_velocity`, `get_move_speed`, `get_entity_name`) to prevent state duplication in Lua.
 * [x] **Blueprint Extensibility:**
   - Enhance `SpawnEntity` to accept configuration parameters (or integrate a registry) rather than hardcoding EntityType and Components.
+* [x] **API Ergonomics for Skills (MOBA Support):**
+  - Add `Loci.get_entities_in_radius` for Spatial Queries (AoE skills).
+  - Expose fixed-point math methods (`distance_to`, `normalize`, `length`) to `DeterministicVector2` to prevent floating-point determinism loss.
 
 ### Português
 * [x] **Interceptação Estrita de Intents (Correção da Camada Segura):**
@@ -122,6 +125,9 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Implementar Getters básicos (`get_velocity`, `get_move_speed`, `get_entity_name`) para evitar duplicação de estado no Lua.
 * [x] **Extensibilidade de Blueprints:**
   - Melhorar `SpawnEntity` para aceitar parâmetros de configuração (ou integrar um registry) em vez de fixar (hardcode) EntityType e Componentes.
+* [x] **Ergonomia da API para Skills (Suporte a MOBA):**
+  - Adicionar `Loci.get_entities_in_radius` para Spatial Queries (skills em área).
+  - Expor métodos matemáticos em fixed-point (`distance_to`, `normalize`, `length`) no `DeterministicVector2` para evitar perda de determinismo com ponto flutuante.
 
 ---
 

@@ -103,6 +103,27 @@ where
         })?;
         loci_table.set("get_entity_position", get_entity_position)?;
 
+        // Loci.get_entities_in_radius(position, radius)
+        let get_entities_in_radius = scope.create_function(|lua, (pos_val, radius): (mlua::Value, f64)| {
+            let position = extract_vector2(pos_val)?;
+            let radius_fp = fixed::types::I16F16::from_num(radius);
+            
+            let mut ids = Vec::new();
+            for entity in instance.entities.values() {
+                if entity.position.distance(position) <= radius_fp {
+                    ids.push(entity.id);
+                }
+            }
+            
+            let table = lua.create_table()?;
+            for (i, id) in ids.into_iter().enumerate() {
+                table.set(i + 1, id)?;
+            }
+            
+            Ok(table)
+        })?;
+        loci_table.set("get_entities_in_radius", get_entities_in_radius)?;
+
         // Loci.get_velocity(id)
         let get_velocity = scope.create_function(|lua, id: u64| {
             if let Some(entity) = instance.get_entity(id) {
