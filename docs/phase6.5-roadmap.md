@@ -135,28 +135,22 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 ## 6.5.3: SDKs & Wrappers para Clientes
 
 ### English
+* [ ] **Love2D SDK Spec:** Write `phase6.5.3-love2d-sdk-spec.md` detailing the client architecture, ensuring all netcode is abstracted away from the devs.
 * [ ] **High-Level Entity Abstraction:**
   - Create in-memory `Entity` objects within the wrappers to automatically handle property type casting (e.g., converting string `"hp"` to number), hiding the engine's string-typing from the end user.
-* [ ] **Godot 4 Wrapper (`LociClient.gd`):**
-  - Build an ergonomic GDScript client module to eliminate boilerplate UDP socket/Protobuf parsing for end users.
-* [ ] **Love2D Wrapper (`loci_client.lua`):**
-  - Create a lightweight Lua module for Love2D developers to connect to the engine effortlessly.
-* [ ] **Python SDK:**
-  - Expose a Python SDK for AI training, data analysis, or rapid prototyping.
+* [ ] **Love2D Wrapper (`loci_client.lua`):** (PRIORITY)
+  - Create a lightweight Lua module for Love2D developers to connect to the engine effortlessly, abstracting UDP sockets and Protobuf completely.
 * [ ] **Signals & Callbacks API:**
-  - Expose intuitive, high-level signals/callbacks for state updates (e.g., `on_entity_updated`, `on_match_event`).
+  - Expose intuitive, high-level signals/callbacks for state updates (e.g., `on_entity_updated`, `on_match_event`, `on_action_cast`) tailored for UI and FX.
 
 ### Português
+* [ ] **Spec do SDK Love2D:** Escrever `phase6.5.3-love2d-sdk-spec.md` detalhando a arquitetura do cliente, garantindo que o netcode fique totalmente abstraído dos devs.
 * [ ] **Abstração de Entidades em Alto Nível:**
-  - Criar objetos `Entity` em memória nos wrappers para lidar automaticamente com o cast de tipos de propriedades (ex: converter string `"hp"` para número), escondendo a tipagem baseada em string do motor para os alunos.
-* [ ] **Wrapper para Godot 4 (`LociClient.gd`):**
-  - Construir um módulo cliente ergonômico em GDScript para eliminar o boilerplate de sockets UDP e decodificação Protobuf para os usuários finais.
-* [ ] **Wrapper para Love2D (`loci_client.lua`):**
-  - Criar um módulo Lua leve para desenvolvedores Love2D conectarem-se ao motor sem esforço.
-* [ ] **SDK para Python:**
-  - Expor um SDK Python para treinamento de IA, análise de dados ou prototipagem rápida.
+  - Criar objetos `Entity` em memória no wrapper para lidar automaticamente com o cast de tipos de propriedades (ex: converter string `"hp"` para número), escondendo a tipagem baseada em string do motor para os alunos.
+* [ ] **Wrapper para Love2D (`loci_client.lua`):** (PRIORIDADE)
+  - Criar um módulo Lua leve para desenvolvedores Love2D conectarem-se ao motor sem esforço, abstraindo sockets UDP e Protobuf completamente.
 * [ ] **API de Sinais & Callbacks:**
-  - Expor sinais/callbacks intuitivos de alto nível para atualizações de estado (ex: `on_entity_updated`, `on_match_event`).
+  - Expor sinais/callbacks intuitivos de alto nível para atualizações de estado (ex: `on_entity_updated`, `on_match_event`, `on_action_cast`) focados em UI e Efeitos.
 
 ---
 
@@ -164,18 +158,14 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 ## 6.5.4: Exemplos de Referência & Templates
 
 ### English
+* [ ] **3v3 Arena MVP (Love2D):** Build a fully functional 3v3 Arena game using the Love2D SDK to validate the engine.
 * [ ] **Standard Lua Game Template:** Create a boilerplate `main.lua` file with heavily documented callbacks (`on_init`, `on_player_join`, etc.) establishing the official structure for students to build game rules.
 * [ ] **Refactor CLI Example:** Update the headless rust client example to reflect recent architectural changes.
-* [ ] **Refactor Love2D Example:** Rebuild the Love2D demo using the new `loci_client.lua` SDK.
-* [ ] **Refactor Godot Example:** Rebuild the Godot demo using the new `LociClient.gd` SDK.
-* [ ] **Refactor Python Example:** Showcase basic interactions using the new Python SDK.
 
 ### Português
+* [ ] **MVP Arena 3v3 (Love2D):** Construir um jogo Arena 3v3 totalmente funcional usando o SDK do Love2D para validar a engine.
 * [ ] **Template Padrão de Jogo em Lua:** Criar um arquivo `main.lua` modelo com callbacks amplamente documentados (`on_init`, `on_player_join`, etc.), estabelecendo a estrutura oficial para os alunos criarem regras de jogo.
 * [ ] **Refatorar Exemplo CLI:** Atualizar o exemplo de cliente headless em Rust para refletir as mudanças arquiteturais recentes.
-* [ ] **Refatorar Exemplo Love2D:** Reconstruir a demo em Love2D usando o novo SDK `loci_client.lua`.
-* [ ] **Refatorar Exemplo Godot:** Reconstruir a demo em Godot usando o novo SDK `LociClient.gd`.
-* [ ] **Refatorar Exemplo Python:** Demonstrar interações básicas usando o novo SDK Python.
 
 ---
 
@@ -210,3 +200,20 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
   - Realizar sessões físicas de playtest em LAN com estudantes de ensino médio e graduação para identificar pontos de atrito de UX/DX e testar a ergonomia da API.
 * [ ] **Métricas de Estabilidade de Rede:**
   - Medir a estabilidade dos ticks, resiliência a dessincronização e latência de pacotes sob condições reais de rede local.
+
+---
+
+## Future Work (Out of Scope for Phase 6.5 MVP)
+## Trabalhos Futuros (Fora do Escopo do MVP da Fase 6.5)
+
+### English
+* [ ] **Godot 4 Wrapper (`LociClient.gd`):** Build an ergonomic GDScript client module to eliminate boilerplate UDP socket/Protobuf parsing for end users.
+* [ ] **Python SDK:** Expose a Python SDK for AI training, data analysis, or rapid prototyping.
+* [ ] **Refactor Godot Example:** Rebuild the Godot demo using the new `LociClient.gd` SDK.
+* [ ] **Refactor Python Example:** Showcase basic interactions using the new Python SDK.
+
+### Português
+* [ ] **Wrapper para Godot 4 (`LociClient.gd`):** Construir um módulo cliente ergonômico em GDScript para eliminar o boilerplate de sockets UDP e decodificação Protobuf para os usuários finais.
+* [ ] **SDK para Python:** Expor um SDK Python para treinamento de IA, análise de dados ou prototipagem rápida.
+* [ ] **Refatorar Exemplo Godot:** Reconstruir a demo em Godot usando o novo SDK `LociClient.gd`.
+* [ ] **Refatorar Exemplo Python:** Demonstrar interações básicas usando o novo SDK Python.
