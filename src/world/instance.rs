@@ -16,6 +16,13 @@ use std::path::Path;
 pub use super::fixed_point::DeterministicVector2;
 pub use crate::network::packets::Vector2;
 
+#[derive(Debug, Clone)]
+pub enum ApplyIntentResult {
+    Ok(Option<ReplayIntentEntry>),
+    Rejected(String),
+    FatalError(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MatchState {
     Paused,
@@ -126,10 +133,10 @@ impl Instance {
         &mut self,
         addr: SocketAddr,
         intent: ClientIntent,
-    ) -> Result<Option<ReplayIntentEntry>, String> {
+    ) -> ApplyIntentResult {
         let inner_intent = match intent.intent.as_ref() {
             Some(i) => i,
-            None => return Ok(None),
+            None => return ApplyIntentResult::Ok(None),
         };
 
         if matches!(self.state, MatchState::Ended { .. })
@@ -137,7 +144,7 @@ impl Instance {
                 inner_intent,
                 Intent::Action(_) | Intent::Move(_) | Intent::MoveToPos(_)
             ) {
-                return Ok(None);
+                return ApplyIntentResult::Ok(None);
             }
 
         let (entity_id, player_name) = match inner_intent {
@@ -153,7 +160,7 @@ impl Instance {
             Intent::Disconnect(disconnect_intent) => {
                 let session = match self.sessions.get(&addr) {
                     Some(s) => s,
-                    None => return Ok(None),
+                    None => return ApplyIntentResult::Ok(None),
                 };
                 let entity_id = session.entity_id;
                 let player_name = session.player_name.clone();
@@ -163,19 +170,27 @@ impl Instance {
             _ => {
                 let session = match self.sessions.get_mut(&addr) {
                     Some(s) => s,
-                    None => return Ok(None),
+                    None => return ApplyIntentResult::Ok(None),
                 };
                 session.refresh_activity();
                 (session.entity_id, String::new())
             }
         };
 
-        crate::world::intent_handler::apply_resolved_intent(
+        match crate::world::intent_handler::apply_resolved_intent(
             self,
             entity_id,
             player_name.clone(),
             inner_intent,
-        )?;
+        ) {
+            crate::world::intent_handler::IntentResult::Ok => {}
+            crate::world::intent_handler::IntentResult::Rejected(reason) => {
+                return ApplyIntentResult::Rejected(reason);
+            }
+            crate::world::intent_handler::IntentResult::FatalError(e) => {
+                return ApplyIntentResult::FatalError(e);
+            }
+        }
 
         let intent_for_replay = if matches!(inner_intent, Intent::Ping(_)) {
             None
@@ -187,7 +202,7 @@ impl Instance {
             })
         };
 
-        Ok(intent_for_replay)
+        ApplyIntentResult::Ok(intent_for_replay)
     }
 
     /// Explicit client join
@@ -373,13 +388,19 @@ impl Instance {
             return;
         };
 
-        if let Err(e) = crate::world::intent_handler::apply_resolved_intent(
+        match crate::world::intent_handler::apply_resolved_intent(
             self,
             entry.entity_id,
             entry.player_name.clone(),
             inner_intent,
         ) {
-            eprintln!("[Replay] Error applying intent: {}", e);
+            crate::world::intent_handler::IntentResult::FatalError(e) => {
+                eprintln!("[Replay] Error applying intent: {}", e);
+            }
+            crate::world::intent_handler::IntentResult::Rejected(r) => {
+                eprintln!("[Replay] Intent rejected: {}", r);
+            }
+            crate::world::intent_handler::IntentResult::Ok => {}
         }
     }
 }
@@ -941,8 +962,7 @@ mod tests {
             })),
         };
         let _ = instance
-            .apply_intent("127.0.0.1:1234".parse().unwrap(), join_intent)
-            .unwrap();
+            .apply_intent("127.0.0.1:1234".parse().unwrap(), join_intent);
 
         let join_called: bool = instance
             .script_engine
@@ -988,13 +1008,13 @@ mod tests {
         let addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
 
         // These should be ignored and return Ok(None)
-        let res_action = instance.apply_intent(addr, action_intent).unwrap();
-        assert!(res_action.is_none());
+        let res_action = instance.apply_intent(addr, action_intent);
+        assert!(matches!(res_action, ApplyIntentResult::Ok(None)));
 
-        let res_move = instance.apply_intent(addr, move_intent).unwrap();
-        assert!(res_move.is_none());
+        let res_move = instance.apply_intent(addr, move_intent);
+        assert!(matches!(res_move, ApplyIntentResult::Ok(None)));
 
         let res_ping = instance.apply_intent(addr, ping_intent);
-        assert!(res_ping.is_ok());
+        assert!(matches!(res_ping, ApplyIntentResult::Ok(None)));
     }
 }

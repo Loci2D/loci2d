@@ -118,7 +118,7 @@ fn main() {
                     player_name: name.clone(),
                 })),
             };
-            if let Ok(Some(entry)) = sim_instance.apply_intent(addr, join_intent) {
+            if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) = sim_instance.apply_intent(addr, join_intent) {
                 tick_entries.push(entry);
             }
         }
@@ -151,7 +151,7 @@ fn main() {
                     };
 
                     let addr: SocketAddr = format!("127.0.0.1:{}", 20000 + pid).parse().unwrap();
-                    if let Ok(Some(entry)) = sim_instance.apply_intent(addr, client_intent_payload)
+                    if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) = sim_instance.apply_intent(addr, client_intent_payload)
                     {
                         tick_entries.push(entry);
                     }

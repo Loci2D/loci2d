@@ -6,6 +6,12 @@ use crate::world::instance::Instance;
 
 use fixed::types::I16F16;
 
+pub enum IntentResult {
+    Ok,
+    Rejected(String),
+    FatalError(String),
+}
+
 /// Applies a resolved intent to the instance. This is used by both live client intents
 /// and replay playback to ensure identical behavior and identical Lua callback invocation.
 pub fn apply_resolved_intent(
@@ -13,7 +19,7 @@ pub fn apply_resolved_intent(
     entity_id: u64,
     player_name: String,
     intent: &Intent,
-) -> Result<(), String> {
+) -> IntentResult {
     match intent {
         Intent::Join(join_intent) => {
             let final_name = if join_intent.player_name.trim().is_empty() {
@@ -32,18 +38,16 @@ pub fn apply_resolved_intent(
             }
 
             let mut cmd_buffer = CommandBuffer::new();
-            instance
-                .script_engine
-                .on_player_join(instance, entity_id, &mut cmd_buffer)
-                .map_err(|e| e.to_string())?;
+            if let Err(e) = instance.script_engine.on_player_join(instance, entity_id, &mut cmd_buffer) {
+                return IntentResult::FatalError(e.to_string());
+            }
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Disconnect(_) => {
             let mut cmd_buffer = CommandBuffer::new();
-            instance
-                .script_engine
-                .on_player_leave(instance, entity_id, &mut cmd_buffer)
-                .map_err(|e| e.to_string())?;
+            if let Err(e) = instance.script_engine.on_player_leave(instance, entity_id, &mut cmd_buffer) {
+                return IntentResult::FatalError(e.to_string());
+            }
             cmd_buffer.push(crate::scripting::command::Command::DestroyEntity { entity_id });
             cmd_buffer.flush_and_apply(instance);
         }
@@ -57,10 +61,11 @@ pub fn apply_resolved_intent(
             };
 
             let mut cmd_buffer = CommandBuffer::new();
-            instance
-                .script_engine
-                .on_move_intent(instance, entity_id, dir_x, dir_y, &mut cmd_buffer)
-                .map_err(|e| e.to_string())?;
+            match instance.script_engine.on_move_intent(instance, entity_id, dir_x, dir_y, &mut cmd_buffer) {
+                Ok(Some(reason)) => return IntentResult::Rejected(reason),
+                Ok(None) => {},
+                Err(e) => return IntentResult::FatalError(e.to_string()),
+            }
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::MoveToPos(move_to_pos_intent) => {
@@ -76,20 +81,22 @@ pub fn apply_resolved_intent(
             };
 
             let mut cmd_buffer = CommandBuffer::new();
-            instance
-                .script_engine
-                .on_nav_intent(instance, entity_id, target_x, target_y, &mut cmd_buffer)
-                .map_err(|e| e.to_string())?;
+            match instance.script_engine.on_nav_intent(instance, entity_id, target_x, target_y, &mut cmd_buffer) {
+                Ok(Some(reason)) => return IntentResult::Rejected(reason),
+                Ok(None) => {},
+                Err(e) => return IntentResult::FatalError(e.to_string()),
+            }
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Action(action_intent) => {
-            if let Some(entity) = instance.entities.get(&entity_id)
-                && instance.logging_enabled {
+            if let Some(entity) = instance.entities.get(&entity_id) {
+                if instance.logging_enabled {
                     println!(
                         "[Intent] Entity {} ({}) executed action {}",
                         entity_id, entity.name, action_intent.ability_id
                     );
                 }
+            }
 
             let (dir_x, dir_y) = match &action_intent.target_direction {
                 Some(dir) => {
@@ -100,22 +107,23 @@ pub fn apply_resolved_intent(
             };
 
             let mut cmd_buffer = CommandBuffer::new();
-            instance
-                .script_engine
-                .on_action(
-                    instance,
-                    entity_id,
-                    action_intent.ability_id,
-                    dir_x,
-                    dir_y,
-                    &mut cmd_buffer,
-                )
-                .map_err(|e| e.to_string())?;
+            match instance.script_engine.on_action(
+                instance,
+                entity_id,
+                action_intent.ability_id,
+                dir_x,
+                dir_y,
+                &mut cmd_buffer,
+            ) {
+                Ok(Some(reason)) => return IntentResult::Rejected(reason),
+                Ok(None) => {},
+                Err(e) => return IntentResult::FatalError(e.to_string()),
+            }
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Ping(_) => {
             // Heartbeat, no state mutation
         }
     }
-    Ok(())
+    IntentResult::Ok
 }

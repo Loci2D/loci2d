@@ -297,17 +297,25 @@ impl ScriptEngine {
         dir_x: f64,
         dir_y: f64,
         cmd_buffer: &mut CommandBuffer,
-    ) -> LuaResult<()> {
+    ) -> LuaResult<Option<String>> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
             if globals.contains_key("on_move_intent")? {
                 let func: mlua::Function = globals.get("on_move_intent")?;
-                func.call::<()>((entity_id, dir_x, dir_y))?;
+                let results: mlua::MultiValue = func.call((entity_id, dir_x, dir_y))?;
+                if let Some(mlua::Value::Boolean(false)) = results.get(0) {
+                    let reason = if let Some(mlua::Value::String(s)) = results.get(1) {
+                        s.to_string_lossy().to_owned()
+                    } else {
+                        "Move intent rejected".to_string()
+                    };
+                    return Ok(Some(reason));
+                }
             } else if instance.logging_enabled {
                 eprintln!("[Loci] WARNING: on_move_intent received but no handler defined. Entity {} will not move.", entity_id);
             }
-            Ok(())
+            Ok(None)
         })
     }
 
@@ -318,17 +326,25 @@ impl ScriptEngine {
         target_x: f64,
         target_y: f64,
         cmd_buffer: &mut CommandBuffer,
-    ) -> LuaResult<()> {
+    ) -> LuaResult<Option<String>> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
             if globals.contains_key("on_nav_intent")? {
                 let func: mlua::Function = globals.get("on_nav_intent")?;
-                func.call::<()>((entity_id, target_x, target_y))?;
+                let results: mlua::MultiValue = func.call((entity_id, target_x, target_y))?;
+                if let Some(mlua::Value::Boolean(false)) = results.get(0) {
+                    let reason = if let Some(mlua::Value::String(s)) = results.get(1) {
+                        s.to_string_lossy().to_owned()
+                    } else {
+                        "Nav intent rejected".to_string()
+                    };
+                    return Ok(Some(reason));
+                }
             } else if instance.logging_enabled {
                 eprintln!("[Loci] WARNING: on_nav_intent received but no handler defined. Entity {} will not navigate.", entity_id);
             }
-            Ok(())
+            Ok(None)
         })
     }
 
@@ -340,16 +356,24 @@ impl ScriptEngine {
         dir_x: f64,
         dir_y: f64,
         cmd_buffer: &mut CommandBuffer,
-    ) -> LuaResult<()> {
+    ) -> LuaResult<Option<String>> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
             if let Ok(on_action_fn) = globals.get::<mlua::Function>("on_action") {
                 // Note: ability_id is uint32 from protobuf. mlua marshals this as an i64.
                 // Values > 2^31 will still be safely represented as positive integers in Lua.
-                on_action_fn.call::<()>((entity_id, ability_id, dir_x, dir_y))?;
+                let results: mlua::MultiValue = on_action_fn.call((entity_id, ability_id, dir_x, dir_y))?;
+                if let Some(mlua::Value::Boolean(false)) = results.get(0) {
+                    let reason = if let Some(mlua::Value::String(s)) = results.get(1) {
+                        s.to_string_lossy().to_owned()
+                    } else {
+                        "Action rejected".to_string()
+                    };
+                    return Ok(Some(reason));
+                }
             }
-            Ok(())
+            Ok(None)
         })
     }
 

@@ -103,7 +103,7 @@ fn test_on_action_direction_passthrough() {
             }),
         })),
     };
-    instance.apply_intent(addr, action_intent).unwrap();
+    instance.apply_intent(addr, action_intent);
 
     let globals = instance.script_engine.lua().globals();
     let dir_x: f64 = globals.get("ACTION_DIR_X").unwrap();
@@ -131,7 +131,7 @@ fn test_set_move_speed_command() {
             player_name: "Bob".to_string(),
         }))
     };
-    instance.apply_intent(addr, join_intent).unwrap();
+    instance.apply_intent(addr, join_intent);
     
     let entity_id = instance.sessions.get(&addr).unwrap().entity_id;
     let entity = instance.get_entity(entity_id).unwrap();
@@ -297,7 +297,7 @@ fn test_on_player_leave_can_access_entity() {
             reason: "test".to_string(),
         })),
     };
-    instance.apply_intent(addr, disconnect_intent).unwrap();
+    instance.apply_intent(addr, disconnect_intent);
     
     // The entity should be destroyed now
     assert!(instance.get_entity(entity_id).is_none());
@@ -306,4 +306,33 @@ fn test_on_player_leave_can_access_entity() {
     let globals = instance.script_engine.lua().globals();
     let last_x: f64 = globals.get("LAST_X").unwrap();
     assert_eq!(last_x, 12.0);
+}
+
+#[test]
+fn test_intent_rejection_feedback() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let _alice_id = instance.handle_join(addr, "Alice".to_string());
+
+    let script = r#"
+        function on_move_intent(entity_id, dir_x, dir_y)
+            return false, "Stunned"
+        end
+    "#;
+    instance.script_engine.load_script(script).unwrap();
+
+    let move_intent = ClientIntent {
+        intent: Some(client_intent::Intent::Move(loci2d::network::packets::MoveIntent {
+            direction: Some(Vector2 { x_bits: 65536, y_bits: 0 }),
+        })),
+    };
+
+    let result = instance.apply_intent(addr, move_intent);
+    
+    match result {
+        loci2d::world::instance::ApplyIntentResult::Rejected(reason) => {
+            assert_eq!(reason, "Stunned");
+        }
+        _ => panic!("Expected Intent to be rejected"),
+    }
 }

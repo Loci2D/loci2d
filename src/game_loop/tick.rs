@@ -86,13 +86,27 @@ impl GameLoop {
                 // 1. Drain the intent queue (non-blocking) for this fixed tick
                 while let Ok((addr, intent)) = intent_rx.try_recv() {
                     match instance.apply_intent(addr, intent) {
-                        Ok(Some(entry)) => {
+                        crate::world::instance::ApplyIntentResult::Ok(Some(entry)) => {
                             if self.recorder.is_some() {
                                 tick_entries.push(entry);
                             }
                         }
-                        Ok(None) => {}
-                        Err(e) => {
+                        crate::world::instance::ApplyIntentResult::Ok(None) => {}
+                        crate::world::instance::ApplyIntentResult::Rejected(reason) => {
+                            let response_packet = server_packet::Payload::Response(
+                                crate::network::packets::ServerResponse {
+                                    sequence_id: 0,
+                                    status: format!("rejected: {}", reason),
+                                },
+                            );
+                            let packet = ServerPacket {
+                                sequence_id: 0, // Server packets might not need strict sequential ordering for responses yet
+                                payload: Some(response_packet),
+                            };
+                            let buf = packet.encode_to_vec();
+                            let _ = socket.send_to(&buf, addr);
+                        }
+                        crate::world::instance::ApplyIntentResult::FatalError(e) => {
                             eprintln!(
                                 "[Server] Script Error during apply_intent: {}. Aborting instance.",
                                 e
