@@ -63,13 +63,13 @@ function loci.connect(host, port, player_name, base_path)
         -- 1. Try dynamic text parsing with protoc.lua
         if protoc then
             local p = protoc.new()
-            p.include_dirs = { loci._base_path .. "../../proto", "proto", ".", loci._base_path }
+            p.include_dirs = { loci._base_path, loci._base_path .. "../../proto", "proto", "." }
 
-            local ok, res = pcall(function() return p:loadfile(loci._base_path .. "../../proto/game_packets.proto") end)
+            local ok, res = pcall(function() return p:loadfile(loci._base_path .. "game_packets.proto") end)
             if ok and res then
                 schema_loaded = true
             else
-                local f = io.open(loci._base_path .. "../../proto/game_packets.proto", "r")
+                local f = io.open(loci._base_path .. "game_packets.proto", "r")
                 if f then
                     local content = f:read("*a")
                     f:close()

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loci2D - Love2D SDK Guia Rápido</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f1115;
+            --surface-color: #1a1d24;
+            --surface-color-light: #242831;
+            --primary: #4ade80;
+            --primary-glow: rgba(74, 222, 128, 0.2);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #2e3440;
+            --code-bg: #14161a;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 24px;
+        }
+
+        h1, h2, h3 {
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #4ade80, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 2rem;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            border-color: var(--surface-color-light);
+        }
+
+        .step-badge {
+            display: inline-block;
+            background-color: var(--primary-glow);
+            color: var(--primary);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        code, pre {
+            font-family: 'Fira Code', monospace;
+        }
+
+        p code {
+            background-color: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #ff7b72;
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            color: #d2a8ff;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .comment { color: #8b949e; }
+        .keyword { color: #ff7b72; }
+        .string { color: #a5d6ff; }
+        .func { color: #d2a8ff; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav-links">
+            <a href="server_scripts.html">Ir para Guia de Scripts do Servidor →</a>
+        </div>
+        
+        <h1>Loci2D Love2D SDK</h1>
+        <p class="subtitle">Guia rápido de integração para o seu primeiro protótipo cliente-servidor.</p>
+
+        <div class="card">
+            <span class="step-badge">Passo 1</span>
+            <h2>Instalação</h2>
+            <p>Para usar o SDK no seu projeto, você precisa copiar os arquivos do SDK para dentro da pasta do seu jogo Love2D.</p>
+            <ol>
+                <li>Crie uma pasta chamada <code>sdks/love2d</code> (ou algo similar) dentro do seu projeto.</li>
+                <li>Copie o arquivo <code>loci_client.lua</code> e a pasta <code>lib/</code> para dentro dela.</li>
+                <li>A pasta <code>lib/</code> deve conter os arquivos <code>pb.lua</code>, <code>protoc.lua</code> e <code>game_packets.proto</code>.</li>
+            </ol>
+        </div>
+
+        <div class="card">
+            <span class="step-badge">Passo 2</span>
+            <h2>Importação e Conexão</h2>
+            <p>No seu arquivo <code>main.lua</code>, importe o SDK, ajuste o <code>package.path</code> se necessário, e conecte-se ao servidor dentro da função <code>love.load</code>.</p>
+            <pre><code><span class="comment">-- Ajuste o caminho se você colocou o SDK em subpastas</span>
+<span class="keyword">package</span>.<span class="keyword">path</span> = <span class="keyword">package</span>.<span class="keyword">path</span> .. <span class="string">";sdks/love2d/?.lua"</span>
+<span class="keyword">local</span> loci = <span class="keyword">require</span>(<span class="string">"loci_client"</span>)
+
+<span class="keyword">function</span> <span class="func">love.load</span>()
+    <span class="comment">-- (IP do Servidor, Porta, Nome do Jogador, Caminho relativo para a pasta lib/)</span>
+    loci.<span class="func">connect</span>(<span class="string">"127.0.0.1"</span>, 8080, <span class="string">"MeuJogador"</span>, <span class="string">"sdks/love2d/lib/"</span>)
+<span class="keyword">end</span></code></pre>
+            <p><strong>Nota importante:</strong> O quarto parâmetro de <code>loci.connect</code> é fundamental! Ele diz ao SDK onde encontrar os arquivos internos do Protobuf (o <code>game_packets.proto</code>). Passe o caminho relativo da pasta onde você roda o seu jogo até chegar na pasta <code>lib/</code> do SDK, terminando com uma barra <code>/</code>.</p>
+        </div>
+
+        <div class="card">
+            <span class="step-badge">Passo 3</span>
+            <h2>O Ciclo do Jogo (Game Loop)</h2>
+            <p>O SDK do Loci2D processa os pacotes de rede recebidos de forma assíncrona. Você deve chamar a função <code>loci.update(dt)</code> a cada quadro.</p>
+            <pre><code><span class="keyword">function</span> <span class="func">love.update</span>(dt)
+    <span class="comment">-- Processa a rede e sincroniza o mundo</span>
+    loci.<span class="func">update</span>(dt)
+<span class="keyword">end</span></code></pre>
+        </div>
+
+        <div class="card">
+            <span class="step-badge">Passo 4</span>
+            <h2>Movimentação do Personagem</h2>
+            <p>A melhor forma de enviar intenções de movimento é lendo o estado atual do teclado dentro do seu <code>love.update(dt)</code> e avisando ao SDK quando a direção muda.</p>
+            <pre><code><span class="keyword">local</span> last_dx, last_dy = 0, 0
+
+<span class="keyword">function</span> <span class="func">love.update</span>(dt)
+    loci.<span class="func">update</span>(dt)
+    
+    <span class="keyword">local</span> dx, dy = 0, 0
+    <span class="keyword">if</span> love.keyboard.isDown(<span class="string">"w"</span>) <span class="keyword">then</span> dy = -1 <span class="keyword">end</span>
+    <span class="keyword">if</span> love.keyboard.isDown(<span class="string">"s"</span>) <span class="keyword">then</span> dy = 1 <span class="keyword">end</span>
+    <span class="keyword">if</span> love.keyboard.isDown(<span class="string">"a"</span>) <span class="keyword">then</span> dx = -1 <span class="keyword">end</span>
+    <span class="keyword">if</span> love.keyboard.isDown(<span class="string">"d"</span>) <span class="keyword">then</span> dx = 1 <span class="keyword">end</span>
+    
+    <span class="comment">-- Enviar o pacote apenas se a direção mudou</span>
+    <span class="keyword">if</span> dx ~= last_dx <span class="keyword">or</span> dy ~= last_dy <span class="keyword">then</span>
+        last_dx, last_dy = dx, dy
+        loci.<span class="func">send_move</span>(dx, dy)
+    <span class="keyword">end</span>
+<span class="keyword">end</span></code></pre>
+        </div>
+
+        <div class="card">
+            <span class="step-badge">Passo 5</span>
+            <h2>Desenhando o Mundo Autorizado</h2>
+            <p>O servidor é a fonte da verdade! Desenhe as entidades lendo a lista de entidades providenciada pelo SDK no <code>love.draw()</code>.</p>
+            <pre><code><span class="keyword">function</span> <span class="func">love.draw</span>()
+    <span class="keyword">local</span> entities = loci.<span class="func">get_entities</span>()
+    
+    <span class="keyword">for</span> _, entity <span class="keyword">in</span> <span class="func">ipairs</span>(entities) <span class="keyword">do</span>
+        <span class="keyword">if</span> entity.id == loci.my_entity_id <span class="keyword">then</span>
+            love.graphics.setColor(0, 0.5, 1) <span class="comment">-- Você em azul</span>
+        <span class="keyword">else</span>
+            love.graphics.setColor(1, 0, 0) <span class="comment">-- Outros em vermelho</span>
+        <span class="keyword">end</span>
+        
+        love.graphics.circle(<span class="string">"fill"</span>, entity.x, entity.y, 16)
+        
+        <span class="comment">-- Lendo propriedades customizadas vindas do servidor</span>
+        <span class="keyword">local</span> hp = entity.properties <span class="keyword">and</span> entity.properties[<span class="string">"hp"</span>]
+        <span class="keyword">if</span> hp <span class="keyword">then</span>
+            love.graphics.print(<span class="string">"HP: "</span> .. hp, entity.x - 20, entity.y - 24)
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span></code></pre>
+        </div>
+
+        <div class="card">
+            <h2>Referência da API do Loci2D</h2>
+            
+            <h3>Funções Principais</h3>
+            <table>
+                <tr>
+                    <th>Função</th>
+                    <th>Descrição</th>
+                </tr>
+                <tr>
+                    <td><code>loci.connect(ip, port, name, lib_path)</code></td>
+                    <td>Inicia a conexão UDP e carrega o schema do Protobuf.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.update(dt)</code></td>
+                    <td>Processa pacotes recebidos, faz o ping e interpola posições.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.disconnect(reason)</code></td>
+                    <td>Envia a intenção de desconexão e fecha o socket.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.send_move(dir_x, dir_y)</code></td>
+                    <td>Envia intenção de movimento. <code>(1, 0)</code>, <code>(-1, -1)</code>, etc.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.send_action(ability_id, x, y)</code></td>
+                    <td>Envia intenção de cast de magia ou ataque para o mundo (X, Y).</td>
+                </tr>
+                <tr>
+                    <td><code>loci.get_entities()</code></td>
+                    <td>Retorna a lista de todas as entidades renderizáveis.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.get_my_entity()</code></td>
+                    <td>Retorna a tabela da sua própria entidade, útil para câmeras.</td>
+                </tr>
+            </table>
+
+            <h3>Callbacks (Eventos)</h3>
+            <p>Você pode sobrescrever essas funções no seu <code>main.lua</code> para reagir aos eventos do servidor:</p>
+            <table>
+                <tr>
+                    <th>Callback</th>
+                    <th>Acionado quando...</th>
+                </tr>
+                <tr>
+                    <td><code>loci.on_entity_spawned = function(ent)</code></td>
+                    <td>Uma nova entidade surge na sua visão do servidor.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.on_entity_despawned = function(id)</code></td>
+                    <td>Uma entidade é destruída ou sai do seu campo de visão.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.on_property_changed = function(ent, key, old, new)</code></td>
+                    <td>O servidor altera uma propriedade visual (ex: <code>"hp"</code>, <code>"team"</code>).</td>
+                </tr>
+                <tr>
+                    <td><code>loci.on_intent_rejected = function(reason)</code></td>
+                    <td>O servidor recusa uma ação sua (ex: tentando usar magia em cooldown).</td>
+                </tr>
+            </table>
+        </div>
+
+    </div>
+</body>
+</html>

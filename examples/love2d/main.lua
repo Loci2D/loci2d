@@ -63,9 +63,7 @@ function update_movement()
 end
 
 function love.keypressed(key)
-    if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
-        update_movement()
-    elseif key == "x" or key == "k" then
+    if key == "x" or key == "k" then
         -- Explicit stop movement
         last_sent_dx, last_sent_dy = 0, 0
         loci.send_move(0, 0)
@@ -73,9 +71,7 @@ function love.keypressed(key)
 end
 
 function love.keyreleased(key)
-    if key == "w" or key == "s" or key == "a" or key == "d" or key == "up" or key == "down" or key == "left" or key == "right" then
-        update_movement()
-    end
+    -- Input polling is handled in love.update
 end
 
 function love.mousepressed(x, y, button)
@@ -100,6 +96,9 @@ end
 function love.update(dt)
     -- Process network packets and update state
     loci.update(dt)
+
+    -- Process robust input polling
+    update_movement()
 
     if rejection_timer > 0 then
         rejection_timer = rejection_timer - dt

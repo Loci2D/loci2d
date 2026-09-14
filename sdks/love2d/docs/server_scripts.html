@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loci2D - Guia de Scripts do Servidor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f1115;
+            --surface-color: #1a1d24;
+            --surface-color-light: #242831;
+            --primary: #c084fc;
+            --primary-glow: rgba(192, 132, 252, 0.2);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #2e3440;
+            --code-bg: #14161a;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 24px;
+        }
+
+        h1, h2, h3 {
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #c084fc, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 2rem;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            border-color: var(--surface-color-light);
+        }
+
+        .step-badge {
+            display: inline-block;
+            background-color: var(--primary-glow);
+            color: var(--primary);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        code, pre {
+            font-family: 'Fira Code', monospace;
+        }
+
+        p code, li code {
+            background-color: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #ff7b72;
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            color: #d2a8ff;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .comment { color: #8b949e; }
+        .keyword { color: #ff7b72; }
+        .string { color: #a5d6ff; }
+        .func { color: #d2a8ff; }
+        .number { color: #79c0ff; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-links {
+            margin-bottom: 2rem;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav-links">
+            <a href="index.html">← Voltar para Guia do Cliente (Love2D)</a>
+        </div>
+        
+        <h1>Loci2D Server Scripts</h1>
+        <p class="subtitle">Guia para criação de regras, mecânicas e habilidades no servidor em Lua.</p>
+
+        <div class="card">
+            <span class="step-badge">Estrutura</span>
+            <h2>O que é o Script do Servidor?</h2>
+            <p>Enquanto o Love2D processa os gráficos e a entrada do jogador, o servidor em Rust roda um <strong>ambiente isolado em Lua</strong> que dita as regras do jogo. A autoridade máxima é sempre do servidor!</p>
+            <p>Todos os scripts ficam na pasta <code>scripts/nome_da_arena/main.lua</code>. Quando o servidor sobe, ele lê esse arquivo para injetar vida nas mecânicas.</p>
+        </div>
+
+        <div class="card">
+            <span class="step-badge">Passo 1</span>
+            <h2>Ouvindo os Jogadores (Callbacks)</h2>
+            <p>No seu <code>main.lua</code> do servidor, você deve declarar as seguintes funções globais. A engine em Rust vai chamá-las automaticamente quando os eventos acontecerem:</p>
+            <pre><code><span class="comment">-- Chamado quando um jogador entra na sala</span>
+<span class="keyword">function</span> <span class="func">on_player_join</span>(entity_id)
+    Loci.Log.info(<span class="string">"Jogador "</span> .. entity_id .. <span class="string">" entrou!"</span>)
+    Loci.Commands.set_property(entity_id, <span class="string">"hp"</span>, <span class="string">"100"</span>)
+<span class="keyword">end</span>
+
+<span class="comment">-- Chamado quando um jogador tenta se mover (WASD do cliente)</span>
+<span class="keyword">function</span> <span class="func">on_move_intent</span>(entity_id, dir_x, dir_y)
+    <span class="keyword">local</span> SPEED = <span class="number">5.0</span>
+    <span class="comment">-- Aplica a velocidade na entidade</span>
+    Loci.Commands.set_velocity(entity_id, {x = dir_x * SPEED, y = dir_y * SPEED})
+    <span class="keyword">return</span> <span class="keyword">true</span> <span class="comment">-- Retorna true para aceitar o comando</span>
+<span class="keyword">end</span>
+
+<span class="comment">-- Chamado quando o jogador desconecta</span>
+<span class="keyword">function</span> <span class="func">on_player_leave</span>(entity_id)
+    Loci.Commands.destroy_entity(entity_id)
+<span class="keyword">end</span></code></pre>
+        </div>
+
+        <div class="card">
+            <span class="step-badge">Passo 2</span>
+            <h2>Criando Habilidades (Skills)</h2>
+            <p>Quando o cliente chama <code>loci.send_action(ability_id, x, y)</code>, o servidor recebe isso através da função <code>on_action</code>. É aqui que a mágica acontece!</p>
+            <p style="background-color: var(--primary-glow); padding: 12px; border-left: 4px solid var(--primary); border-radius: 0 8px 8px 0; font-size: 0.95rem; margin-bottom: 20px;">
+                💡 <strong>Dica de Input:</strong> O servidor não sabe se o jogador clicou com o mouse, apertou a barra de espaço, ou usou um controle de videogame! O cliente fica encarregado de mapear os botões e chamar a função enviando apenas o <code>ability_id</code>. O servidor recebe apenas a intenção ("Usar habilidade 1 nas coordenadas X, Y").
+            </p>
+            <pre><code><span class="keyword">function</span> <span class="func">on_action</span>(entity_id, ability_id, aim_x, aim_y)
+    <span class="keyword">if</span> ability_id == <span class="number">1</span> <span class="keyword">then</span>
+        <span class="comment">-- Habilidade 1: Tiro de Fogo</span>
+        <span class="keyword">local</span> fireball = {
+            blueprint = <span class="string">"Fireball"</span>,
+            position = {x = aim_x, y = aim_y},
+            entity_type = <span class="string">"Projectile"</span>,
+            properties = { damage = <span class="string">"20"</span> }
+        }
+        Loci.Commands.spawn_entity(fireball)
+        <span class="keyword">return</span> <span class="keyword">true</span>
+    <span class="keyword">end</span>
+    
+    <span class="comment">-- Retorne false e uma string para rejeitar e avisar o cliente</span>
+    <span class="keyword">return</span> <span class="keyword">false</span>, <span class="string">"Habilidade desconhecida ou em cooldown!"</span>
+<span class="keyword">end</span></code></pre>
+        </div>
+
+        <div class="card">
+            <span class="step-badge">API</span>
+            <h2>Referência <code>Loci.Commands</code></h2>
+            <p>O módulo <code>Loci.Commands</code> é a ponte entre o seu script Lua e o motor de física do Rust.</p>
+            <table>
+                <tr>
+                    <th>Comando</th>
+                    <th>O que faz?</th>
+                </tr>
+                <tr>
+                    <td><code>spawn_entity(params)</code></td>
+                    <td>Cria uma entidade. Recebe tabela: <code>{blueprint, position={x,y}, entity_type, move_speed, radius, properties={}}</code></td>
+                </tr>
+                <tr>
+                    <td><code>destroy_entity(id)</code></td>
+                    <td>Remove a entidade instantaneamente do jogo.</td>
+                </tr>
+                <tr>
+                    <td><code>set_position(id, {x, y})</code></td>
+                    <td>Teleporta a entidade para as coordenadas especificadas.</td>
+                </tr>
+                <tr>
+                    <td><code>set_velocity(id, {x, y})</code></td>
+                    <td>Aplica uma força de movimento (reseta na próxima intenção).</td>
+                </tr>
+                <tr>
+                    <td><code>set_navigation_target(id, {x, y})</code></td>
+                    <td>Ordena a entidade a andar automaticamente até o ponto (Pathfinding).</td>
+                </tr>
+                <tr>
+                    <td><code>set_property(id, key, value)</code></td>
+                    <td>Altera uma propriedade (ex: "hp", "team"). Sincroniza com todos os clientes!</td>
+                </tr>
+                <tr>
+                    <td><code>set_global(key, value)</code></td>
+                    <td>Seta uma propriedade global da partida (ex: "tempo", "pontuacao").</td>
+                </tr>
+                <tr>
+                    <td><code>start_timer(timer_id, ticks)</code></td>
+                    <td>Cria um timer. Quando acabar, dispara <code>on_timer_completed(timer_id)</code>.</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="card">
+            <span class="step-badge">Debug</span>
+            <h2>Logs no Console</h2>
+            <p>Para investigar o que está acontecendo no servidor, sempre use os métodos da tabela <code>Loci.Log</code>. Os prints nativos do Lua podem não aparecer no console do Rust de forma síncrona.</p>
+            <ul>
+                <li><code>Loci.Log.info("Mensagem")</code> - Verde no console.</li>
+                <li><code>Loci.Log.warn("Aviso")</code> - Amarelo no console.</li>
+                <li><code>Loci.Log.error("Erro!")</code> - Vermelho no console.</li>
+            </ul>
+        </div>
+
+    </div>
+</body>
+</html>
