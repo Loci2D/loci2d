@@ -25,8 +25,8 @@ local loci = {
     on_entity_spawned = function(entity) end,
     on_entity_despawned = function(entity_id) end,
     on_property_changed = function(entity, key, old_val, new_val) end,
-    on_match_state_changed = function(state) end,
-    on_action_cast = function(entity, ability_id, dir_x, dir_y) end,
+    on_match_state_changed = function(state) end, -- Reserved for future use: Not yet broadcast by server
+    on_action_cast = function(entity, ability_id, dir_x, dir_y) end, -- Reserved for future use: Action broadcasts not yet implemented
     on_intent_rejected = function(reason) end,
     
     -- Internal
@@ -34,7 +34,6 @@ local loci = {
     _schema_loaded = false,
     _sequence_id = 0,
     _last_heartbeat_time = 0,
-    _last_sent_dir = { x = 0, y = 0 },
     _player_name = nil,
     _base_path = "lib/",
 }
@@ -113,7 +112,7 @@ function loci._send_intent(intent_table)
     loci._sequence_id = loci._sequence_id + 1
     local packet = {
         sequence_id = loci._sequence_id,
-        timestamp = os.time() * 1000,
+        timestamp = math.floor(socket.gettime() * 1000),
         intent = intent_table
     }
 
@@ -124,7 +123,6 @@ function loci._send_intent(intent_table)
 end
 
 function loci.send_move(dir_x, dir_y)
-    loci._last_sent_dir = { x = dir_x, y = dir_y }
     loci._send_intent({ move = { direction = { x_bits = float_to_bits(dir_x), y_bits = float_to_bits(dir_y) } } })
 end
 
@@ -147,6 +145,7 @@ function loci.send_action(ability_id, aim_x, aim_y)
     loci._send_intent({ action = { ability_id = ability_id, target_direction = { x_bits = float_to_bits(dx), y_bits = float_to_bits(dy) } } })
 end
 
+-- TODO: allocates a new table every call; consider caching if GC pressure becomes an issue
 function loci.get_entities()
     local list = {}
     for _, e in pairs(loci.entities) do
@@ -269,14 +268,18 @@ function loci._handle_world_state(state)
                     end
                 end
             end
-            -- Check for removed properties
+            -- Check for removed properties (collect first to avoid mutating table during pairs iteration)
+            local to_remove = {}
             for k, old_val in pairs(ent.properties) do
                 if not new_props[k] then
-                    ent.properties[k] = nil
+                    table.insert(to_remove, k)
                     if not is_new then
                         loci.on_property_changed(ent, k, old_val, nil)
                     end
                 end
+            end
+            for _, k in ipairs(to_remove) do
+                ent.properties[k] = nil
             end
             
             if is_new then
