@@ -23,6 +23,7 @@ This phase implements the directives of ADR-0018 and is constrained by the follo
 | **ADR-0018** | **State Management** | SDK maintains a local `entities` table that mirrors the `WorldState`. |
 | **ADR-0018** | **High-Level API Facade** | Client scripts only call `loci.send_move()` and never build `GamePacket` protobufs directly. |
 | **ADR-0018** | **Callbacks & Hooks** | SDK exposes `loci.on_property_changed` enabling reactive UI and FX without polling. |
+| **ADR-0018** | **Intent Feedback** | SDK intercepts `ServerResponse` packets to fire `loci.on_intent_rejected`, avoiding silent failures for the user. |
 | **ADR-0008** | **Session Lifecycle** | `loci.update(dt)` sends a periodic `PingIntent` heartbeat (every ~2s) to prevent server-side timeout (`CLIENT_TIMEOUT_SECS = 10s`). |
 | **ADR-0007** | **Fixed-Point Arithmetic** | The server transmits all `Vector2` fields as I16F16 fixed-point (`int32 x_bits`, `int32 y_bits`). The SDK converts them to Lua floats internally (`x = x_bits / 65536.0`) so developers only ever see plain `.x` and `.y` float fields. |
 
@@ -67,7 +68,8 @@ flowchart TD
   3. For existing entities, iterate over their `properties`. If a property value changed, trigger `loci.on_property_changed(entity, key, old_val, new_val)`.
   4. If an entity in `loci.entities` is missing from the new `WorldState`, trigger `loci.on_entity_despawned(entity_id)` and remove it.
   5. Update `loci.globals` from `WorldState.globals` on every tick.
-* **Interpolation (Linear):** To smooth out 30Hz server ticks to 60Hz/144Hz client framerates, the SDK will linearly interpolate the entity's rendering coordinates based on `velocity` and `dt` between server ticks. **Edge case:** if an entity's `velocity` is `(0, 0)`, interpolation is skipped and the authoritative `position` from the last tick is used directly, preventing phantom drift.
+* **Interpolation (Linear):** To smooth out 30Hz server ticks to 60Hz/144Hz client framerates, the SDK will linearly interpolate the entity's rendering coordinates based on `velocity` and `dt` between server ticks.
+* **Response Handling:** When a `ServerResponse` packet arrives indicating a rejected intent, the SDK triggers `loci.on_intent_rejected(reason)` to provide explicit feedback to the developer. **Edge case:** if an entity's `velocity` is `(0, 0)`, interpolation is skipped and the authoritative `position` from the last tick is used directly, preventing phantom drift.
 
 ### 4.3 API Facade (Public)
 *(High-level Lua functions the students will call)*
@@ -80,7 +82,7 @@ flowchart TD
 * `loci.get_globals()`: Returns the current `loci.globals` table (key-value map of match-wide properties, e.g. `"match_timer"`, `"score_red"`).
 * `loci.send_move(dir_x, dir_y)`: Encodes a `MoveIntent` with the given direction floats (SDK converts to fixed-point internally).
 * `loci.send_action(ability_id, aim_x, aim_y)`: Encodes an `ActionIntent`. **`aim_x, aim_y` are world-space coordinates (e.g. mouse position converted to world space).** The SDK computes the normalized direction vector relative to the local player's current position before encoding as fixed-point. If `get_my_entity()` is `nil`, the call is a no-op.
-* Callbacks: `on_entity_spawned(entity)`, `on_entity_despawned(entity_id)`, `on_property_changed(entity, key, old_val, new_val)`, `on_match_state_changed(state)`, `on_action_cast(entity, ability_id, dir_x, dir_y)`.
+* Callbacks: `on_entity_spawned(entity)`, `on_entity_despawned(entity_id)`, `on_property_changed(entity, key, old_val, new_val)`, `on_match_state_changed(state)`, `on_action_cast(entity, ability_id, dir_x, dir_y)`, `on_intent_rejected(reason)`.
 
 ### 4.4 Usage Example
 
@@ -112,6 +114,11 @@ function love.load()
     
     loci.on_action_cast = function(entity, ability_id, dir_x, dir_y)
         play_ability_animation(entity, ability_id)
+    end
+    
+    loci.on_intent_rejected = function(reason)
+        print("Server rejected our action:", reason)
+        show_floating_text("Action Failed: " .. reason)
     end
 end
 
@@ -180,6 +187,7 @@ We will manually and automatically verify the SDK functionality using a controll
 | **T2: Movement Intent** | Call `loci.send_move(1, 0)` | Server receives `MoveIntent`, authorizes via Lua script, updates velocity. |
 | **T3: State Replication** | Server spawns NPC | Client receives `WorldState`, triggers `on_entity_spawned`. |
 | **T4: Property Diffing** | Server changes NPC `hp` from 100 to 50 | Client triggers `on_property_changed(npc, "hp", "100", "50")`. |
+| **T5: Intent Rejection** | Server rejects movement (e.g. stunned) and returns `ServerResponse` | Client triggers `on_intent_rejected(reason)`. |
 
 ---
 
@@ -194,9 +202,10 @@ We will manually and automatically verify the SDK functionality using a controll
   - [ ] Implement fixed-point conversion helpers: `bits_to_float(bits)` and `float_to_bits(f)` using `/ 65536.0` and `math.floor(f * 65536)` respectively.
   - [ ] Implement periodic `PingIntent` heartbeat inside `loci.update` (every 2s) to maintain session (ADR-0008).
   - [ ] Implement `loci.disconnect` to send `DisconnectIntent`.
-- [ ] **3. State Manager**
+- [ ] **3. State Manager & Feedback**
   - [ ] Implement `ServerPacket` dispatch: route `world_state` vs `response` payloads.
   - [ ] Implement `WorldState` entity diffing loop with `on_entity_spawned`, `on_property_changed`, and `on_entity_despawned` callbacks.
+  - [ ] Implement `ServerResponse` handling to dispatch `on_intent_rejected`.
   - [ ] Implement `loci.globals` update from `WorldState.globals` on every tick; expose via `loci.get_globals()`.
   - [ ] Implement client-side linear interpolation using `dt` and `velocity`; skip interpolation when `velocity == (0, 0)`.
 - [ ] **4. Intent Builders**
@@ -223,4 +232,4 @@ We will manually and automatically verify the SDK functionality using a controll
 1. **Ergonomic API:** The `examples/love2d/main.lua` file no longer contains any `luasocket` or `protobuf` code directly.
 2. **Stable Connection Lifecycle:** The client can successfully join, stream the world state, and gracefully disconnect without crashing.
 3. **Property Callbacks:** Changing an entity's property on the server reliably triggers `loci.on_property_changed` on the client.
-4. **Intent Dispatch:** The client can send `MoveIntent` and `ActionIntent` which are successfully received and authorized by the server's Lua script engine.
+4. **Intent Dispatch & Feedback:** The client can send `MoveIntent` and `ActionIntent`. If the server rejects them, the client reliably receives a `ServerResponse` and fires `on_intent_rejected`.
