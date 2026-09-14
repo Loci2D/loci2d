@@ -193,27 +193,27 @@ We will manually and automatically verify the SDK functionality using a controll
 
 ## 6. Implementation Checklist
 
-- [ ] **1. Protobuf Integration**
-  - [ ] Add `lua-protobuf` binaries/scripts to `sdks/love2d/lib/`.
-  - [ ] Compile `game_packets.proto` to `game_packets.pb` for distribution.
-- [ ] **2. Network Scaffold (`sdks/love2d/loci_client.lua`)**
-  - [ ] Implement UDP socket initialization in `loci.connect`.
-  - [ ] Implement non-blocking `receive()` loop in `loci.update`, decoding `loci2d.ServerPacket` as the inbound envelope.
-  - [ ] Implement fixed-point conversion helpers: `bits_to_float(bits)` and `float_to_bits(f)` using `/ 65536.0` and `math.floor(f * 65536)` respectively.
-  - [ ] Implement periodic `PingIntent` heartbeat inside `loci.update` (every 2s) to maintain session (ADR-0008).
-  - [ ] Implement `loci.disconnect` to send `DisconnectIntent`.
-- [ ] **3. State Manager & Feedback**
-  - [ ] Implement `ServerPacket` dispatch: route `world_state` vs `response` payloads.
-  - [ ] Implement `WorldState` entity diffing loop with `on_entity_spawned`, `on_property_changed`, and `on_entity_despawned` callbacks.
-  - [ ] Implement `ServerResponse` handling to dispatch `on_intent_rejected`.
-  - [ ] Implement `loci.globals` update from `WorldState.globals` on every tick; expose via `loci.get_globals()`.
-  - [ ] Implement client-side linear interpolation using `dt` and `velocity`; skip interpolation when `velocity == (0, 0)`.
-- [ ] **4. Intent Builders**
-  - [ ] Implement `loci.send_move` wrapping `MoveIntent` (floats → fixed-point).
-  - [ ] Implement `loci.send_action` wrapping `ActionIntent`: compute normalized direction vector from `(aim_x, aim_y)` relative to `get_my_entity()` position; encode as fixed-point.
-- [ ] **5. Example Refactor**
-  - [ ] Rewrite `examples/love2d/main.lua` to remove all raw luasocket/protobuf code, relying entirely on `loci_client.lua`.
-  - [ ] Spectator mode and replay toggle are **out of scope** for this refactor (see Section 7). The new example is a pure player-mode client.
+- [x] **1. Protobuf Integration**
+  - [x] Add `lua-protobuf` binaries/scripts to `sdks/love2d/lib/`.
+  - [x] Compile `game_packets.proto` to `game_packets.pb` for distribution.
+- [x] **2. Network Scaffold (`sdks/love2d/loci_client.lua`)**
+  - [x] Implement UDP socket initialization in `loci.connect`.
+  - [x] Implement non-blocking `receive()` loop in `loci.update`, decoding `loci2d.ServerPacket` as the inbound envelope.
+  - [x] Implement fixed-point conversion helpers: `bits_to_float(bits)` and `float_to_bits(f)` using `/ 65536.0` and `math.floor(f * 65536)` respectively.
+  - [x] Implement periodic `PingIntent` heartbeat inside `loci.update` (every 2s) to maintain session (ADR-0008).
+  - [x] Implement `loci.disconnect` to send `DisconnectIntent`.
+- [x] **3. State Manager & Feedback**
+  - [x] Implement `ServerPacket` dispatch: route `world_state` vs `response` payloads.
+  - [x] Implement `WorldState` entity diffing loop with `on_entity_spawned`, `on_property_changed`, and `on_entity_despawned` callbacks.
+  - [x] Implement `ServerResponse` handling to dispatch `on_intent_rejected`.
+  - [x] Implement `loci.globals` update from `WorldState.globals` on every tick; expose via `loci.get_globals()`.
+  - [x] Implement client-side linear interpolation using `dt` and `velocity`; skip interpolation when `velocity == (0, 0)`.
+- [x] **4. Intent Builders**
+  - [x] Implement `loci.send_move` wrapping `MoveIntent` (floats → fixed-point).
+  - [x] Implement `loci.send_action` wrapping `ActionIntent`: compute normalized direction vector from `(aim_x, aim_y)` relative to `get_my_entity()` position; encode as fixed-point.
+- [x] **5. Example Refactor**
+  - [x] Rewrite `examples/love2d/main.lua` to remove all raw luasocket/protobuf code, relying entirely on `loci_client.lua`.
+  - [x] Spectator mode and replay toggle are **out of scope** for this refactor (see Section 7). The new example is a pure player-mode client.
 
 ---
 
