@@ -1,7 +1,7 @@
 # Implementation Spec — Phase 6.5.3: Love2D SDK & MVP Client
 > **Status:** Ready to Implement
 > **Roadmap Phase:** Phase 6.5.3
-> **Reference ADRs:** ADR-0018 (Client SDKs and Network Abstraction) · ADR-0008 (Session Lifecycle) · ADR-0007 (Fixed-Point Arithmetic)
+> **Reference ADRs:** ADR-0018 (Client SDKs and Network Abstraction) · ADR-0019 (Authoritative Intent Rejection Feedback) · ADR-0008 (Session Lifecycle) · ADR-0007 (Fixed-Point Arithmetic)
 
 ---
 
