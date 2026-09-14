@@ -102,6 +102,8 @@ end
 function loci.disconnect(reason)
     if loci._udp then
         loci._send_intent({ disconnect = { reason = reason or "client closing" } })
+        loci._udp:close()
+        loci._udp = nil
     end
 end
 
@@ -175,7 +177,7 @@ function loci.update(dt)
         end
     end
 
-    local now = love.timer.getTime()
+    local now = socket.gettime()
     if now - loci._last_heartbeat_time >= 2.0 then
         loci._last_heartbeat_time = now
         loci._send_intent({ ping = {} })
@@ -204,8 +206,8 @@ function loci._handle_world_state(state)
     -- Store globals
     loci.globals = {}
     if state.globals then
-        for k, v in pairs(state.globals) do
-            loci.globals[k] = v
+        for _, prop in ipairs(state.globals) do
+            loci.globals[prop.key] = prop.value
         end
     end
     
@@ -218,12 +220,8 @@ function loci._handle_world_state(state)
             local entity_id = raw_ent.id
             
             -- Detect my_entity
-            if loci.my_entity_id == nil and state.sessions then
-                for _, sess in ipairs(state.sessions) do
-                    if sess.player_name == loci._player_name then
-                        loci.my_entity_id = sess.entity_id
-                    end
-                end
+            if loci.my_entity_id == nil and raw_ent.name == loci._player_name then
+                loci.my_entity_id = raw_ent.id
             end
             
             local ent = loci.entities[entity_id]
@@ -232,20 +230,17 @@ function loci._handle_world_state(state)
                 is_new = true
                 ent = {
                     id = entity_id,
-                    blueprint = raw_ent.blueprint,
+                    blueprint = raw_ent.name,
                     properties = {}
                 }
             end
             
             -- Update Transform
-            if raw_ent.transform then
-                local nx = bits_to_float(raw_ent.transform.position.x_bits)
-                local ny = bits_to_float(raw_ent.transform.position.y_bits)
-                -- Snap if error is large
-                if is_new or math.abs(ent.x - nx) > 2.0 or math.abs(ent.y - ny) > 2.0 then
-                    ent.x = nx
-                    ent.y = ny
-                end
+            if raw_ent.position then
+                local nx = bits_to_float(raw_ent.position.x_bits)
+                local ny = bits_to_float(raw_ent.position.y_bits)
+                ent.x = nx
+                ent.y = ny
             else
                 ent.x = ent.x or 0
                 ent.y = ent.y or 0
@@ -253,22 +248,33 @@ function loci._handle_world_state(state)
             
             -- Update Velocity (for interpolation)
             if raw_ent.velocity then
-                ent.vx = bits_to_float(raw_ent.velocity.linear.x_bits)
-                ent.vy = bits_to_float(raw_ent.velocity.linear.y_bits)
+                ent.vx = bits_to_float(raw_ent.velocity.x_bits)
+                ent.vy = bits_to_float(raw_ent.velocity.y_bits)
             else
                 ent.vx = 0
                 ent.vy = 0
             end
             
             -- Diff properties
+            local new_props = {}
             if raw_ent.properties then
-                for k, v in pairs(raw_ent.properties) do
-                    local old_val = ent.properties[k]
-                    if old_val ~= v then
-                        ent.properties[k] = v
+                for _, prop in ipairs(raw_ent.properties) do
+                    new_props[prop.key] = true
+                    local old_val = ent.properties[prop.key]
+                    if old_val ~= prop.value then
+                        ent.properties[prop.key] = prop.value
                         if not is_new then
-                            loci.on_property_changed(ent, k, old_val, v)
+                            loci.on_property_changed(ent, prop.key, old_val, prop.value)
                         end
+                    end
+                end
+            end
+            -- Check for removed properties
+            for k, old_val in pairs(ent.properties) do
+                if not new_props[k] then
+                    ent.properties[k] = nil
+                    if not is_new then
+                        loci.on_property_changed(ent, k, old_val, nil)
                     end
                 end
             end
