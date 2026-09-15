@@ -402,6 +402,12 @@ impl Instance {
             }
             crate::world::intent_handler::IntentResult::Ok => {}
         }
+
+        // Keep next_entity_id in sync so Lua dynamic spawning uses correct IDs during replay
+        let current_next = self.next_entity_id.get();
+        if entry.entity_id >= current_next {
+            self.next_entity_id.set(entry.entity_id + 1);
+        }
     }
 }
 

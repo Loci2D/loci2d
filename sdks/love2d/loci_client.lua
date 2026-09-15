@@ -183,7 +183,7 @@ function loci.update(dt)
     end
 
     while true do
-        local data, err = loci._udp:receive()
+        local data, err = loci._udp:receive(65536)
         if not data then
             break
         end

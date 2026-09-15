@@ -1,7 +1,8 @@
 use fixed::types::I16F16;
 use loci2d::network::{
-    ClientIntent, JoinIntent, MoveIntent, MoveToPositionIntent, client_intent,
+    ClientIntent, JoinIntent, MoveIntent, MoveToPositionIntent, ActionIntent, client_intent,
 };
+use sha2::{Digest, Sha256};
 use loci2d::replay::player::ReplayPlayer;
 use loci2d::replay::recorder::ReplayRecorder;
 use loci2d::world::fixed_point::DeterministicVector2;
@@ -21,7 +22,60 @@ fn main() {
     // Part 1: Performance Benchmark (100 active entities)
     // -------------------------------------------------------------
     println!("1. Running Performance Benchmark (100 active entities, 10,000 ticks)...");
+
+    let benchmark_script = r#"
+local SPEED = 5.0
+local PROJECTILES = {}
+
+function on_player_join(entity_id)
+    Loci.Commands.set_property(entity_id, "team", "benchmark")
+    Loci.Commands.set_property(entity_id, "hp", "100")
+end
+
+function on_move_intent(entity_id, dir_x, dir_y)
+    Loci.Commands.set_velocity(entity_id, {x = dir_x * SPEED, y = dir_y * SPEED})
+    return true
+end
+
+function on_nav_intent(entity_id, target_x, target_y)
+    Loci.Commands.set_navigation_target(entity_id, {x = target_x, y = target_y})
+    Loci.Commands.set_move_speed(entity_id, SPEED)
+    return true
+end
+
+function on_action(entity_id, ability_id, aim_x, aim_y)
+    local counter = tonumber(Loci.get_global("proj_counter") or "0") + 1
+    Loci.Commands.set_global("proj_counter", tostring(counter))
+    local proj_id = Loci.Commands.spawn_entity({
+        blueprint = "Projectile",
+        position = {x = aim_x * 10, y = aim_y * 10},
+        move_speed = 10.0,
+        radius = 1.0,
+        entity_type = "Prop",
+        properties = { owner = tostring(entity_id) }
+    })
+    table.insert(PROJECTILES, { id = proj_id, lifetime = 60 })
+    return true
+end
+
+function on_tick(tick)
+    for i = #PROJECTILES, 1, -1 do
+        local p = PROJECTILES[i]
+        p.lifetime = p.lifetime - 1
+        if p.lifetime <= 0 then
+            Loci.Commands.destroy_entity(p.id)
+            table.remove(PROJECTILES, i)
+        end
+    end
+end
+"#;
+
+    let mut hasher = Sha256::new();
+    hasher.update(benchmark_script.as_bytes());
+    let script_hash = format!("{:x}", hasher.finalize());
+
     let mut bench_instance = Instance::new(1, 30, 60, 42);
+    bench_instance.load_script(benchmark_script).expect("Failed to load benchmark script into bench_instance");
     bench_instance.set_map_bounds(MapBounds::default_arena());
 
     bench_instance.add_static_obstacle(StaticObstacle::solid_wall(
@@ -90,10 +144,11 @@ fn main() {
         seed,
         "default_arena".to_string(),
         checkpoint_interval,
-        "".to_string(),
-        "".to_string(),
+        script_hash.clone(),
+        benchmark_script.to_string(),
     );
     let mut sim_instance = Instance::new(1, 30, 60, 42);
+    sim_instance.load_script(benchmark_script).expect("Failed to load benchmark script into sim_instance");
     sim_instance.set_map_bounds(MapBounds::default_arena());
     sim_instance.add_static_obstacle(StaticObstacle::solid_wall(
         1000,
@@ -132,15 +187,21 @@ fn main() {
                     let dy = (angle.to_radians()).sin() * 3.5;
                     let vec_f32 = DeterministicVector2::from_f32(dx, dy);
 
-                    let inner_intent = if pid % 2 == 0 {
-                        // Even players use click-to-move
+                    let inner_intent = if pid % 3 == 0 {
+                        // Action Intent: Spawn projectiles
+                        client_intent::Intent::Action(ActionIntent {
+                            ability_id: 1,
+                            target_direction: Some(vec_f32.to_proto()),
+                        })
+                    } else if pid % 3 == 1 {
+                        // Click-to-move
                         client_intent::Intent::MoveToPos(MoveToPositionIntent {
                             target_position: Some(
                                 DeterministicVector2::from_f32(dx * 50.0, dy * 50.0).to_proto(),
                             ),
                         })
                     } else {
-                        // Odd players use direct velocity
+                        // Direct velocity
                         client_intent::Intent::Move(MoveIntent {
                             direction: Some(vec_f32.to_proto()),
                         })
@@ -186,6 +247,7 @@ fn main() {
     println!("\n3. Verifying Determinism of Generated Replay File...");
     let mut player = ReplayPlayer::load_from_file(file_path).expect("Failed to reload replay");
     let mut verify_instance = Instance::new(1, 30, 60, 42);
+    verify_instance.load_script(benchmark_script).expect("Failed to load benchmark script into verify_instance");
     verify_instance.set_map_bounds(MapBounds::default_arena());
     verify_instance.add_static_obstacle(StaticObstacle::solid_wall(
         1000,

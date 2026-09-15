@@ -30,12 +30,31 @@ p:loadfile("../../proto/game_packets.proto")
 
 ## Running the Example
 
+### Player Mode
 1. Start the `loci2d` server:
 ```bash
 cargo run
 ```
 
-2. Run Love2D on this folder:
+2. Run Love2D:
 ```bash
-love .
+love examples/love2d
 ```
+
+### Spectator / Replay Mode
+1. Start the replay broadcast server:
+```bash
+cargo run --bin loci2d -- --replay benchmark.loci
+```
+
+2. Run Love2D (it will automatically detect spectator mode, or pass `--spectate`):
+```bash
+love examples/love2d --spectate
+```
+
+#### Spectator Controls
+- **WASD / Arrow Keys**: Pan the free camera around the arena
+- **Mouse Drag (Left or Right Click)**: Pan the camera
+- **Click on Entity**: Lock camera and follow the entity
+- **Space / R**: Reset camera back to arena origin `(0, 0)`
+
