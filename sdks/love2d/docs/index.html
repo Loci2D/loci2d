@@ -212,23 +212,24 @@
         <div class="card">
             <span class="step-badge">Passo 5</span>
             <h2>Desenhando o Mundo Autorizado</h2>
-            <p>O servidor é a fonte da verdade! Desenhe as entidades lendo a lista de entidades providenciada pelo SDK no <code>love.draw()</code>.</p>
+            <p>O servidor é a fonte da verdade! Desenhe as entidades lendo a lista de entidades providenciada pelo SDK no <code>love.draw()</code>. Graças ao <strong>Phase 6.5.3-1</strong>, você pode acessar propriedades customizadas diretamente como números e booleanos (ex: <code>entity.hp</code>, <code>entity.team</code>) e usar métodos utilitários como <code>entity:is_local_player()</code>.</p>
             <pre><code><span class="keyword">function</span> <span class="func">love.draw</span>()
     <span class="keyword">local</span> entities = loci.<span class="func">get_entities</span>()
     
     <span class="keyword">for</span> _, entity <span class="keyword">in</span> <span class="func">ipairs</span>(entities) <span class="keyword">do</span>
-        <span class="keyword">if</span> entity.id == loci.my_entity_id <span class="keyword">then</span>
+        <span class="keyword">if</span> entity:<span class="func">is_local_player</span>() <span class="keyword">then</span>
             love.graphics.setColor(0, 0.5, 1) <span class="comment">-- Você em azul</span>
+        <span class="keyword">elseif</span> entity.team == 1 <span class="keyword">then</span>
+            love.graphics.setColor(1, 0, 0) <span class="comment">-- Time 1 em vermelho</span>
         <span class="keyword">else</span>
-            love.graphics.setColor(1, 0, 0) <span class="comment">-- Outros em vermelho</span>
+            love.graphics.setColor(0, 1, 0) <span class="comment">-- Outros em verde</span>
         <span class="keyword">end</span>
         
         love.graphics.circle(<span class="string">"fill"</span>, entity.x, entity.y, 16)
         
-        <span class="comment">-- Lendo propriedades customizadas vindas do servidor</span>
-        <span class="keyword">local</span> hp = entity.properties <span class="keyword">and</span> entity.properties[<span class="string">"hp"</span>]
-        <span class="keyword">if</span> hp <span class="keyword">then</span>
-            love.graphics.print(<span class="string">"HP: "</span> .. hp, entity.x - 20, entity.y - 24)
+        <span class="comment">-- Acesso direto e tipado (automático para number/boolean)</span>
+        <span class="keyword">if</span> entity.hp <span class="keyword">then</span>
+            love.graphics.print(<span class="string">"HP: "</span> .. entity.hp, entity.x - 20, entity.y - 24)
         <span class="keyword">end</span>
     <span class="keyword">end</span>
 <span class="keyword">end</span></code></pre>
@@ -265,11 +266,55 @@
                 </tr>
                 <tr>
                     <td><code>loci.get_entities()</code></td>
-                    <td>Retorna a lista de todas as entidades renderizáveis.</td>
+                    <td>Retorna a lista de todas as entidades ativas.</td>
                 </tr>
                 <tr>
                     <td><code>loci.get_my_entity()</code></td>
-                    <td>Retorna a tabela da sua própria entidade, útil para câmeras.</td>
+                    <td>Retorna o objeto <code>Entity</code> do seu próprio jogador.</td>
+                </tr>
+                <tr>
+                    <td><code>loci.get_entities_by_blueprint(name)</code></td>
+                    <td>Filtra entidades pelo nome do blueprint (ex: <code>"player"</code>, <code>"projectile"</code>).</td>
+                </tr>
+                <tr>
+                    <td><code>loci.get_entities_in_radius(x, y, radius)</code></td>
+                    <td>Retorna todas as entidades dentro de um raio de alcance (útil para AoE/câmera).</td>
+                </tr>
+                <tr>
+                    <td><code>loci.get_globals()</code></td>
+                    <td>Retorna a tabela de propriedades globais da partida (ex: placar, tempo).</td>
+                </tr>
+            </table>
+
+            <h3>Objeto Entity (Métodos & Propriedades)</h3>
+            <table>
+                <tr>
+                    <th>Campo / Método</th>
+                    <th>Descrição</th>
+                </tr>
+                <tr>
+                    <td><code>entity.x</code>, <code>entity.y</code></td>
+                    <td>Coordenadas do mundo em ponto flutuante (já interpoladas).</td>
+                </tr>
+                <tr>
+                    <td><code>entity.vx</code>, <code>entity.vy</code></td>
+                    <td>Velocidade atual da entidade em floats.</td>
+                </tr>
+                <tr>
+                    <td><code>entity.[propriedade]</code></td>
+                    <td>Acesso direto e auto-tipado a qualquer propriedade (ex: <code>entity.hp</code>, <code>entity.team</code>).</td>
+                </tr>
+                <tr>
+                    <td><code>entity:is_local_player()</code></td>
+                    <td>Retorna <code>true</code> se a entidade for o seu próprio jogador.</td>
+                </tr>
+                <tr>
+                    <td><code>entity:distance_to(other)</code></td>
+                    <td>Calcula a distância euclidiana até outra entidade ou ponto <code>{x=..., y=...}</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>entity:get(key, default)</code></td>
+                    <td>Getter seguro com valor padrão de fallback.</td>
                 </tr>
             </table>
 
@@ -290,7 +335,15 @@
                 </tr>
                 <tr>
                     <td><code>loci.on_property_changed = function(ent, key, old, new)</code></td>
-                    <td>O servidor altera uma propriedade visual (ex: <code>"hp"</code>, <code>"team"</code>).</td>
+                    <td>O servidor altera uma propriedade visual (valores já chegam tipados como number/bool).</td>
+                </tr>
+                <tr>
+                    <td><code>loci.on_action_cast = function(ent, ability_id, dir_x, dir_y)</code></td>
+                    <td>Uma entidade (você ou outro jogador) conjura uma habilidade. Ideal para FX/áudio!</td>
+                </tr>
+                <tr>
+                    <td><code>loci.on_match_state_changed = function(state, winner)</code></td>
+                    <td>O estado da partida transiciona (<code>"running"</code>, <code>"paused"</code>, <code>"ended"</code>).</td>
                 </tr>
                 <tr>
                     <td><code>loci.on_intent_rejected = function(reason)</code></td>

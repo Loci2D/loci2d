@@ -120,6 +120,11 @@ pub fn apply_resolved_intent(
                 Err(e) => return IntentResult::FatalError(e.to_string()),
             }
             cmd_buffer.flush_and_apply(instance);
+            instance.record_action(
+                entity_id,
+                action_intent.ability_id,
+                action_intent.target_direction.clone(),
+            );
         }
         Intent::Ping(_) => {
             // Heartbeat, no state mutation

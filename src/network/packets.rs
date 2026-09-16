@@ -128,6 +128,16 @@ mod tests {
                         properties: vec![],
                     },
                 ],
+                actions: vec![ActionBroadcast {
+                    entity_id: 1,
+                    ability_id: 42,
+                    target_direction: Some(Vector2 {
+                        x_bits: 65536,
+                        y_bits: 0,
+                    }),
+                }],
+                match_state: MatchLifecycleState::MatchRunning as i32,
+                match_winner: String::new(),
             })),
         };
 

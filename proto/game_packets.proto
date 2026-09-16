@@ -78,12 +78,28 @@ message EntityState {
   repeated Property properties = 6;
 }
 
+enum MatchLifecycleState {
+  MATCH_RUNNING = 0;
+  MATCH_PAUSED = 1;
+  MATCH_ENDED = 2;
+}
+
+// Phase 6.5.3-1: Action/Ability Cast Broadcast Event
+message ActionBroadcast {
+  uint64 entity_id = 1;
+  uint32 ability_id = 2;
+  Vector2 target_direction = 3;
+}
+
 // Full Authoritative World Snapshot
 message WorldState {
   uint64 tick = 1;
   uint64 timestamp = 2;
   repeated EntityState entities = 3;
   repeated Property globals = 4;
+  repeated ActionBroadcast actions = 5;
+  MatchLifecycleState match_state = 6;
+  string match_winner = 7;
 }
 
 // Direct Acknowledgment / Server Response

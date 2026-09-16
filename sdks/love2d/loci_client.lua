@@ -15,18 +15,91 @@ else
     print("Install lua-protobuf (e.g. via luarocks install lua-protobuf) to run full binary Protobuf encoding.")
 end
 
+local function bits_to_float(bits)
+    if not bits then return 0.0 end
+    return bits / 65536.0
+end
+
+local function float_to_bits(f)
+    if not f then return 0 end
+    return math.floor(f * 65536)
+end
+
+local function cast_property_value(val)
+    if type(val) ~= "string" then return val end
+    if val == "true" or val == "True" then return true end
+    if val == "false" or val == "False" then return false end
+    local num = tonumber(val)
+    if num ~= nil then return num end
+    return val
+end
+
+-- ============================================================================
+-- High-Level Entity Abstraction (Phase 6.5.3-1)
+-- ============================================================================
+local Entity = {}
+Entity.__index = function(t, k)
+    local method = Entity[k]
+    if method ~= nil then return method end
+    local props = rawget(t, "properties")
+    if props ~= nil then
+        return props[k]
+    end
+    return nil
+end
+
+function Entity:is_local_player()
+    return loci and self.id == loci.my_entity_id
+end
+
+function Entity:distance_to(other_or_pos)
+    if not other_or_pos then return 0 end
+    local ox = other_or_pos.x or 0
+    local oy = other_or_pos.y or 0
+    local dx = self.x - ox
+    local dy = self.y - oy
+    return math.sqrt(dx * dx + dy * dy)
+end
+
+function Entity:get(prop_name, default_value)
+    local props = rawget(self, "properties")
+    if props and props[prop_name] ~= nil then
+        return props[prop_name]
+    end
+    return default_value
+end
+
+local function new_entity(id, blueprint)
+    local ent = {
+        id = id,
+        blueprint = blueprint,
+        x = 0,
+        y = 0,
+        vx = 0,
+        vy = 0,
+        properties = {}
+    }
+    setmetatable(ent, Entity)
+    return ent
+end
+
+-- ============================================================================
+-- Loci Client Module Facade
+-- ============================================================================
 local loci = {
     -- State
     entities = {},
     globals = {},
     my_entity_id = nil,
+    match_state = "running",
+    match_winner = "",
 
     -- Callbacks
     on_entity_spawned = function(entity) end,
     on_entity_despawned = function(entity_id) end,
     on_property_changed = function(entity, key, old_val, new_val) end,
-    on_match_state_changed = function(state) end, -- Reserved for future use: Not yet broadcast by server
-    on_action_cast = function(entity, ability_id, dir_x, dir_y) end, -- Reserved for future use: Action broadcasts not yet implemented
+    on_match_state_changed = function(state, winner) end,
+    on_action_cast = function(entity, ability_id, dir_x, dir_y) end,
     on_intent_rejected = function(reason) end,
     
     -- Internal
@@ -37,16 +110,6 @@ local loci = {
     _player_name = nil,
     _base_path = "lib/",
 }
-
-local function bits_to_float(bits)
-    if not bits then return 0.0 end
-    return bits / 65536.0
-end
-
-local function float_to_bits(f)
-    if not f then return 0 end
-    return math.floor(f * 65536)
-end
 
 function loci.connect(host, port, player_name, base_path)
     if base_path then
@@ -154,6 +217,29 @@ function loci.get_entities()
     return list
 end
 
+function loci.get_entities_by_blueprint(blueprint_name)
+    local list = {}
+    for _, e in pairs(loci.entities) do
+        if e.blueprint == blueprint_name then
+            table.insert(list, e)
+        end
+    end
+    return list
+end
+
+function loci.get_entities_in_radius(center_x, center_y, radius)
+    local list = {}
+    local r2 = radius * radius
+    for _, e in pairs(loci.entities) do
+        local dx = e.x - center_x
+        local dy = e.y - center_y
+        if (dx * dx + dy * dy) <= r2 then
+            table.insert(list, e)
+        end
+    end
+    return list
+end
+
 function loci.get_my_entity()
     if loci.my_entity_id then
         return loci.entities[loci.my_entity_id]
@@ -202,16 +288,27 @@ function loci.update(dt)
 end
 
 function loci._handle_world_state(state)
-    -- Store globals
+    -- Store globals with auto-type casting
     loci.globals = {}
     if state.globals then
         for _, prop in ipairs(state.globals) do
-            loci.globals[prop.key] = prop.value
+            loci.globals[prop.key] = cast_property_value(prop.value)
+        end
+    end
+
+    -- Match state synchronization
+    if state.match_state ~= nil then
+        local state_map = { [0] = "running", [1] = "paused", [2] = "ended" }
+        local new_state = state_map[state.match_state] or "running"
+        local new_winner = state.match_winner or ""
+        if loci.match_state ~= new_state or (new_state == "ended" and loci.match_winner ~= new_winner) then
+            loci.match_state = new_state
+            loci.match_winner = new_winner
+            loci.on_match_state_changed(new_state, new_winner)
         end
     end
     
-    -- We assume the server returns the whole match state, and client just mirrors it
-    -- Update my_entity_id if we have a match
+    -- Ingest and diff entities
     local new_entities = {}
     
     if state.entities then
@@ -227,11 +324,7 @@ function loci._handle_world_state(state)
             local is_new = false
             if not ent then
                 is_new = true
-                ent = {
-                    id = entity_id,
-                    blueprint = raw_ent.name,
-                    properties = {}
-                }
+                ent = new_entity(entity_id, raw_ent.name)
             end
             
             -- Update Transform
@@ -254,21 +347,22 @@ function loci._handle_world_state(state)
                 ent.vy = 0
             end
             
-            -- Diff properties
+            -- Diff properties with auto-casting
             local new_props = {}
             if raw_ent.properties then
                 for _, prop in ipairs(raw_ent.properties) do
                     new_props[prop.key] = true
+                    local casted_val = cast_property_value(prop.value)
                     local old_val = ent.properties[prop.key]
-                    if old_val ~= prop.value then
-                        ent.properties[prop.key] = prop.value
+                    if old_val ~= casted_val then
+                        ent.properties[prop.key] = casted_val
                         if not is_new then
-                            loci.on_property_changed(ent, prop.key, old_val, prop.value)
+                            loci.on_property_changed(ent, prop.key, old_val, casted_val)
                         end
                     end
                 end
             end
-            -- Check for removed properties (collect first to avoid mutating table during pairs iteration)
+            -- Check for removed properties
             local to_remove = {}
             for k, old_val in pairs(ent.properties) do
                 if not new_props[k] then
@@ -299,6 +393,19 @@ function loci._handle_world_state(state)
             if loci.my_entity_id == id then
                 loci.my_entity_id = nil
             end
+        end
+    end
+
+    -- Process transient action broadcasts
+    if state.actions then
+        for _, act in ipairs(state.actions) do
+            local dir_x, dir_y = 0.0, 0.0
+            if act.target_direction then
+                dir_x = bits_to_float(act.target_direction.x_bits)
+                dir_y = bits_to_float(act.target_direction.y_bits)
+            end
+            local ent = loci.entities[act.entity_id]
+            loci.on_action_cast(ent, act.ability_id, dir_x, dir_y)
         end
     end
 end

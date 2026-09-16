@@ -133,24 +133,25 @@ Este documento detalha os sub-marcos para a Fase 6.5 do projeto **loci2d**. A Fa
 
 ## 6.5.3: Client SDKs & Wrappers
 ## 6.5.3: SDKs & Wrappers para Clientes
+> **Specs:** [phase6.5.3-love2d-sdk-spec.md](roadmap-specs/phase6.5.3-love2d-sdk-spec.md) · [phase6.5.3-1-client-sdk-ergonomics-and-events-spec.md](roadmap-specs/phase6.5.3-1-client-sdk-ergonomics-and-events-spec.md)
 
 ### English
-* [ ] **Love2D SDK Spec:** Write `phase6.5.3-love2d-sdk-spec.md` detailing the client architecture, ensuring all netcode is abstracted away from the devs.
-* [ ] **High-Level Entity Abstraction:**
-  - Create in-memory `Entity` objects within the wrappers to automatically handle property type casting (e.g., converting string `"hp"` to number), hiding the engine's string-typing from the end user.
-* [ ] **Love2D Wrapper (`loci_client.lua`):** (PRIORITY)
+* [x] **Love2D SDK Spec:** Write `phase6.5.3-love2d-sdk-spec.md` detailing the client architecture, ensuring all netcode is abstracted away from the devs.
+* [x] **Love2D Wrapper (`loci_client.lua`):** (PRIORITY)
   - Create a lightweight Lua module for Love2D developers to connect to the engine effortlessly, abstracting UDP sockets and Protobuf completely.
-* [ ] **Signals & Callbacks API:**
-  - Expose intuitive, high-level signals/callbacks for state updates (e.g., `on_entity_updated`, `on_match_event`, `on_action_cast`) tailored for UI and FX.
+* [x] **Phase 6.5.3-1: High-Level Entity Abstraction & Property Auto-Casting:**
+  - Create in-memory `Entity` objects with metatables to automatically cast property strings to numbers/booleans and provide direct field access (`entity.hp`).
+* [x] **Phase 6.5.3-1: Action & Match State Broadcasts:**
+  - Extend Protobuf with transient `ActionBroadcast` and `MatchLifecycleState`, updating the server and SDK to fire `on_action_cast` and `on_match_state_changed`.
 
 ### Português
-* [ ] **Spec do SDK Love2D:** Escrever `phase6.5.3-love2d-sdk-spec.md` detalhando a arquitetura do cliente, garantindo que o netcode fique totalmente abstraído dos devs.
-* [ ] **Abstração de Entidades em Alto Nível:**
-  - Criar objetos `Entity` em memória no wrapper para lidar automaticamente com o cast de tipos de propriedades (ex: converter string `"hp"` para número), escondendo a tipagem baseada em string do motor para os alunos.
-* [ ] **Wrapper para Love2D (`loci_client.lua`):** (PRIORIDADE)
+* [x] **Spec do SDK Love2D:** Escrever `phase6.5.3-love2d-sdk-spec.md` detalhando a arquitetura do cliente, garantindo que o netcode fique totalmente abstraído dos devs.
+* [x] **Wrapper para Love2D (`loci_client.lua`):** (PRIORIDADE)
   - Criar um módulo Lua leve para desenvolvedores Love2D conectarem-se ao motor sem esforço, abstraindo sockets UDP e Protobuf completamente.
-* [ ] **API de Sinais & Callbacks:**
-  - Expor sinais/callbacks intuitivos de alto nível para atualizações de estado (ex: `on_entity_updated`, `on_match_event`, `on_action_cast`) focados em UI e Efeitos.
+* [x] **Fase 6.5.3-1: Abstração de Entidades em Alto Nível & Cast Automático:**
+  - Criar objetos `Entity` em memória com metatabelas no wrapper para conversão automática de propriedades para números/booleanos e acesso direto (`entity.hp`).
+* [x] **Fase 6.5.3-1: Broadcast de Ações & Estado da Partida:**
+  - Estender Protobuf com `ActionBroadcast` transiente e `MatchLifecycleState`, atualizando servidor e SDK para disparar `on_action_cast` e `on_match_state_changed`.
 
 ---
 

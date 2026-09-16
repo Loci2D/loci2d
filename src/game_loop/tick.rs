@@ -199,6 +199,7 @@ impl GameLoop {
 
                 // 5. Generate WorldState snapshot
                 let world_state = instance.create_snapshot(tick_count);
+                instance.clear_tick_actions();
                 let packet = ServerPacket {
                     sequence_id: tick_count,
                     payload: Some(server_packet::Payload::WorldState(world_state)),

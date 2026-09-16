@@ -3,8 +3,8 @@ use super::physics::{MapBounds, StaticObstacle, TriggerEvent};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::client_intent::Intent;
 use crate::network::packets::{
-    ClientIntent, EntityState, EntityType as ProtoEntityType, Property, ReplayIntentEntry,
-    WorldState,
+    ActionBroadcast, ClientIntent, EntityState, EntityType as ProtoEntityType, MatchLifecycleState,
+    Property, ReplayIntentEntry, WorldState,
 };
 use crate::scripting::{CommandBuffer, ScriptEngine};
 use fixed::types::I16F16;
@@ -60,6 +60,8 @@ pub struct Instance {
     pub globals: BTreeMap<String, String>,
     pub state: MatchState,
     pub active_timers: BTreeMap<String, ActiveTimer>,
+    // Phase 6.5.3-1 Additions: Transient action broadcasts for clients
+    pub tick_actions: Vec<ActionBroadcast>,
     // NOTE: Cell<u64> is intentionally not PartialEq-comparable. Instance equality
     // must be established via canonical_hash(), not structural comparison.
     // TODO(Phase 7+): If Instance is ever moved to a multi-threaded runtime,
@@ -96,6 +98,7 @@ impl Instance {
             globals: BTreeMap::new(),
             state: MatchState::Running,
             active_timers: BTreeMap::new(),
+            tick_actions: Vec::new(),
             next_entity_id: std::cell::Cell::new(1),
             next_session_id: 1,
         }
@@ -331,6 +334,25 @@ impl Instance {
         self.map_bounds = bounds;
     }
 
+    /// Records an action executed in the current tick to broadcast to clients.
+    pub fn record_action(
+        &mut self,
+        entity_id: u64,
+        ability_id: u32,
+        target_direction: Option<Vector2>,
+    ) {
+        self.tick_actions.push(ActionBroadcast {
+            entity_id,
+            ability_id,
+            target_direction,
+        });
+    }
+
+    /// Clears the transient tick actions buffer after snapshot generation.
+    pub fn clear_tick_actions(&mut self) {
+        self.tick_actions.clear();
+    }
+
     /// Generates a complete WorldState snapshot representing all active entities.
     pub fn create_snapshot(&self, tick: u64) -> WorldState {
         let entities = self
@@ -359,6 +381,15 @@ impl Instance {
 
         let timestamp = tick * (1000 / self.tick_rate as u64);
 
+        let (match_state, match_winner) = match &self.state {
+            MatchState::Running => (MatchLifecycleState::MatchRunning as i32, String::new()),
+            MatchState::Paused => (MatchLifecycleState::MatchPaused as i32, String::new()),
+            MatchState::Ended { winner_data } => (
+                MatchLifecycleState::MatchEnded as i32,
+                winner_data.clone(),
+            ),
+        };
+
         WorldState {
             tick,
             timestamp,
@@ -371,6 +402,9 @@ impl Instance {
                     value: v.clone(),
                 })
                 .collect(),
+            actions: self.tick_actions.clone(),
+            match_state,
+            match_winner,
         }
     }
 

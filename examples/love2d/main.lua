@@ -10,6 +10,10 @@ local rejection_timer = 0
 local server_ip = "127.0.0.1"
 local server_port = 8080
 
+local visual_fx = {}
+local match_banner = ""
+local match_banner_timer = 0
+
 local is_spectator_cli = false
 local spec_cam_x, spec_cam_y = 0, 0
 local following_entity_id = nil
@@ -59,7 +63,23 @@ function love.load(args)
     end
 
     loci.on_action_cast = function(entity, ability_id, dir_x, dir_y)
-        print("Action cast by " .. tostring(entity.id) .. " ability: " .. tostring(ability_id))
+        local ent_id = entity and entity.id or "?"
+        print(string.format("Action cast by %s (ability=%d, dir=[%.2f, %.2f])", tostring(ent_id), ability_id, dir_x, dir_y))
+        table.insert(visual_fx, {
+            x = entity and entity.x or 0,
+            y = entity and entity.y or 0,
+            dir_x = dir_x,
+            dir_y = dir_y,
+            ability_id = ability_id,
+            lifetime = 0.35,
+            max_lifetime = 0.35,
+        })
+    end
+
+    loci.on_match_state_changed = function(state, winner)
+        print("Match state changed to: " .. tostring(state) .. " winner: " .. tostring(winner))
+        match_banner = "MATCH " .. string.upper(state) .. (winner ~= "" and (" (Winner: " .. winner .. ")") or "")
+        match_banner_timer = 4.0
     end
 
     loci.on_intent_rejected = function(reason)
@@ -203,6 +223,21 @@ function love.update(dt)
         end
     end
 
+    for i = #visual_fx, 1, -1 do
+        local fx = visual_fx[i]
+        fx.lifetime = fx.lifetime - dt
+        if fx.lifetime <= 0 then
+            table.remove(visual_fx, i)
+        end
+    end
+
+    if match_banner_timer > 0 then
+        match_banner_timer = match_banner_timer - dt
+        if match_banner_timer <= 0 then
+            match_banner = ""
+        end
+    end
+
     if rejection_timer > 0 then
         rejection_timer = rejection_timer - dt
         if rejection_timer <= 0 then
@@ -236,17 +271,17 @@ function love.draw()
         local pos_x = center_x + (entity.x - cam_x) * 10
         local pos_y = center_y + (entity.y - cam_y) * 10
 
-        -- Color based on properties if they exist
-        local team = entity.properties and entity.properties["team"]
-        if team == "1" then
+        -- Direct typed property access (Phase 6.5.3-1)
+        local team = entity.team
+        if team == 1 or team == "1" then
             love.graphics.setColor(0.8, 0.3, 0.3) -- Team 1 Red
-        elseif team == "2" then
+        elseif team == 2 or team == "2" then
             love.graphics.setColor(0.3, 0.3, 0.8) -- Team 2 Blue
         else
             love.graphics.setColor(0.3, 0.8, 0.4) -- Default Green
         end
 
-        if loci.my_entity_id == entity.id then
+        if entity:is_local_player() then
             love.graphics.setColor(0.3, 0.6, 1.0) -- Local Player Blue
         end
 
@@ -269,12 +304,48 @@ function love.draw()
         love.graphics.setColor(1, 1, 1)
         love.graphics.print(label, pos_x - text_width / 2, pos_y - 32)
         
-        -- Draw HP if it exists
-        local hp = entity.properties and entity.properties["hp"]
+        -- Draw HP if it exists (using direct typed property access)
+        local hp = entity.hp
         if hp and (not is_spectating or following_entity_id ~= entity.id) then
             love.graphics.setColor(1, 0.2, 0.2)
-            love.graphics.print("HP: " .. hp, pos_x - 20, pos_y + 20)
+            love.graphics.print("HP: " .. tostring(hp), pos_x - 20, pos_y + 20)
         end
+    end
+
+    -- Render transient action visual effects (Phase 6.5.3-1)
+    for _, fx in ipairs(visual_fx) do
+        local alpha = math.max(0, fx.lifetime / fx.max_lifetime)
+        local start_x = center_x + (fx.x - cam_x) * 10
+        local start_y = center_y + (fx.y - cam_y) * 10
+        local end_x = start_x + (fx.dir_x * 45)
+        local end_y = start_y + (fx.dir_y * 45)
+
+        if fx.ability_id == 1 then
+            love.graphics.setColor(1, 0.85, 0.2, alpha) -- Ability 1: Yellow Beam
+            love.graphics.setLineWidth(3)
+        else
+            love.graphics.setColor(0.85, 0.2, 1, alpha) -- Ability 2: Purple Beam
+            love.graphics.setLineWidth(5)
+        end
+        love.graphics.line(start_x, start_y, end_x, end_y)
+        love.graphics.circle("fill", end_x, end_y, 4 * alpha)
+        love.graphics.setLineWidth(1)
+    end
+
+    -- Match State Notification Banner
+    if match_banner ~= "" then
+        local mb_w = 320
+        local mb_h = 32
+        local mb_x = center_x - mb_w / 2
+        local mb_y = is_spectating and 48 or 14
+        love.graphics.setColor(0.1, 0.15, 0.25, 0.92)
+        love.graphics.rectangle("fill", mb_x, mb_y, mb_w, mb_h, 8, 8)
+        love.graphics.setColor(0.4, 0.8, 1.0)
+        love.graphics.rectangle("line", mb_x, mb_y, mb_w, mb_h, 8, 8)
+        love.graphics.setColor(1, 1, 1)
+        local font = love.graphics.getFont()
+        local tw = font:getWidth(match_banner)
+        love.graphics.print(match_banner, center_x - tw / 2, mb_y + 8)
     end
 
     -- Top Center Spectator Pill / Banner (Unmistakable visual indicator)
