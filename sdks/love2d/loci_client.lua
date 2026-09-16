@@ -405,7 +405,9 @@ function loci._handle_world_state(state)
                 dir_y = bits_to_float(act.target_direction.y_bits)
             end
             local ent = loci.entities[act.entity_id]
-            loci.on_action_cast(ent, act.ability_id, dir_x, dir_y)
+            if ent then
+                loci.on_action_cast(ent, act.ability_id, dir_x, dir_y)
+            end
         end
     end
 end
