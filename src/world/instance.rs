@@ -61,7 +61,7 @@ pub struct Instance {
     pub state: MatchState,
     pub active_timers: BTreeMap<String, ActiveTimer>,
     // Phase 6.5.3-1 Additions: Transient action broadcasts for clients
-    pub tick_actions: Vec<ActionBroadcast>,
+    pub(crate) tick_actions: Vec<ActionBroadcast>,
     // NOTE: Cell<u64> is intentionally not PartialEq-comparable. Instance equality
     // must be established via canonical_hash(), not structural comparison.
     // TODO(Phase 7+): If Instance is ever moved to a multi-threaded runtime,
