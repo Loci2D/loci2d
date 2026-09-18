@@ -169,7 +169,7 @@ fn test_wasd_move_preempts_navigation() {
         intent: Some(client_intent::Intent::Join(
             loci2d::network::packets::JoinIntent {
                 player_name: "PreemptTest".to_string(),
-            },
+            schema_version: 1 },
         )),
     };
     instance.apply_intent(addr, join_intent);
@@ -235,7 +235,7 @@ fn test_new_moveto_preempts_prior_target() {
             intent: Some(client_intent::Intent::Join(
                 loci2d::network::packets::JoinIntent {
                     player_name: "RetargetPlayer".to_string(),
-                },
+                schema_version: 1 },
             )),
         },
     );

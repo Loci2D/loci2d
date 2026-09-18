@@ -16,6 +16,8 @@ use std::path::Path;
 pub use super::fixed_point::DeterministicVector2;
 pub use crate::network::packets::Vector2;
 
+pub const SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone)]
 pub enum ApplyIntentResult {
     Ok(Option<ReplayIntentEntry>),
@@ -152,6 +154,9 @@ impl Instance {
 
         let (entity_id, player_name) = match inner_intent {
             Intent::Join(join_intent) => {
+                if join_intent.schema_version != SCHEMA_VERSION {
+                    return ApplyIntentResult::Rejected(format!("Version mismatch. Server expects schema_version {}", SCHEMA_VERSION));
+                }
                 let player_name = if join_intent.player_name.trim().is_empty() {
                     format!("Player_{}", self.next_entity_id.get())
                 } else {
@@ -470,7 +475,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            })),
+            schema_version: 1 })),
         };
         let _ = instance.apply_intent(addr, join_intent);
 
@@ -515,7 +520,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Bob".to_string(),
-            })),
+            schema_version: 1 })),
         };
         let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
@@ -578,7 +583,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Charlie".to_string(),
-            })),
+            schema_version: 1 })),
         };
         let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
@@ -600,7 +605,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Dave".to_string(),
-            })),
+            schema_version: 1 })),
         };
         let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
@@ -779,7 +784,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            })),
+            schema_version: 1 })),
         };
         let _ = instance.apply_intent(addr, join_intent);
 
@@ -999,7 +1004,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            })),
+            schema_version: 1 })),
         };
         let _ = instance
             .apply_intent("127.0.0.1:1234".parse().unwrap(), join_intent);

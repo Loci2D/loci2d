@@ -45,7 +45,7 @@ fn test_end_to_end_session_lifecycle() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Arthur".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     let mut buf = Vec::new();

@@ -57,6 +57,7 @@ fn test_1000_tick_multi_player_replay_determinism() {
                 intent: Some(ClientIntent {
                     intent: Some(client_intent::Intent::Join(JoinIntent {
                         player_name: format!("Player_{}", pid),
+                        schema_version: 1
                     })),
                 }),
             });
@@ -167,7 +168,7 @@ fn test_rejoin_entity_state_preservation_determinism() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice".to_string(),
-                })),
+                schema_version: 1 })),
             }),
         }],
     );
@@ -205,7 +206,7 @@ fn test_rejoin_entity_state_preservation_determinism() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice_Updated".to_string(),
-                })),
+                schema_version: 1 })),
             }),
         }],
     );
@@ -271,7 +272,7 @@ fn test_inactivity_timeout_disconnect_synchronization() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "TimeoutPlayer".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     let mut buf = Vec::new();
@@ -307,7 +308,7 @@ fn test_desync_diagnostic_report_on_tampered_frame() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice".to_string(),
-                })),
+                schema_version: 1 })),
             }),
         }],
     );
@@ -389,7 +390,7 @@ fn test_click_to_move_replay_determinism() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: name,
-                })),
+                schema_version: 1 })),
             }),
         });
     }

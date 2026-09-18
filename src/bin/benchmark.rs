@@ -171,7 +171,7 @@ end
             let join_intent = ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: name.clone(),
-                })),
+                schema_version: 1 })),
             };
             if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) = sim_instance.apply_intent(addr, join_intent) {
                 tick_entries.push(entry);

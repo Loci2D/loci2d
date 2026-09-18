@@ -155,7 +155,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            })),
+            schema_version: 1 })),
         };
         recorder.record_tick(
             1,

@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Loci2D - Guia de Scripts do Servidor</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg-color: #0f1115;
@@ -34,7 +37,9 @@
             padding: 0 24px;
         }
 
-        h1, h2, h3 {
+        h1,
+        h2,
+        h3 {
             color: #ffffff;
             font-weight: 700;
         }
@@ -43,7 +48,7 @@
             font-size: 2.5rem;
             margin-bottom: 0.5rem;
             background: linear-gradient(135deg, #c084fc, #f472b6);
-            -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -82,11 +87,13 @@
             margin-bottom: 12px;
         }
 
-        code, pre {
+        code,
+        pre {
             font-family: 'Fira Code', monospace;
         }
 
-        p code, li code {
+        p code,
+        li code {
             background-color: var(--code-bg);
             padding: 2px 6px;
             border-radius: 4px;
@@ -105,11 +112,25 @@
             line-height: 1.5;
         }
 
-        .comment { color: #8b949e; }
-        .keyword { color: #ff7b72; }
-        .string { color: #a5d6ff; }
-        .func { color: #d2a8ff; }
-        .number { color: #79c0ff; }
+        .comment {
+            color: #8b949e;
+        }
+
+        .keyword {
+            color: #ff7b72;
+        }
+
+        .string {
+            color: #a5d6ff;
+        }
+
+        .func {
+            color: #d2a8ff;
+        }
+
+        .number {
+            color: #79c0ff;
+        }
 
         table {
             width: 100%;
@@ -117,7 +138,8 @@
             margin-top: 1rem;
         }
 
-        th, td {
+        th,
+        td {
             text-align: left;
             padding: 12px;
             border-bottom: 1px solid var(--border-color);
@@ -147,26 +169,31 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="nav-links">
             <a href="index.html">← Voltar para Guia do Cliente (Love2D)</a>
         </div>
-        
+
         <h1>Loci2D Server Scripts</h1>
         <p class="subtitle">Guia para criação de regras, mecânicas e habilidades no servidor em Lua.</p>
 
         <div class="card">
             <span class="step-badge">Estrutura</span>
             <h2>O que é o Script do Servidor?</h2>
-            <p>Enquanto o Love2D processa os gráficos e a entrada do jogador, o servidor em Rust roda um <strong>ambiente isolado em Lua</strong> que dita as regras do jogo. A autoridade máxima é sempre do servidor!</p>
-            <p>Todos os scripts ficam na pasta <code>scripts/nome_da_arena/main.lua</code>. Quando o servidor sobe, ele lê esse arquivo para injetar vida nas mecânicas.</p>
+            <p>Enquanto o Love2D processa os gráficos e a entrada do jogador, o servidor em Rust roda um
+                <strong>ambiente isolado em Lua</strong> que dita as regras do jogo. A autoridade máxima é sempre do
+                servidor!</p>
+            <p>Todos os scripts ficam na pasta <code>scripts/nome_da_arena/main.lua</code>. Quando o servidor sobe, ele
+                lê esse arquivo para injetar vida nas mecânicas.</p>
         </div>
 
         <div class="card">
             <span class="step-badge">Passo 1</span>
             <h2>Ouvindo os Jogadores (Callbacks)</h2>
-            <p>No seu <code>main.lua</code> do servidor, você deve declarar as seguintes funções globais. A engine em Rust vai chamá-las automaticamente quando os eventos acontecerem:</p>
+            <p>No seu <code>main.lua</code> do servidor, você deve declarar as seguintes funções globais. A engine em
+                Rust vai chamá-las automaticamente quando os eventos acontecerem:</p>
             <pre><code><span class="comment">-- Chamado quando um jogador entra na sala</span>
 <span class="keyword">function</span> <span class="func">on_player_join</span>(entity_id)
     Loci.Log.info(<span class="string">"Jogador "</span> .. entity_id .. <span class="string">" entrou!"</span>)
@@ -190,9 +217,14 @@
         <div class="card">
             <span class="step-badge">Passo 2</span>
             <h2>Criando Habilidades (Skills)</h2>
-            <p>Quando o cliente chama <code>loci.send_action(ability_id, x, y)</code>, o servidor recebe isso através da função <code>on_action</code>. É aqui que a mágica acontece!</p>
-            <p style="background-color: var(--primary-glow); padding: 12px; border-left: 4px solid var(--primary); border-radius: 0 8px 8px 0; font-size: 0.95rem; margin-bottom: 20px;">
-                💡 <strong>Dica de Input:</strong> O servidor não sabe se o jogador clicou com o mouse, apertou a barra de espaço, ou usou um controle de videogame! O cliente fica encarregado de mapear os botões e chamar a função enviando apenas o <code>ability_id</code>. O servidor recebe apenas a intenção ("Usar habilidade 1 nas coordenadas X, Y").
+            <p>Quando o cliente chama <code>loci.send_action(ability_id, x, y)</code>, o servidor recebe isso através da
+                função <code>on_action</code>. É aqui que a mágica acontece!</p>
+            <p
+                style="background-color: var(--primary-glow); padding: 12px; border-left: 4px solid var(--primary); border-radius: 0 8px 8px 0; font-size: 0.95rem; margin-bottom: 20px;">
+                💡 <strong>Dica de Input:</strong> O servidor não sabe se o jogador clicou com o mouse, apertou a barra
+                de espaço, ou usou um controle de videogame! O cliente fica encarregado de mapear os botões e chamar a
+                função enviando apenas o <code>ability_id</code>. O servidor recebe apenas a intenção ("Usar habilidade
+                1 nas coordenadas X, Y").
             </p>
             <pre><code><span class="keyword">function</span> <span class="func">on_action</span>(entity_id, ability_id, aim_x, aim_y)
     <span class="keyword">if</span> ability_id == <span class="number">1</span> <span class="keyword">then</span>
@@ -223,7 +255,8 @@
                 </tr>
                 <tr>
                     <td><code>spawn_entity(params)</code></td>
-                    <td>Cria uma entidade. Recebe tabela: <code>{blueprint, position={x,y}, entity_type, move_speed, radius, properties={}}</code></td>
+                    <td>Cria uma entidade. Recebe tabela:
+                        <code>{blueprint, position={x,y}, entity_type, move_speed, radius, properties={}}</code></td>
                 </tr>
                 <tr>
                     <td><code>destroy_entity(id)</code></td>
@@ -255,11 +288,13 @@
                 </tr>
             </table>
         </div>
-        
+
         <div class="card">
             <span class="step-badge">Debug</span>
             <h2>Logs no Console</h2>
-            <p>Para investigar o que está acontecendo no servidor, sempre use os métodos da tabela <code>Loci.Log</code>. Os prints nativos do Lua podem não aparecer no console do Rust de forma síncrona.</p>
+            <p>Para investigar o que está acontecendo no servidor, sempre use os métodos da tabela
+                <code>Loci.Log</code>. Os prints nativos do Lua podem não aparecer no console do Rust de forma síncrona.
+            </p>
             <ul>
                 <li><code>Loci.Log.info("Mensagem")</code> - Verde no console.</li>
                 <li><code>Loci.Log.warn("Aviso")</code> - Amarelo no console.</li>
@@ -269,4 +304,5 @@
 
     </div>
 </body>
+
 </html>

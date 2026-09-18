@@ -128,8 +128,7 @@ fn test_set_move_speed_command() {
     
     let join_intent = ClientIntent {
         intent: Some(client_intent::Intent::Join(loci2d::network::JoinIntent {
-            player_name: "Bob".to_string(),
-        }))
+            player_name: "Bob".to_string(), schema_version: 1 }))
     };
     instance.apply_intent(addr, join_intent);
     

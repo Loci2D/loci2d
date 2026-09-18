@@ -88,6 +88,7 @@ end
 -- ============================================================================
 local loci = {
     -- State
+    SCHEMA_VERSION = 1,
     entities = {},
     globals = {},
     my_entity_id = nil,
@@ -154,11 +155,17 @@ function loci.connect(host, port, player_name, base_path)
         loci._schema_loaded = schema_loaded
         
         if schema_loaded then
-            loci._send_intent({ join = { player_name = player_name } })
+            loci._send_intent({ join = { player_name = player_name, schema_version = loci.SCHEMA_VERSION } })
+            return true
         else
-            print("[Warning] Could not load game_packets schema definition.")
+            print("[Error] Could not load game_packets schema definition. Aborting network.")
+            loci._udp:close()
+            loci._udp = nil
+            return false
         end
     end
+    
+    return false
 end
 
 function loci.disconnect(reason)
@@ -275,13 +282,15 @@ function loci.update(dt)
         end
 
         if loci._schema_loaded then
-            local packet = pb.decode("loci2d.ServerPacket", data)
-            if packet then
+            local ok, packet = pcall(pb.decode, "loci2d.ServerPacket", data)
+            if ok and packet then
                 if packet.world_state then
                     loci._handle_world_state(packet.world_state)
                 elseif packet.response then
                     loci._handle_response(packet.response)
                 end
+            elseif not ok then
+                print("[Error] pb.decode failed: " .. tostring(packet))
             end
         end
     end

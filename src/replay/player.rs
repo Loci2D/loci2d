@@ -422,7 +422,7 @@ mod tests {
                 intent: Some(ClientIntent {
                     intent: Some(client_intent::Intent::Join(JoinIntent {
                         player_name: "Alice".to_string(),
-                    })),
+                    schema_version: 1 })),
                 }),
             }],
         );
@@ -474,7 +474,7 @@ mod tests {
                 intent: Some(ClientIntent {
                     intent: Some(client_intent::Intent::Join(JoinIntent {
                         player_name: "Bob".to_string(),
-                    })),
+                    schema_version: 1 })),
                 }),
             }],
         );

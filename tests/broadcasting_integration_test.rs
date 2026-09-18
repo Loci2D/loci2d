@@ -92,7 +92,7 @@ fn test_client_receives_world_state_on_join() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     let mut buf = Vec::new();
@@ -125,7 +125,7 @@ fn test_client_receives_position_updates_after_move() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Bob".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     let mut buf = Vec::new();
@@ -188,7 +188,7 @@ fn test_multi_client_world_state_broadcasting() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     let mut buf = Vec::new();
@@ -202,7 +202,7 @@ fn test_multi_client_world_state_broadcasting() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Charlie".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     buf.clear();
@@ -245,7 +245,7 @@ fn test_despawn_synchronization_on_disconnect() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     let mut buf = Vec::new();
@@ -259,7 +259,7 @@ fn test_despawn_synchronization_on_disconnect() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Dave".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     buf.clear();

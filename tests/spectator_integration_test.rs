@@ -44,7 +44,7 @@ fn test_live_spectator_replay_broadcasting() {
                 intent: Some(ClientIntent {
                     intent: Some(client_intent::Intent::Join(JoinIntent {
                         player_name: "Alice".to_string(),
-                    })),
+                    schema_version: 1 })),
                 }),
             },
             ReplayIntentEntry {
@@ -53,7 +53,7 @@ fn test_live_spectator_replay_broadcasting() {
                 intent: Some(ClientIntent {
                     intent: Some(client_intent::Intent::Join(JoinIntent {
                         player_name: "Bob".to_string(),
-                    })),
+                    schema_version: 1 })),
                 }),
             },
         ],
@@ -135,7 +135,7 @@ fn test_live_spectator_replay_broadcasting() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "GodotSpectator".to_string(),
-            })),
+            schema_version: 1 })),
         }),
     };
     let mut join_buf = Vec::new();
