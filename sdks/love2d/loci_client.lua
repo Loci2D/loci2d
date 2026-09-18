@@ -110,6 +110,7 @@ local loci = {
     _last_heartbeat_time = 0,
     _player_name = nil,
     _base_path = "lib/",
+    _entities_list_cache = nil,
 }
 
 function loci.connect(host, port, player_name, base_path)
@@ -215,13 +216,16 @@ function loci.send_action(ability_id, aim_x, aim_y)
     loci._send_intent({ action = { ability_id = ability_id, target_direction = { x_bits = float_to_bits(dx), y_bits = float_to_bits(dy) } } })
 end
 
--- TODO: allocates a new table every call; consider caching if GC pressure becomes an issue
+-- Cached to avoid GC pressure
 function loci.get_entities()
-    local list = {}
-    for _, e in pairs(loci.entities) do
-        table.insert(list, e)
+    if not loci._entities_list_cache then
+        local list = {}
+        for _, e in pairs(loci.entities) do
+            table.insert(list, e)
+        end
+        loci._entities_list_cache = list
     end
-    return list
+    return loci._entities_list_cache
 end
 
 function loci.get_entities_by_blueprint(blueprint_name)
@@ -263,7 +267,30 @@ function loci.update(dt)
 
     -- Interpolation
     for _, entity in pairs(loci.entities) do
-        if entity.vx ~= 0 or entity.vy ~= 0 then
+        if entity.server_x and entity.server_y then
+            -- Predict theoretical server position
+            entity.server_x = entity.server_x + entity.vx * dt
+            entity.server_y = entity.server_y + entity.vy * dt
+            
+            local dx = entity.server_x - entity.x
+            local dy = entity.server_y - entity.y
+            local dist2 = dx * dx + dy * dy
+            
+            if dist2 > 4.0 then
+                -- Strict snap (Rubberbanding > 2.0 units)
+                entity.x = entity.server_x
+                entity.y = entity.server_y
+            elseif dist2 > 0.001 then
+                -- Soft lerp
+                entity.x = entity.x + dx * 10.0 * dt
+                entity.y = entity.y + dy * 10.0 * dt
+            else
+                -- Just move with velocity
+                entity.x = entity.x + entity.vx * dt
+                entity.y = entity.y + entity.vy * dt
+            end
+        else
+            -- No server pos yet, just use vx/vy
             entity.x = entity.x + entity.vx * dt
             entity.y = entity.y + entity.vy * dt
         end
@@ -340,8 +367,12 @@ function loci._handle_world_state(state)
             if raw_ent.position then
                 local nx = bits_to_float(raw_ent.position.x_bits)
                 local ny = bits_to_float(raw_ent.position.y_bits)
-                ent.x = nx
-                ent.y = ny
+                ent.server_x = nx
+                ent.server_y = ny
+                if is_new then
+                    ent.x = nx
+                    ent.y = ny
+                end
             else
                 ent.x = ent.x or 0
                 ent.y = ent.y or 0
@@ -387,6 +418,7 @@ function loci._handle_world_state(state)
             
             if is_new then
                 loci.entities[entity_id] = ent
+                loci._entities_list_cache = nil
                 loci.on_entity_spawned(ent)
             end
             
@@ -399,6 +431,7 @@ function loci._handle_world_state(state)
         if not new_entities[id] then
             loci.on_entity_despawned(id)
             loci.entities[id] = nil
+            loci._entities_list_cache = nil
             if loci.my_entity_id == id then
                 loci.my_entity_id = nil
             end
