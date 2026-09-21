@@ -279,14 +279,22 @@ impl ScriptEngine {
         instance: &Instance,
         entity_id: u64,
         cmd_buffer: &mut CommandBuffer,
-    ) -> LuaResult<()> {
+    ) -> LuaResult<Option<String>> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
             if let Ok(on_join_fn) = globals.get::<mlua::Function>("on_player_join") {
-                on_join_fn.call::<()>(entity_id)?;
+                let results: mlua::MultiValue = on_join_fn.call((entity_id,))?;
+                if let Some(mlua::Value::Boolean(false)) = results.get(0) {
+                    let reason = if let Some(mlua::Value::String(s)) = results.get(1) {
+                        s.to_string_lossy().to_owned()
+                    } else {
+                        "Join rejected".to_string()
+                    };
+                    return Ok(Some(reason));
+                }
             }
-            Ok(())
+            Ok(None)
         })
     }
 
@@ -382,14 +390,22 @@ impl ScriptEngine {
         instance: &Instance,
         entity_id: u64,
         cmd_buffer: &mut CommandBuffer,
-    ) -> LuaResult<()> {
+    ) -> LuaResult<Option<String>> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
             if let Ok(on_leave_fn) = globals.get::<mlua::Function>("on_player_leave") {
-                on_leave_fn.call::<()>(entity_id)?;
+                let results: mlua::MultiValue = on_leave_fn.call((entity_id,))?;
+                if let Some(mlua::Value::Boolean(false)) = results.get(0) {
+                    let reason = if let Some(mlua::Value::String(s)) = results.get(1) {
+                        s.to_string_lossy().to_owned()
+                    } else {
+                        "Leave rejected".to_string()
+                    };
+                    return Ok(Some(reason));
+                }
             }
-            Ok(())
+            Ok(None)
         })
     }
 

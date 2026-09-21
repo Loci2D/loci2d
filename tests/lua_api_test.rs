@@ -335,3 +335,34 @@ fn test_intent_rejection_feedback() {
         _ => panic!("Expected Intent to be rejected"),
     }
 }
+
+#[test]
+fn test_lifecycle_rejection_rollback() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    
+    let script = r#"
+        function on_player_join(entity_id)
+            return false, "Server Full"
+        end
+    "#;
+    instance.script_engine.load_script(script).unwrap();
+
+    let join_intent = ClientIntent {
+        intent: Some(client_intent::Intent::Join(loci2d::network::JoinIntent {
+            player_name: "Eve".to_string(), schema_version: 1 }))
+    };
+
+    let result = instance.apply_intent(addr, join_intent);
+    
+    match result {
+        loci2d::world::instance::ApplyIntentResult::Rejected(reason) => {
+            assert_eq!(reason, "Server Full");
+        }
+        _ => panic!("Expected Join to be rejected"),
+    }
+
+    // Verify rollback: session and entity should not exist
+    assert!(instance.sessions.get(&addr).is_none());
+    assert_eq!(instance.entities.len(), 0);
+}

@@ -193,6 +193,11 @@ impl Instance {
         ) {
             crate::world::intent_handler::IntentResult::Ok => {}
             crate::world::intent_handler::IntentResult::Rejected(reason) => {
+                if matches!(inner_intent, Intent::Join(_)) {
+                    self.sessions.remove(&addr);
+                    self.entities.remove(&entity_id);
+                    self.entity_to_addr.remove(&entity_id);
+                }
                 return ApplyIntentResult::Rejected(reason);
             }
             crate::world::intent_handler::IntentResult::FatalError(e) => {
