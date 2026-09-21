@@ -287,7 +287,7 @@ impl ScriptEngine {
                 let results: mlua::MultiValue = on_join_fn.call((entity_id,))?;
                 if let Some(mlua::Value::Boolean(false)) = results.get(0) {
                     let reason = if let Some(mlua::Value::String(s)) = results.get(1) {
-                        s.to_string_lossy().to_owned()
+                        s.to_string_lossy()
                     } else {
                         "Join rejected".to_string()
                     };
@@ -390,22 +390,15 @@ impl ScriptEngine {
         instance: &Instance,
         entity_id: u64,
         cmd_buffer: &mut CommandBuffer,
-    ) -> LuaResult<Option<String>> {
+    ) -> LuaResult<()> {
         self.reset_instruction_counter();
         with_scoped_api(&self.lua, instance, cmd_buffer, || {
             let globals = self.lua.globals();
             if let Ok(on_leave_fn) = globals.get::<mlua::Function>("on_player_leave") {
-                let results: mlua::MultiValue = on_leave_fn.call((entity_id,))?;
-                if let Some(mlua::Value::Boolean(false)) = results.get(0) {
-                    let reason = if let Some(mlua::Value::String(s)) = results.get(1) {
-                        s.to_string_lossy().to_owned()
-                    } else {
-                        "Leave rejected".to_string()
-                    };
-                    return Ok(Some(reason));
-                }
+                // NOTE: on_player_leave does not support rejection; return value is ignored.
+                on_leave_fn.call::<()>(entity_id)?;
             }
-            Ok(None)
+            Ok(())
         })
     }
 

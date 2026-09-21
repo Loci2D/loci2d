@@ -47,10 +47,8 @@ pub fn apply_resolved_intent(
         }
         Intent::Disconnect(_) => {
             let mut cmd_buffer = CommandBuffer::new();
-            match instance.script_engine.on_player_leave(instance, entity_id, &mut cmd_buffer) {
-                Ok(Some(reason)) => return IntentResult::Rejected(reason),
-                Ok(None) => {},
-                Err(e) => return IntentResult::FatalError(e.to_string()),
+            if let Err(e) = instance.script_engine.on_player_leave(instance, entity_id, &mut cmd_buffer) {
+                return IntentResult::FatalError(e.to_string());
             }
             cmd_buffer.push(crate::scripting::command::Command::DestroyEntity { entity_id });
             cmd_buffer.flush_and_apply(instance);
