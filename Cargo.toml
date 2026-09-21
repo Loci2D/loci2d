@@ -3,6 +3,8 @@ name = "loci2d"
 version = "0.6.5-sdk.3"
 edition = "2024"
 default-run = "loci2d"
+license = "MIT"
+authors = ["Luiz André Furlan"]
 
 [dependencies]
 chrono = "0.4"
