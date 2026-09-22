@@ -128,21 +128,44 @@ function loci.connect(host, port, player_name, base_path)
     
     if pb then
         local schema_loaded = false
+        local candidate_proto_paths = {
+            loci._base_path and (loci._base_path .. "game_packets.proto"),
+            loci._base_path and (loci._base_path .. "/game_packets.proto"),
+            "sdks/love2d/lib/game_packets.proto",
+            "../../sdks/love2d/lib/game_packets.proto",
+            "proto/game_packets.proto",
+            "../../proto/game_packets.proto",
+            "lib/game_packets.proto",
+            "game_packets.proto",
+        }
+
+        local function read_proto_file(path)
+            if not path then return nil end
+            local f = io.open(path, "r")
+            if f then
+                local content = f:read("*a")
+                f:close()
+                if content and #content > 0 then return content end
+            end
+            if love and love.filesystem and love.filesystem.getInfo and love.filesystem.getInfo(path) then
+                local content, _ = love.filesystem.read(path)
+                if content and #content > 0 then return content end
+            end
+            return nil
+        end
+
         -- 1. Try dynamic text parsing with protoc.lua
         if protoc then
             local p = protoc.new()
-            p.include_dirs = { loci._base_path, loci._base_path .. "../../proto", "proto", "." }
+            p.include_dirs = { loci._base_path, "sdks/love2d/lib", "proto", "../../proto", "." }
 
-            local ok, res = pcall(function() return p:loadfile(loci._base_path .. "game_packets.proto") end)
-            if ok and res then
-                schema_loaded = true
-            else
-                local f = io.open(loci._base_path .. "game_packets.proto", "r")
-                if f then
-                    local content = f:read("*a")
-                    f:close()
-                    if content and p:load(content, "game_packets.proto") then
+            for _, path in ipairs(candidate_proto_paths) do
+                local content = read_proto_file(path)
+                if content then
+                    local ok, _ = pcall(function() return p:load(content, "game_packets.proto") end)
+                    if ok then
                         schema_loaded = true
+                        break
                     end
                 end
             end
@@ -150,9 +173,19 @@ function loci.connect(host, port, player_name, base_path)
 
         -- 2. Fallback: try loading compiled .pb descriptor file
         if not schema_loaded then
-            local ok, res = pcall(function() return pb.loadfile(loci._base_path .. "game_packets.pb") end)
-            if ok and res then
-                schema_loaded = true
+            local candidate_pb_paths = {
+                loci._base_path and (loci._base_path .. "game_packets.pb"),
+                "sdks/love2d/lib/game_packets.pb",
+                "../../sdks/love2d/lib/game_packets.pb",
+                "lib/game_packets.pb",
+                "game_packets.pb",
+            }
+            for _, path in ipairs(candidate_pb_paths) do
+                local ok, res = pcall(function() return pb.loadfile(path) end)
+                if ok and res then
+                    schema_loaded = true
+                    break
+                end
             end
         end
 
