@@ -1,7 +1,8 @@
 -- Love2D Client Example for loci2d using loci_client.lua SDK
 -- Supports both Player Mode and Spectator Mode (Free Cam & Entity Follow)
 
-package.path = package.path .. ";../../sdks/love2d/?.lua"
+package.path = package.path .. ";../../sdks/love2d/?.lua;../../sdks/love2d/lib/?.lua;sdks/love2d/?.lua;sdks/love2d/lib/?.lua;./?.lua;./lib/?.lua"
+package.cpath = package.cpath .. ";../../sdks/love2d/lib/?.so;../../sdks/love2d/?.so;sdks/love2d/lib/?.so;sdks/love2d/?.so;./?.so;./lib/?.so"
 local loci = require("loci_client")
 
 local last_status = "Connecting to server..."
@@ -29,6 +30,7 @@ local function get_cam_pos()
 end
 
 function love.load(args)
+    math.randomseed(os.time())
     -- Check CLI args for spectator flag
     local raw_args = args or arg or {}
     for _, v in ipairs(raw_args) do
@@ -38,7 +40,8 @@ function love.load(args)
         end
     end
 
-    local client_name = is_spectator_cli and "Spectator" or "Love2DPlayer"
+    local random_suffix = tostring(math.random(100, 999))
+    local client_name = is_spectator_cli and ("Spectator_" .. random_suffix) or ("Love2DPlayer_" .. random_suffix)
     love.window.setTitle(is_spectator_cli and "loci2d - Spectator Mode" or "loci2d - Love2D Client SDK Example")
     love.window.setMode(800, 600, { resizable = true })
 
@@ -110,15 +113,16 @@ function update_movement()
 end
 
 function love.keypressed(key)
-    if key == "x" or key == "k" then
-        -- Explicit stop movement
-        last_sent_dx, last_sent_dy = 0, 0
-        loci.send_move(0, 0)
-    elseif key == "r" or key == "space" then
-        -- Reset spectator camera
-        if not loci.get_my_entity() then
+    if is_spectator_cli then
+        if key == "r" or key == "space" then
             following_entity_id = nil
             spec_cam_x, spec_cam_y = 0, 0
+        end
+    else
+        if key == "x" or key == "k" then
+            -- Explicit stop movement
+            last_sent_dx, last_sent_dy = 0, 0
+            loci.send_move(0, 0)
         end
     end
 end
@@ -128,8 +132,6 @@ function love.keyreleased(key)
 end
 
 function love.mousepressed(x, y, button)
-    local my_entity = loci.get_my_entity()
-    local cam_x, cam_y = get_cam_pos()
     local center_x = love.graphics.getWidth() / 2
     local center_y = love.graphics.getHeight() / 2
 
@@ -138,17 +140,9 @@ function love.mousepressed(x, y, button)
         return
     end
 
-    if my_entity then
-        local world_x = my_entity.x + (x - center_x) / 10
-        local world_y = my_entity.y + (y - center_y) / 10
-
-        if button == 1 then
-            loci.send_action(1, world_x, world_y)
-        elseif button == 2 then
-            loci.send_action(2, world_x, world_y)
-        end
-    else
+    if is_spectator_cli then
         -- Spectator interactions: Click to follow entity, or Drag to pan camera
+        local cam_x, cam_y = get_cam_pos()
         local clicked_world_x = cam_x + (x - center_x) / 10
         local clicked_world_y = cam_y + (y - center_y) / 10
 
@@ -174,6 +168,18 @@ function love.mousepressed(x, y, button)
             is_dragging = true
             drag_last_x, drag_last_y = x, y
         end
+    else
+        local my_entity = loci.get_my_entity()
+        if my_entity then
+            local world_x = my_entity.x + (x - center_x) / 10
+            local world_y = my_entity.y + (y - center_y) / 10
+
+            if button == 1 then
+                loci.send_action(1, world_x, world_y)
+            elseif button == 2 then
+                loci.send_action(2, world_x, world_y)
+            end
+        end
     end
 end
 
@@ -196,13 +202,7 @@ function love.update(dt)
     -- Process network packets and update state
     loci.update(dt)
 
-    local my_entity = loci.get_my_entity()
-    local is_spectating = is_spectator_cli or (my_entity == nil)
-
-    if my_entity then
-        -- Process robust input polling for player entity
-        update_movement()
-    else
+    if is_spectator_cli then
         -- Spectator mode free camera & follow logic
         local kdx, kdy = get_held_direction()
         if kdx ~= 0 or kdy ~= 0 then
@@ -220,6 +220,12 @@ function love.update(dt)
             else
                 following_entity_id = nil
             end
+        end
+    else
+        local my_entity = loci.get_my_entity()
+        if my_entity then
+            -- Process robust input polling for player entity
+            update_movement()
         end
     end
 
@@ -254,7 +260,7 @@ function love.draw()
     local center_y = love.graphics.getHeight() / 2
 
     local my_entity = loci.get_my_entity()
-    local is_spectating = is_spectator_cli or (my_entity == nil)
+    local is_spectating = is_spectator_cli
     local cam_x, cam_y = get_cam_pos()
 
     -- Draw origin crosshair / grid center relative to camera
@@ -410,7 +416,11 @@ function love.draw()
 
         -- Player entity info
         love.graphics.setColor(0.4, 0.9, 1.0)
-        love.graphics.print(string.format("Player Entity: %s (id=%d)", my_entity.blueprint or loci._player_name, my_entity.id or 0), 20, 72)
+        if my_entity then
+            love.graphics.print(string.format("Player Entity: %s (id=%d)", my_entity.blueprint or loci._player_name, my_entity.id or 0), 20, 72)
+        else
+            love.graphics.print("Player Entity: Connecting / Waiting for spawn...", 20, 72)
+        end
     end
 
     love.graphics.setColor(0.4, 0.9, 1.0)
