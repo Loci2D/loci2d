@@ -111,6 +111,7 @@ local loci = {
     _schema_loaded = false,
     _sequence_id = 0,
     _last_heartbeat_time = 0,
+    _last_join_attempt_time = 0,
     _player_name = nil,
     _base_path = "lib/",
     _entities_list_cache = nil,
@@ -333,9 +334,19 @@ function loci.update(dt)
     end
 
     local now = socket.gettime()
-    if now - loci._last_heartbeat_time >= 2.0 then
-        loci._last_heartbeat_time = now
-        loci._send_intent({ ping = {} })
+
+    -- If we haven't been acknowledged yet (server not up / join lost), resend JoinIntent every 2s
+    if loci.my_entity_id == nil and loci._player_name then
+        if now - loci._last_join_attempt_time >= 2.0 then
+            loci._last_join_attempt_time = now
+            loci._send_intent({ join = { player_name = loci._player_name, schema_version = loci.SCHEMA_VERSION } })
+        end
+    else
+        -- Normal heartbeat ping once connected
+        if now - loci._last_heartbeat_time >= 2.0 then
+            loci._last_heartbeat_time = now
+            loci._send_intent({ ping = {} })
+        end
     end
 
     while true do
