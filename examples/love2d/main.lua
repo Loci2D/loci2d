@@ -30,7 +30,6 @@ local function get_cam_pos()
 end
 
 function love.load(args)
-    math.randomseed(os.time())
     -- Check CLI args for spectator flag
     local raw_args = args or arg or {}
     for _, v in ipairs(raw_args) do
@@ -40,7 +39,7 @@ function love.load(args)
         end
     end
 
-    local random_suffix = tostring(math.random(100, 999))
+    local random_suffix = tostring(love.math and love.math.random(1000, 9999) or math.random(1000, 9999))
     local client_name = is_spectator_cli and ("Spectator_" .. random_suffix) or ("Love2DPlayer_" .. random_suffix)
     love.window.setTitle(is_spectator_cli and "loci2d - Spectator Mode" or "loci2d - Love2D Client SDK Example")
     love.window.setMode(800, 600, { resizable = true })
