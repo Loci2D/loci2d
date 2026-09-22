@@ -51,17 +51,112 @@ sequenceDiagram
 
 ---
 
+## 🛠️ Prerequisites & Installation
+
+When setting up the project on a **new machine**, ensure the following tools are installed:
+
+### 1. Required Tools
+- **C Compiler & Build Tools**: Required to compile C dependencies (e.g., Lua 5.4 via `mlua`).
+- **Rust (Cargo)**: Version **1.85+** (loci2d uses the Rust 2024 edition).
+- **LÖVE (Love2D)**: Required to run the primary client example (`examples/love2d`).
+
+### 2. OS-Specific Installation Commands
+
+#### 🐧 Linux (Ubuntu / Debian / Pop!_OS)
+```bash
+# 1. Install C compiler, pkg-config, and Love2D
+sudo apt update
+sudo apt install -y build-essential pkg-config love
+
+# 2. Install Rust via rustup (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+
+# 3. Ensure Rust is up to date
+rustup update stable
+```
+
+#### 🐧 Linux (Arch Linux / Manjaro)
+```bash
+sudo pacman -S base-devel pkgconf love rustup
+rustup default stable
+```
+
+#### 🐧 Linux (Fedora / RHEL)
+```bash
+sudo dnf install -y gcc gcc-c++ make pkg-config love
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+#### 🍏 macOS
+```bash
+# 1. Apple build tools
+xcode-select --install
+
+# 2. Install Love2D via Homebrew
+brew install --cask love
+
+# 3. Install Rust via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+#### 🪟 Windows
+1. **Rust**: Download and run the installer from [rustup.rs](https://rustup.rs/) (select Visual Studio C++ Build Tools during setup).
+2. **Love2D**: Download the installer from [love2d.org](https://love2d.org/) or install via terminal: `winget install LOVE.LOVE`. Ensure the `love` executable is in your PATH.
+
+---
+
+### 🔍 Quick Environment Check
+Run the verification script to check if your machine has all required dependencies:
+```bash
+./tools/setup_environment.sh
+```
+
+---
+
+## 🚀 How to Run the Project
+
+The primary development workflow runs the **Rust server** alongside the **Love2D client**:
+
+### Method 1: Step-by-Step (2 Terminals)
+
+#### Terminal 1 — Start the Server
+```bash
+cargo run
+```
+*The server binds to UDP port `127.0.0.1:8080`.*
+
+#### Terminal 2 — Start the Love2D Client
+```bash
+love examples/love2d
+```
+*The Love2D client will launch and connect to the local server.*
+
+---
+
+### Method 2: Single Command Script (Linux/macOS)
+To launch both the server and the Love2D client together:
+```bash
+./tools/run_dev.sh
+```
+
+---
+
 ## Multi-Language Client Examples
 
 Cross-language client integration examples are available in the [`examples/`](examples/) directory:
 
+- **[Love2D Example (Primary)](examples/love2d/README.md)**: Love2D Lua client using `lua-protobuf` rendering 2D multi-entity movement and spectator mode in real time.
 - **[Python Example](examples/python/README.md)**: Python UDP client using standard `protobuf` decoding real-time `WorldState` snapshots.
-- **[Love2D Example](examples/love2d/README.md)**: Love2D Lua client using `lua-protobuf` rendering 2D multi-entity movement in real time.
 - **[Godot Example](examples/godot/README.md)**: Godot 4 GDScript example using `PacketPeerUDP` and GDScript Protobuf for spatial synchronization.
 
 ---
 
-## Quickstart & Testing (Rust Server & CLI Client)
+## Quickstart with Rust CLI Client
+
+If you want to test via the command line without launching the graphical client:
 
 ### 1. Start the Server
 ```bash
