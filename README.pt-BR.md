@@ -51,17 +51,112 @@ sequenceDiagram
 
 ---
 
+## 🛠️ Pré-requisitos e Instalação
+
+Ao clonar o projeto em uma **máquina nova**, certifique-se de ter os pré-requisitos instalados:
+
+### 1. Ferramentas Necessárias
+- **Compilador C / Ferramentas de Build**: Necessário para compilar as dependências de C (ex: Lua 5.4 pelo `mlua`).
+- **Rust (Cargo)**: Versão **1.85+** (o projeto utiliza a edição Rust 2024).
+- **LÖVE (Love2D)**: Necessário para rodar o cliente gráfico de exemplo (`examples/love2d`).
+
+### 2. Comandos de Instalação por Sistema Operacional
+
+#### 🐧 Linux (Ubuntu / Debian / Pop!_OS)
+```bash
+# 1. Instalar compilador C, pkg-config e Love2D
+sudo apt update
+sudo apt install -y build-essential pkg-config love
+
+# 2. Instalar Rust via rustup (caso não tenha instalado)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+
+# 3. Garantir Rust atualizado
+rustup update stable
+```
+
+#### 🐧 Linux (Arch Linux / Manjaro)
+```bash
+sudo pacman -S base-devel pkgconf love rustup
+rustup default stable
+```
+
+#### 🐧 Linux (Fedora / RHEL)
+```bash
+sudo dnf install -y gcc gcc-c++ make pkg-config love
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+#### 🍏 macOS
+```bash
+# 1. Ferramentas de compilação da Apple
+xcode-select --install
+
+# 2. Instalar Love2D via Homebrew
+brew install --cask love
+
+# 3. Instalar Rust via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+#### 🪟 Windows
+1. **Rust**: Baixe e execute o instalador em [rustup.rs](https://rustup.rs/) (selecione C++ Build Tools do Visual Studio durante a instalação).
+2. **Love2D**: Baixe o instalador em [love2d.org](https://love2d.org/) ou instale via terminal: `winget install LOVE.LOVE`. Certifique-se de que o executável `love` está no seu PATH.
+
+---
+
+### 🔍 Verificação Rápida do Ambiente
+Você pode rodar o script utilitário para checar se todas as dependências estão prontas:
+```bash
+./tools/setup_environment.sh
+```
+
+---
+
+## 🚀 Como Rodar o Projeto
+
+O fluxo padrão de desenvolvimento consiste em rodar o **servidor Rust** e o **cliente Love2D**:
+
+### Método 1: Passo a Passo (2 Terminais)
+
+#### Terminal 1 — Iniciar o Servidor
+```bash
+cargo run
+```
+*O servidor iniciará e escutará conexões UDP na porta `127.0.0.1:8080`.*
+
+#### Terminal 2 — Iniciar o Cliente Love2D
+```bash
+love examples/love2d
+```
+*A janela do Love2D abrirá conectando-se automaticamente ao servidor local.*
+
+---
+
+### Método 2: Script Único (Linux/macOS)
+Para iniciar o servidor e abrir o cliente Love2D automaticamente com um único comando:
+```bash
+./tools/run_dev.sh
+```
+
+---
+
 ## Exemplos de Clientes em Várias Linguagens
 
 Exemplos de integração de clientes em diferentes linguagens estão disponíveis no diretório [`examples/`](examples/):
 
+- **[Exemplo em Love2D (Principal)](examples/love2d/README.md)**: Cliente em Lua para Love2D utilizando `lua-protobuf` renderizando movimentação 2D, estados e modo espectador em tempo real.
 - **[Exemplo em Python](examples/python/README.md)**: Cliente UDP em Python utilizando a biblioteca padrão `protobuf` decodificando snapshots de `WorldState` em tempo real.
-- **[Exemplo em Love2D](examples/love2d/README.md)**: Cliente em Lua para Love2D utilizando `lua-protobuf` renderizando movimentação 2D de múltiplas entidades em tempo real.
 - **[Exemplo em Godot](examples/godot/README.md)**: Exemplo em GDScript para Godot 4 utilizando `PacketPeerUDP` e GDScript Protobuf para sincronização espacial.
 
 ---
 
-## Início Rápido e Testes (Servidor Rust & Cliente CLI)
+## Início Rápido com Cliente CLI em Rust
+
+Caso queira testar via linha de comando sem abrir o cliente gráfico:
 
 ### 1. Iniciar o Servidor
 ```bash

@@ -2,10 +2,35 @@
 
 This example demonstrates how a **LÖVE2D / Lua** game client can communicate with the `loci2d` authoritative server using `lua-protobuf` (`pb`) and LuaSocket (`socket`).
 
-## Prerequisites
+## Prerequisites & Installation
 
-1. **Love2D**: Installed on your system ([love2d.org](https://love2d.org/)).
-2. **lua-protobuf**: A C-module for Lua providing Protobuf encoding/decoding (`pb.lua` / `pb.so` / `pb.dll`).
+### 1. Install Love2D (LÖVE)
+- **Ubuntu / Debian / Pop!_OS**:
+  ```bash
+  sudo apt update && sudo apt install -y love
+  ```
+- **Arch Linux**:
+  ```bash
+  sudo pacman -S love
+  ```
+- **Fedora**:
+  ```bash
+  sudo dnf install -y love
+  ```
+- **macOS**:
+  ```bash
+  brew install --cask love
+  ```
+- **Windows**:
+  Download from [love2d.org](https://love2d.org/) or install with:
+  ```powershell
+  winget install LOVE.LOVE
+  ```
+
+### 2. Protobuf Library (`lua-protobuf`)
+The dynamic proto compiler `protoc.lua` and schemas are located in `sdks/love2d/lib/`. For binary Protobuf serialization, ensure `lua-protobuf` is installed (e.g. `luarocks install lua-protobuf`) or place `pb.so` (Linux) / `pb.dll` (Windows) in `lib/`.
+
+---
 
 ## Project Structure
 
