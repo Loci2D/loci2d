@@ -153,13 +153,21 @@
 
         <div class="card">
             <span class="step-badge">Passo 1</span>
-            <h2>Instalação</h2>
+            <h2>Instalação & Estrutura de Arquivos</h2>
             <p>Para usar o SDK no seu projeto, você precisa copiar os arquivos do SDK para dentro da pasta do seu jogo Love2D.</p>
             <ol>
-                <li>Crie uma pasta chamada <code>sdks/love2d</code> (ou algo similar) dentro do seu projeto.</li>
+                <li>Crie uma pasta chamada <code>sdks/love2d</code> (ou mantenha a estrutura padrão) dentro do seu projeto.</li>
                 <li>Copie o arquivo <code>loci_client.lua</code> e a pasta <code>lib/</code> para dentro dela.</li>
-                <li>A pasta <code>lib/</code> deve conter os arquivos <code>pb.lua</code>, <code>protoc.lua</code> e <code>game_packets.proto</code>.</li>
+                <li>A pasta <code>lib/</code> contém os arquivos essenciais de protocolo e deserialização:
+                    <ul>
+                        <li><code>game_packets.proto</code>: Definição original dos pacotes e esquemas do Loci2D.</li>
+                        <li><code>game_packets.pb</code>: Descritor binário pré-compilado para carregamento imediato sem overhead de compilação.</li>
+                        <li><code>protoc.lua</code>: Parser puro em Lua que permite compilar schemas <code>.proto</code> em tempo de execução sem dependências C externas.</li>
+                    </ul>
+                </li>
             </ol>
+            <p><strong>Dica de Validação:</strong> Para ter certeza de que o ambiente Lua e o SDK estão funcionando perfeitamente na sua máquina, execute no terminal:</p>
+            <pre><code>lua sdks/love2d/test_sdk.lua</code></pre>
         </div>
 
         <div class="card">
