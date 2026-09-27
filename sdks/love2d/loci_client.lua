@@ -305,33 +305,37 @@ function loci.update(dt)
     if not loci._udp then return end
 
     -- Interpolation
+    local SERVER_TICK_RATE = 30.0
     for _, entity in pairs(loci.entities) do
+        local vx_sec = (entity.vx or 0) * SERVER_TICK_RATE
+        local vy_sec = (entity.vy or 0) * SERVER_TICK_RATE
+
         if entity.server_x and entity.server_y then
-            -- Predict theoretical server position
-            entity.server_x = entity.server_x + entity.vx * dt
-            entity.server_y = entity.server_y + entity.vy * dt
+            -- Predict theoretical server position using server tick rate
+            entity.server_x = entity.server_x + vx_sec * dt
+            entity.server_y = entity.server_y + vy_sec * dt
             
             local dx = entity.server_x - entity.x
             local dy = entity.server_y - entity.y
             local dist2 = dx * dx + dy * dy
             
-            if dist2 > 4.0 then
-                -- Strict snap (Rubberbanding > 2.0 units)
+            if dist2 > 2500.0 then
+                -- Strict snap (Rubberbanding > 50 units)
                 entity.x = entity.server_x
                 entity.y = entity.server_y
-            elseif dist2 > 0.001 then
-                -- Soft lerp
-                entity.x = entity.x + dx * 10.0 * dt
-                entity.y = entity.y + dy * 10.0 * dt
+            elseif dist2 > 0.01 then
+                -- Soft lerp smoothly tracking predicted position
+                entity.x = entity.x + dx * math.min(1.0, 15.0 * dt)
+                entity.y = entity.y + dy * math.min(1.0, 15.0 * dt)
             else
                 -- Just move with velocity
-                entity.x = entity.x + entity.vx * dt
-                entity.y = entity.y + entity.vy * dt
+                entity.x = entity.x + vx_sec * dt
+                entity.y = entity.y + vy_sec * dt
             end
         else
             -- No server pos yet, just use vx/vy
-            entity.x = entity.x + entity.vx * dt
-            entity.y = entity.y + entity.vy * dt
+            entity.x = entity.x + vx_sec * dt
+            entity.y = entity.y + vy_sec * dt
         end
     end
 
