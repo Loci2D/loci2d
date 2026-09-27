@@ -82,11 +82,6 @@ jobs:
             binary_name: loci2d
             asset_prefix: loci2d-macos-arm64
             archive_name: loci2d-macos-arm64.tar.gz
-          - os: macos-13
-            target: x86_64-apple-darwin
-            binary_name: loci2d
-            asset_prefix: loci2d-macos-x86_64
-            archive_name: loci2d-macos-x86_64.tar.gz
 
     runs-on: ${{ matrix.os }}
     steps:
