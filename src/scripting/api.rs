@@ -365,6 +365,10 @@ where
             let direction = extract_vector2(dir_val)?;
             let max_distance = fixed::types::I16F16::from_num(max_dist_val);
             
+            // Note: Loci.Physics.raycast queries only static solid obstacles (walls).
+            // It does not detect dynamic entities. Use get_entities_in_radius for entity queries.
+            // Also note: the `direction` vector is normalized internally by the engine before casting.
+
             // Call the deterministic raycast from the physics engine
             if let Some(hit) = crate::world::physics::collision::fixed_raycast(
                 origin, 
