@@ -59,6 +59,9 @@ pub fn compute_canonical_state_hash(instance: &Instance, tick: u64) -> [u8; 32] 
         let type_id = entity.entity_type.as_u8();
         hasher.update([type_id]);
 
+        hasher.update(entity.collision_filter.layer.to_be_bytes());
+        hasher.update(entity.collision_filter.mask.to_be_bytes());
+
         // Hash navigation component
         if let Some(nav) = &entity.navigation {
             hasher.update([1]);

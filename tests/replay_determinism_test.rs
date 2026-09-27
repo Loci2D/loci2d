@@ -145,7 +145,7 @@ fn test_1000_tick_multi_player_replay_determinism() {
     // If floating-point non-determinism leaks in, this will fail on one of the runners.
     assert_eq!(
         report.final_hash,
-        "56a0962085ffbce7af4d1a91a11f208ff77e98cace527bad14afc1abaacb7802",
+        "c1d08042eee6cfe3683a9ff4da2d34e5c8ce41340af351f3a63f0276c412d107",
         "Cross-architecture determinism compromised!"
     );
 }

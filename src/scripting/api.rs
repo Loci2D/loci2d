@@ -345,7 +345,51 @@ where
         })?;
         commands_table.set("start_timer", start_timer)?;
 
+        let cmd_buf_col_filter = Rc::clone(&cmd_buffer_rc);
+        let set_collision_filter = scope.create_function(move |_, (id, layer, mask): (u64, u16, u16)| {
+            cmd_buf_col_filter.borrow_mut().push(Command::SetCollisionFilter {
+                entity_id: id,
+                layer,
+                mask,
+            });
+            Ok(())
+        })?;
+        commands_table.set("set_collision_filter", set_collision_filter)?;
+
         loci_table.set("Commands", commands_table)?;
+
+        let physics_table = lua.create_table()?;
+
+        let raycast_fn = scope.create_function(|lua, (origin_val, dir_val, max_dist_val): (mlua::Value, mlua::Value, f64)| {
+            let origin = extract_vector2(origin_val)?;
+            let direction = extract_vector2(dir_val)?;
+            let max_distance = fixed::types::I16F16::from_num(max_dist_val);
+            
+            // Note: Loci.Physics.raycast queries only static solid obstacles (walls).
+            // It does not detect dynamic entities. Use get_entities_in_radius for entity queries.
+            // Also note: the `direction` vector is normalized internally by the engine before casting.
+
+            // Call the deterministic raycast from the physics engine
+            if let Some(hit) = crate::world::physics::collision::fixed_raycast(
+                origin, 
+                direction, 
+                max_distance, 
+                &instance.static_obstacles
+            ) {
+                let hit_table = lua.create_table()?;
+                hit_table.set("fraction", hit.fraction.to_num::<f64>())?;
+                hit_table.set("obstacle_id", hit.obstacle_id)?;
+                hit_table.set("point_x", hit.point.x.to_num::<f64>())?;
+                hit_table.set("point_y", hit.point.y.to_num::<f64>())?;
+                hit_table.set("normal_x", hit.normal.x.to_num::<f64>())?;
+                hit_table.set("normal_y", hit.normal.y.to_num::<f64>())?;
+                Ok(Some(hit_table))
+            } else {
+                Ok(None)
+            }
+        })?;
+        physics_table.set("raycast", raycast_fn)?;
+        loci_table.set("Physics", physics_table)?;
 
         // Execute the user's closure
         f()

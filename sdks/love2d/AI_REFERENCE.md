@@ -48,3 +48,7 @@ When asked to implement a game feature:
 1. Put all visual/audio logic inside the event callbacks (e.g., play attack sound in `on_action_cast`).
 2. Map Love2D inputs (`love.keypressed`, `love.mousepressed`) directly to `loci.send_move` and `loci.send_action`.
 3. Read game state directly from `loci.get_entities()` inside `love.draw` to render the game. Do not maintain a separate list of game objects.
+
+### 6. Server-side scripting tips
+- **Dash ability:** To implement a dash ability that passes through enemies but stops at walls, the server script should use `Loci.Physics.raycast` to find walls and `Loci.Commands.set_collision_filter` to temporarily ignore entities. Always remember to restore the original collision filter!
+

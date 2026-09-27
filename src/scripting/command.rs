@@ -54,6 +54,11 @@ pub enum Command {
         timer_id: String,
         remaining_ticks: u32,
     },
+    SetCollisionFilter {
+        entity_id: u64,
+        layer: u16,
+        mask: u16,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -209,6 +214,14 @@ impl CommandBuffer {
                             remaining_ticks,
                         },
                     );
+                }
+                Command::SetCollisionFilter { entity_id, layer, mask } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        entity.collision_filter = crate::world::physics::map::CollisionFilter::new(layer, mask);
+                        if instance.logging_enabled {
+                            println!("[CommandBuffer] SetCollisionFilter entity={} layer={} mask={}", entity_id, layer, mask);
+                        }
+                    }
                 }
             }
         }
