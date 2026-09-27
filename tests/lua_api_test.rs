@@ -366,3 +366,76 @@ fn test_lifecycle_rejection_rollback() {
     assert!(instance.sessions.get(&addr).is_none());
     assert_eq!(instance.entities.len(), 0);
 }
+
+#[test]
+fn test_dash_ability_with_raycast_and_collision_filter() {
+    use loci2d::world::physics::map::StaticObstacle;
+    use loci2d::world::physics::primitives::{DeterministicAABB, ColliderShape};
+    let mut instance = Instance::new(1, 30, 10, 42);
+
+    // Add solid wall from x=10 to x=15, y=-10 to y=10
+    let wall = StaticObstacle::solid_wall(
+        100,
+        ColliderShape::AABB(DeterministicAABB::new(
+            DeterministicVector2::new(I16F16::from_num(10), I16F16::from_num(-10)),
+            DeterministicVector2::new(I16F16::from_num(15), I16F16::from_num(10)),
+        )),
+    );
+    instance.add_static_obstacle(wall);
+
+    let script = r#"
+        function on_dash(entity_id, dir_x, dir_y, dash_dist)
+            local pos = Loci.get_entity_position(entity_id)
+            if not pos then return end
+            
+            -- Temporarily become intangible to enemies (e.g. layer 1, mask 0 to ignore others)
+            Loci.Commands.set_collision_filter(entity_id, 1, 0)
+            
+            local origin = pos
+            local dir = Loci.Vector2(dir_x, dir_y)
+            
+            local hit = Loci.Physics.raycast(origin, dir, dash_dist)
+            local final_dist = dash_dist
+            
+            if hit then
+                -- Wall in the way, dash only up to the wall, minus a small margin
+                -- The fraction is between 0 and 1
+                final_dist = dash_dist * hit.fraction - 0.1
+                if final_dist < 0 then final_dist = 0 end
+            end
+            
+            local final_pos = origin + Loci.Vector2(dir_x * final_dist, dir_y * final_dist)
+            Loci.Commands.set_position(entity_id, final_pos)
+        end
+    "#;
+    instance.script_engine.load_script(script).unwrap();
+
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let entity_id = instance.handle_join(addr, "Dasher".to_string());
+    
+    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+        entity.position = DeterministicVector2::ZERO;
+        entity.collision_filter = loci2d::world::physics::map::CollisionFilter::new(1, 1);
+    }
+
+    let globals = instance.script_engine.lua().globals();
+    let on_dash_fn: mlua::Function = globals.get("on_dash").unwrap();
+
+    // Dash towards the wall: distance 20, dir (1, 0)
+    // Wall is at x=10, distance to wall is 10.
+    let mut cmd_buffer = CommandBuffer::new();
+    with_scoped_api(instance.script_engine.lua(), &instance, &mut cmd_buffer, || {
+        on_dash_fn.call::<()>((entity_id, 1.0, 0.0, 20.0))
+    }).unwrap();
+
+    cmd_buffer.flush_and_apply(&mut instance);
+
+    let entity = instance.get_entity(entity_id).unwrap();
+    
+    // Check position: It should be near the wall (e.g. 10 - 0.1 = 9.9)
+    assert!(entity.position.x > I16F16::from_num(9.0) && entity.position.x < I16F16::from_num(10.0));
+    
+    // Check collision filter: Layer 1, Mask 0
+    assert_eq!(entity.collision_filter.layer, 1);
+    assert_eq!(entity.collision_filter.mask, 0);
+}
