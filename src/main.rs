@@ -27,6 +27,8 @@ fn print_help() {
     println!(
         "  --broadcast <ADDR>           Spectator UDP broadcast destination (e.g. 127.0.0.1:4000)"
     );
+    println!("  --scripts-dir <DIR>          Base directory containing map scripts (default: scripts)");
+    println!("  --script-path <FILE>         Explicit path to authoritative Lua script (overrides --scripts-dir and --map)");
     println!("  --help, -h                   Show this help message");
 }
 
@@ -70,6 +72,8 @@ fn main() {
     let mut map_name = "default_arena".to_string();
     let mut replay_speed = 1.0f32;
     let mut broadcast_addr: Option<String> = None;
+    let mut custom_scripts_dir: Option<String> = None;
+    let mut custom_script_path: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -163,6 +167,24 @@ fn main() {
                     process::exit(1);
                 }
             }
+            "--scripts-dir" => {
+                if i + 1 < args.len() {
+                    custom_scripts_dir = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    eprintln!("Error: --scripts-dir requires a directory path");
+                    process::exit(1);
+                }
+            }
+            "--script-path" => {
+                if i + 1 < args.len() {
+                    custom_script_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    eprintln!("Error: --script-path requires a file path");
+                    process::exit(1);
+                }
+            }
             "--help" | "-h" => {
                 print_help();
                 return;
@@ -214,7 +236,14 @@ fn main() {
                 60,
                 header.random_seed,
             );
-            let script_path = format!("scripts/{}/main.lua", header.map_name);
+            let mut verify_cfg = ServerConfig::from_env();
+            if let Some(ref dir) = custom_scripts_dir {
+                verify_cfg.scripts_dir = dir.clone();
+            }
+            if let Some(ref path) = custom_script_path {
+                verify_cfg.script_path = Some(path.clone());
+            }
+            let script_path = verify_cfg.resolve_script_path(&header.map_name);
             if let Ok(script_content) = std::fs::read_to_string(&script_path) {
                 println!(
                     "[Verify] Loading local script from '{}' for hash verification",
@@ -299,10 +328,16 @@ fn main() {
     }
 
     // 3. Standard Authoritative Server Mode (with optional live match recording)
-    let cfg = ServerConfig::from_env();
+    let mut cfg = ServerConfig::from_env();
+    if let Some(dir) = custom_scripts_dir {
+        cfg.scripts_dir = dir;
+    }
+    if let Some(path) = custom_script_path {
+        cfg.script_path = Some(path);
+    }
     println!(
-        "[Config] bind_addr={} tick_rate={} Hz client_timeout={}s",
-        cfg.bind_addr, cfg.tick_rate, cfg.client_timeout_secs
+        "[Config] bind_addr={} tick_rate={} Hz client_timeout={}s scripts_dir='{}'",
+        cfg.bind_addr, cfg.tick_rate, cfg.client_timeout_secs, cfg.scripts_dir
     );
 
     let socket = UdpSocket::bind(&cfg.bind_addr).expect("Failed to bind UDP socket");
@@ -320,7 +355,7 @@ fn main() {
 
     let (script_hash, script_payload) = {
         let mut temp_instance = Instance::new(1, tick_rate, client_timeout_secs, seed);
-        let script_path = format!("scripts/{}/main.lua", map_name);
+        let script_path = cfg.resolve_script_path(&map_name);
         if let Ok(script_content) = std::fs::read_to_string(&script_path) {
             println!("[Script] Loading script from '{}'", script_path);
             if let Err(e) = temp_instance.load_script(&script_content) {
@@ -375,10 +410,11 @@ fn main() {
 
     let map_name_clone = map_name.clone();
     let loop_socket = Arc::clone(&socket);
+    let loop_cfg = cfg.clone();
     let loop_thread = thread::spawn(move || {
         let mut instance = Instance::new(1, tick_rate, client_timeout_secs, seed);
         instance.logging_enabled = true;
-        let script_path = format!("scripts/{}/main.lua", map_name_clone);
+        let script_path = loop_cfg.resolve_script_path(&map_name_clone);
         if let Ok(script_content) = std::fs::read_to_string(&script_path) {
             let _ = instance.load_script(&script_content);
         }

@@ -227,3 +227,41 @@ cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --sp
 # 5. Fast-Forward Replay Broadcast (2x or 4x speed)
 cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 2.0
 ```
+
+---
+
+## Server Configuration & CLI Options
+
+`loci2d` can be configured via environment variables (or a `.env` file) and command-line arguments:
+
+### Environment Variables (`.env`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `BIND_ADDR` | `127.0.0.1:8080` | UDP host and port to bind the authoritative server |
+| `TICK_RATE` | `30` | Simulation tick frequency in Hz |
+| `CLIENT_TIMEOUT_SECS` | `10` | Inactivity threshold before dropping disconnected clients |
+| `MAX_SPECTATORS` | `128` | Maximum concurrent spectators allowed |
+| `SCRIPTS_DIR` | `scripts` | Base directory containing Lua map rule scripts |
+| `SCRIPT_PATH` | *(none)* | Explicit path to an authoritative script (overrides `SCRIPTS_DIR` and `--map`) |
+| `MAP_NAME` | `default_arena` | Name of the map subdirectory to load |
+
+### Command-Line Arguments
+
+```bash
+loci2d [OPTIONS]
+
+OPTIONS:
+  --scripts-dir <DIR>          Base directory containing map scripts (default: scripts)
+  --script-path <FILE>         Explicit path to authoritative Lua script (overrides --scripts-dir and --map)
+  --map <NAME>                 Map arena identifier (default: default_arena)
+  --record <FILE>              Enable live match recording to a .loci file
+  --replay <FILE>              Load and execute a .loci replay file
+  --verify                     Run headless deterministic replay verification
+  --checkpoint-interval <N>    Checkpoint frequency in ticks (default: 60)
+  --seed <N>                   Random PRNG seed for match instance (default: 42)
+  --speed <FLOAT>              Replay playback speed multiplier (default: 1.0)
+  --broadcast <ADDR>           Spectator UDP broadcast destination (e.g. 127.0.0.1:4000)
+  --help, -h                   Show this help message
+```
+
