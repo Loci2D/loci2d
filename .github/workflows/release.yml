@@ -1,0 +1,168 @@
+name: Release & Binary Distribution
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even if tag already exists'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    name: Check Version & Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      tag: ${{ steps.get_version.outputs.tag }}
+      should_release: ${{ steps.check_release.outputs.should_release }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Determine Version and Tag
+        id: get_version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          else
+            VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+            TAG="v${VERSION}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION} (tag: ${TAG})"
+
+      - name: Check Existing Release
+        id: check_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.get_version.outputs.tag }}
+        run: |
+          if [[ "${{ github.event.inputs.force_release }}" == "true" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Force release requested via workflow_dispatch."
+          elif gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $TAG already exists on GitHub."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release $TAG does not exist yet. Proceeding with build."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-binaries:
+    name: Build (${{ matrix.asset_prefix }})
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: loci2d
+            asset_prefix: loci2d-linux-x86_64
+            archive_name: loci2d-linux-x86_64.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_name: loci2d.exe
+            asset_prefix: loci2d-windows-x86_64
+            archive_name: loci2d-windows-x86_64.zip
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary_name: loci2d
+            asset_prefix: loci2d-macos-arm64
+            archive_name: loci2d-macos-arm64.tar.gz
+          - os: macos-13
+            target: x86_64-apple-darwin
+            binary_name: loci2d
+            asset_prefix: loci2d-macos-x86_64
+            archive_name: loci2d-macos-x86_64.tar.gz
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build Release Binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package Unix Binaries
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p dist
+          # 1. Standalone raw binary
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.asset_prefix }}"
+          chmod +x "dist/${{ matrix.asset_prefix }}"
+          # 2. Archive bundle with docs and configs
+          tar -czf "dist/${{ matrix.archive_name }}" \
+            -C "target/${{ matrix.target }}/release" "${{ matrix.binary_name }}" \
+            -C "$PWD" README.md LICENSE .env.example
+
+      - name: Package Windows Binaries
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p dist
+          # 1. Standalone raw executable
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.asset_prefix }}.exe"
+          # 2. Archive bundle with docs and configs
+          7z a "dist/${{ matrix.archive_name }}" \
+            "./target/${{ matrix.target }}/release/${{ matrix.binary_name }}" \
+            README.md LICENSE .env.example
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_prefix }}
+          path: dist/*
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [check-version, build-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Built Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate Checksums
+        working-directory: release-assets
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create or Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+        run: |
+          echo "Publishing release for tag: $TAG"
+          gh release create "$TAG" release-assets/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Loci2D ${TAG}" \
+            --generate-notes || \
+          gh release upload "$TAG" release-assets/* \
+            --repo "${{ github.repository }}" \
+            --clobber

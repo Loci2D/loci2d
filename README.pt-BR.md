@@ -227,3 +227,41 @@ cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --sp
 # 5. Transmissão Acelerada de Replay (velocidade 2x ou 4x)
 cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 2.0
 ```
+
+---
+
+## Configuração do Servidor & Opções de CLI
+
+O `loci2d` pode ser configurado através de variáveis de ambiente (ou arquivo `.env`) e argumentos de linha de comando:
+
+### Variáveis de Ambiente (`.env`)
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `BIND_ADDR` | `127.0.0.1:8080` | IP e porta UDP de escuta do servidor autoritativo |
+| `TICK_RATE` | `30` | Frequência de simulação em Hz |
+| `CLIENT_TIMEOUT_SECS` | `10` | Limite de inatividade antes de desconectar clientes |
+| `MAX_SPECTATORS` | `128` | Limite máximo de espectadores simultâneos |
+| `SCRIPTS_DIR` | `scripts` | Diretório base dos scripts Lua de regras de arena |
+| `SCRIPT_PATH` | *(nenhum)* | Caminho direto para o script Lua autoritativo (sobrescreve `SCRIPTS_DIR` e `--map`) |
+| `MAP_NAME` | `default_arena` | Identificador do mapa/subpasta a ser carregado |
+
+### Argumentos de Linha de Comando
+
+```bash
+loci2d [OPÇÕES]
+
+OPÇÕES:
+  --scripts-dir <DIR>          Diretório base contendo os scripts de mapas (padrão: scripts)
+  --script-path <ARQUIVO>      Caminho explícito para o script Lua (sobrescreve --scripts-dir e --map)
+  --map <NOME>                 Identificador do mapa da arena (padrão: default_arena)
+  --record <ARQUIVO>           Habilita gravação de partida ao vivo para um arquivo .loci
+  --replay <ARQUIVO>           Carrega e executa um arquivo de replay .loci
+  --verify                     Executa verificação determinística headless
+  --checkpoint-interval <N>    Frequência de checkpoints em ticks (padrão: 60)
+  --seed <N>                   Seed PRNG aleatória para a instância (padrão: 42)
+  --speed <FLOAT>              Multiplicador de velocidade de reprodução do replay (padrão: 1.0)
+  --broadcast <ADDR>           Destino de transmissão UDP para espectadores (ex: 127.0.0.1:4000)
+  --help, -h                   Exibe esta mensagem de ajuda
+```
+
