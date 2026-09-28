@@ -48,6 +48,46 @@ local static_obstacles = {
     { type = "aabb", min = { x = 5, y = 15 }, max = { x = 10, y = 20 } },
 }
 
+
+
+-- DASH
+
+local DASH_DISTANCE = 25.0
+local DASH_COOLDOWN = 30 -- ticks (~1 segundo a 30-60Hz)
+local current_tick = 0
+local dash_cooldowns = {}
+
+function on_tick(tick)
+    current_tick = tick
+end
+
+function on_action(entity_id, ability_id, dir_x, dir_y)
+    if ability_id == 2 then
+        local cooldown_end = dash_cooldowns[entity_id] or 0
+        if current_tick < cooldown_end then
+            return false, "Dash em cooldown"
+        end
+
+        -- dir_x e dir_y já chegam normalizados do SDK Love2D
+        local len_sq = dir_x * dir_x + dir_y * dir_y
+        if len_sq > 0.01 then
+            local pos = Loci.get_entity_position(entity_id)
+            if pos then
+                local px, py = pos:x_float(), pos:y_float()
+                local new_x = px + dir_x * DASH_DISTANCE
+                local new_y = py + dir_y * DASH_DISTANCE
+
+                Loci.Commands.set_position(entity_id, { x = new_x, y = new_y })
+                dash_cooldowns[entity_id] = current_tick + DASH_COOLDOWN
+                return true
+            end
+        end
+        return false, "Direção inválida para dash"
+    end
+    return false, "Habilidade desconhecida"
+end
+
+
 -- ============================================================
 -- Colisão de skills (projéteis somem ao bater em qualquer coisa)
 -- ============================================================
@@ -672,6 +712,22 @@ function love.draw()
         love.graphics.circle("fill", pos_x, pos_y, 16)
         love.graphics.setColor(1, 1, 1)
         love.graphics.circle("line", pos_x, pos_y, 16)
+        
+        -- Visual effect for Slow (blue tint around player)
+        if entity.properties and entity.properties.status_slow == "true" then
+            love.graphics.setColor(0.3, 0.6, 1.0, 0.4)
+            love.graphics.circle("fill", pos_x, pos_y, 20)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.circle("line", pos_x, pos_y, 20)
+        end
+        
+        -- Visual effect for Dash (yellow tint around player)
+        if entity.properties and entity.properties.dash_active == "true" then
+            love.graphics.setColor(1.0, 0.8, 0.2, 0.5)
+            love.graphics.circle("fill", pos_x, pos_y, 22)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.circle("line", pos_x, pos_y, 22)
+        end
 
         -- Highlight followed target in spectator mode
         if is_spectating and following_entity_id == entity.id then
@@ -836,3 +892,5 @@ end
 function love.quit()
     loci.disconnect("Client closing")
 end
+
+

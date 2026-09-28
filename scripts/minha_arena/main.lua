@@ -13,6 +13,16 @@ local HIT_RADIUS = 5.0  -- Aumentado para 5.0 para detectar colisão melhor em t
 -- Configurações de movimento
 local PLAYER_SPEED = 5.0
 
+-- Configurações de dash
+local DASH_DISTANCE = 25.0  -- Distância do dash
+local DASH_COOLDOWN = 30  -- ticks (~1 segundo)
+local dash_cooldowns_list = {}  -- Lista de cooldowns {entity_id, end_tick}
+
+-- Configurações de slow
+local SLOW_FACTOR = 0.5  -- 50% da velocidade normal
+local SLOW_DURATION = 30  -- ticks (~1 segundo)
+local slow_active_list = {}  -- Lista de slows ativos {entity_id, end_tick}
+
 -- Configurações de colisão
 local SOLID_WALL = 1
 local PLAYER = 2
@@ -32,6 +42,13 @@ local function apply_damage(entity_id, damage)
     local current_hp = Loci.get_entity_property(entity_id, "hp") or 100
     local new_hp = current_hp - damage
     Loci.Commands.set_property(entity_id, "hp", tostring(new_hp))
+    
+    -- Aplicar slow quando recebe dano
+    slow_active_list[#slow_active_list + 1] = {
+        entity_id = entity_id,
+        end_tick = current_tick + SLOW_DURATION
+    }
+    Loci.Commands.set_property(entity_id, "status_slow", "true")
     
     if new_hp <= 0 then
         Loci.Commands.destroy_entity(entity_id)
@@ -148,6 +165,15 @@ end
 
 -- Callback quando o jogador tenta se mover
 function on_move_intent(entity_id, dir_x, dir_y)
+    -- Verificar se está em slow
+    local speed = PLAYER_SPEED
+    for _, slow in ipairs(slow_active_list) do
+        if slow.entity_id == entity_id then
+            speed = speed * SLOW_FACTOR
+            break
+        end
+    end
+    
     -- Rastreia a última direção de movimento
     if dir_x ~= 0 or dir_y ~= 0 then
         last_move_directions[entity_id] = {x = dir_x, y = dir_y}
@@ -224,6 +250,35 @@ function on_action(entity_id, ability_id, aim_x, aim_y)
                 }
             end
         end
+    elseif ability_id == 3 then
+        -- Dash
+        local cooldown_end = 0
+        for _, cd in ipairs(dash_cooldowns_list) do
+            if cd.entity_id == entity_id then
+                cooldown_end = cd.end_tick
+                break
+            end
+        end
+        
+        if current_tick >= cooldown_end then
+            local pos = Loci.get_entity_position(entity_id)
+            if pos then
+                local px, py = pos:x_float(), pos:y_float()
+                
+                -- dir_x e dir_y já chegam normalizados do SDK Love2D
+                local len_sq = dir_x * dir_x + dir_y * dir_y
+                if len_sq > 0.01 then
+                    local new_x = px + dir_x * DASH_DISTANCE
+                    local new_y = py + dir_y * DASH_DISTANCE
+                    Loci.Commands.set_position(entity_id, {x = new_x, y = new_y})
+                    dash_cooldowns_list[#dash_cooldowns_list + 1] = {
+                        entity_id = entity_id,
+                        end_tick = current_tick + DASH_COOLDOWN
+                    }
+                    Loci.Commands.set_property(entity_id, "dash_active", "true")
+                end
+            end
+        end
     end
     
     return true
@@ -237,6 +292,30 @@ end
 -- Tick loop
 function on_tick(tick)
     current_tick = tick
+    
+    -- Gerenciar slow ativo
+    local active_slow = {}
+    for _, slow in ipairs(slow_active_list) do
+        if tick >= slow.end_tick then
+            -- Slow terminou, restaurar velocidade normal
+            Loci.Commands.set_property(slow.entity_id, "status_slow", "false")
+        else
+            active_slow[#active_slow + 1] = slow
+        end
+    end
+    slow_active_list = active_slow
+    
+    -- Gerenciar cooldowns de dash
+    local active_dash_cd = {}
+    for _, cd in ipairs(dash_cooldowns_list) do
+        if tick >= cd.end_tick then
+            -- Cooldown terminou
+        else
+            active_dash_cd[#active_dash_cd + 1] = cd
+        end
+    end
+    dash_cooldowns_list = active_dash_cd
+    
     if #fireballs == 0 then
         return
     end
