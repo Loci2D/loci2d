@@ -487,6 +487,12 @@ function love.keypressed(key)
             -- Explicit stop movement
             last_sent_dx, last_sent_dy = 0, 0
             loci.send_move(0, 0)
+        elseif key == "e" then
+            -- Ativar escudo (ability 4)
+            local my_entity = loci.get_my_entity()
+            if my_entity then
+                loci.send_action(4, my_entity.x, my_entity.y)
+            end
         end
     end
 end
@@ -727,6 +733,15 @@ function love.draw()
             love.graphics.circle("fill", pos_x, pos_y, 22)
             love.graphics.setColor(1, 1, 1)
             love.graphics.circle("line", pos_x, pos_y, 22)
+        end
+        
+        -- Visual effect for Shield (cyan tint around player)
+        if entity.properties and entity.properties.shield_active == "true" then
+            love.graphics.setColor(0.2, 0.8, 0.9, 0.5)
+            love.graphics.circle("fill", pos_x, pos_y, 24)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.circle("line", pos_x, pos_y, 24)
+            love.graphics.circle("line", pos_x, pos_y, 28)  -- Segundo anel para escudo
         end
 
         -- Highlight followed target in spectator mode
