@@ -99,6 +99,7 @@ loci = {
     my_entity_id = nil,
     match_state = "running",
     match_winner = "",
+    server_tick_rate = tonumber(os.getenv and (os.getenv("LOCI_TICK_RATE") or os.getenv("TICK_RATE"))) or 30.0,
 
     -- Callbacks
     on_entity_spawned = function(entity) end,
@@ -114,14 +115,30 @@ loci = {
     _sequence_id = 0,
     _last_heartbeat_time = 0,
     _last_join_attempt_time = 0,
+    _last_state_tick = nil,
+    _last_state_timestamp = nil,
     _player_name = nil,
     _base_path = "lib/",
     _entities_list_cache = nil,
 }
 
-function loci.connect(host, port, player_name, base_path)
+function loci.get_server_tick_rate()
+    return loci.server_tick_rate or 30.0
+end
+
+function loci.set_server_tick_rate(rate)
+    local r = tonumber(rate)
+    if r and r > 0 then
+        loci.server_tick_rate = r
+    end
+end
+
+function loci.connect(host, port, player_name, base_path, tick_rate)
     if base_path then
         loci._base_path = base_path
+    end
+    if tick_rate and tonumber(tick_rate) and tonumber(tick_rate) > 0 then
+        loci.server_tick_rate = tonumber(tick_rate)
     end
 
     loci._udp = socket.udp()
@@ -305,33 +322,37 @@ function loci.update(dt)
     if not loci._udp then return end
 
     -- Interpolation
+    local tick_rate = loci.server_tick_rate or 30.0
     for _, entity in pairs(loci.entities) do
+        local vx_sec = (entity.vx or 0) * tick_rate
+        local vy_sec = (entity.vy or 0) * tick_rate
+
         if entity.server_x and entity.server_y then
-            -- Predict theoretical server position
-            entity.server_x = entity.server_x + entity.vx * dt
-            entity.server_y = entity.server_y + entity.vy * dt
+            -- Predict theoretical server position using server tick rate
+            entity.server_x = entity.server_x + vx_sec * dt
+            entity.server_y = entity.server_y + vy_sec * dt
             
             local dx = entity.server_x - entity.x
             local dy = entity.server_y - entity.y
             local dist2 = dx * dx + dy * dy
             
-            if dist2 > 4.0 then
-                -- Strict snap (Rubberbanding > 2.0 units)
+            if dist2 > 2500.0 then
+                -- Strict snap (Rubberbanding > 50 units)
                 entity.x = entity.server_x
                 entity.y = entity.server_y
-            elseif dist2 > 0.001 then
-                -- Soft lerp
-                entity.x = entity.x + dx * 10.0 * dt
-                entity.y = entity.y + dy * 10.0 * dt
+            elseif dist2 > 0.01 then
+                -- Soft lerp smoothly tracking predicted position
+                entity.x = entity.x + dx * math.min(1.0, 15.0 * dt)
+                entity.y = entity.y + dy * math.min(1.0, 15.0 * dt)
             else
                 -- Just move with velocity
-                entity.x = entity.x + entity.vx * dt
-                entity.y = entity.y + entity.vy * dt
+                entity.x = entity.x + vx_sec * dt
+                entity.y = entity.y + vy_sec * dt
             end
         else
             -- No server pos yet, just use vx/vy
-            entity.x = entity.x + entity.vx * dt
-            entity.y = entity.y + entity.vy * dt
+            entity.x = entity.x + vx_sec * dt
+            entity.y = entity.y + vy_sec * dt
         end
     end
 
@@ -379,6 +400,27 @@ function loci._handle_world_state(state)
         for _, prop in ipairs(state.globals) do
             loci.globals[prop.key] = cast_property_value(prop.value)
         end
+        -- Auto-detect server tick rate if published in globals
+        local pub_rate = tonumber(loci.globals["tick_rate"] or loci.globals["server_tick_rate"])
+        if pub_rate and pub_rate > 0 then
+            loci.server_tick_rate = pub_rate
+        end
+    end
+
+    -- Auto-detect server tick rate from authoritative timestamp and tick delta
+    if state.tick and state.timestamp and state.tick > 0 and state.timestamp > 0 then
+        if loci._last_state_tick and loci._last_state_timestamp then
+            local dticks = state.tick - loci._last_state_tick
+            local dtime = state.timestamp - loci._last_state_timestamp
+            if dticks > 0 and dtime > 0 then
+                local estimated_rate = math.floor((dticks * 1000.0 / dtime) + 0.5)
+                if estimated_rate >= 10 and estimated_rate <= 240 then
+                    loci.server_tick_rate = estimated_rate
+                end
+            end
+        end
+        loci._last_state_tick = state.tick
+        loci._last_state_timestamp = state.timestamp
     end
 
     -- Match state synchronization
