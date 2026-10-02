@@ -4,11 +4,12 @@
 package.path = package.path .. ";../../sdks/love2d/?.lua;../../sdks/love2d/lib/?.lua;sdks/love2d/?.lua;sdks/love2d/lib/?.lua;./?.lua;./lib/?.lua"
 package.cpath = package.cpath .. ";../../sdks/love2d/lib/?.so;../../sdks/love2d/?.so;sdks/love2d/lib/?.so;sdks/love2d/lib/?.so;./?.so;./lib/?.so"
 local loci = require("loci_client")
+local anim8 = require("anim8")
 
 local last_status = "Connecting to server..."
 local rejection_msg = ""
 local rejection_timer = 0
-local server_ip = "127.0.0.1"
+local server_ip = "192.168.0.2"
 local server_port = 8080
 
 local visual_fx = {}
@@ -47,6 +48,94 @@ local static_obstacles = {
     { type = "aabb", min = { x = -10, y = 15 }, max = { x = -5, y = 20 } },
     { type = "aabb", min = { x = 5, y = 15 }, max = { x = 10, y = 20 } },
 }
+
+-- ===== Sprite / Animação =====
+local SPRITE_FRAME_W, SPRITE_FRAME_H = 48, 48
+local SPRITE_SCALE = 6
+local knight_img
+local knight_grid
+local anim_templates
+
+-- Fireball spritesheet
+local FIREBALL_FRAME_W, FIREBALL_FRAME_H = 13, 9
+local FIREBALL_FRAME_COUNT = 7
+local FIREBALL_FRAME_DURATION = 0.05
+local FIREBALL_SCALE = 3
+local fireball_img
+local fireball_grid
+local fireball_anim_template
+
+-- Estado de animação por entidade
+local entity_anims = {}
+local MOVE_EPSILON = 0.05
+
+local function get_entity_kind(entity)
+    if entity.blueprint == "fireball" then
+        return "fireball"
+    end
+    if entity.properties and entity.properties["kind"] == "fireball" then
+        return "fireball"
+    end
+    return "player"
+end
+
+local function make_entity_anim(kind)
+    if kind == "fireball" then
+        return {
+            kind = "fireball",
+            anim = fireball_anim_template:clone(),
+            rotation = 0,
+            prev_x = nil,
+            prev_y = nil,
+        }
+    end
+    return {
+        kind = "player",
+        anim = anim_templates.idle:clone(),
+        state = "idle",
+        facing = 1,
+        prev_x = nil,
+        prev_y = nil,
+    }
+end
+
+local function update_entity_anim(id, entity, dt)
+    local kind = get_entity_kind(entity)
+    local state = entity_anims[id]
+    if not state or state.kind ~= kind then
+        state = make_entity_anim(kind)
+        state.prev_x, state.prev_y = entity.x, entity.y
+        entity_anims[id] = state
+    end
+
+    local dx = entity.x - (state.prev_x or entity.x)
+    local dy = entity.y - (state.prev_y or entity.y)
+    state.prev_x, state.prev_y = entity.x, entity.y
+
+    if kind == "fireball" then
+        if (dx * dx + dy * dy) > (MOVE_EPSILON * MOVE_EPSILON) then
+            state.rotation = math.atan2(dy, dx) - math.pi
+        end
+        state.anim:update(dt)
+        return
+    end
+
+    if dx > MOVE_EPSILON then
+        state.facing = 1
+    elseif dx < -MOVE_EPSILON then
+        state.facing = -1
+    end
+
+    local moved = (dx * dx + dy * dy) > (MOVE_EPSILON * MOVE_EPSILON)
+    local target_state = moved and "walk" or "idle"
+
+    if target_state ~= state.state then
+        state.state = target_state
+        state.anim = anim_templates[target_state]:clone()
+    end
+
+    state.anim:update(dt)
+end
 
 
 
@@ -369,6 +458,20 @@ function love.load(args)
     local client_name = is_spectator_cli and ("Spectator_" .. random_suffix) or ("Love2DPlayer_" .. random_suffix)
     love.window.setTitle(is_spectator_cli and "loci2d - Spectator Mode" or "loci2d - Love2D Client SDK Example")
     love.window.setMode(800, 600, { resizable = true })
+    love.graphics.setDefaultFilter("nearest", "nearest")
+
+    -- Carrega sprites Knight
+    knight_img = love.graphics.newImage("assets/KnightMCAnimationsSHEET.png")
+    knight_grid = anim8.newGrid(SPRITE_FRAME_W, SPRITE_FRAME_H, knight_img:getWidth(), knight_img:getHeight())
+    anim_templates = {
+        idle = anim8.newAnimation(knight_grid("1-8", 1), 0.15),
+        walk = anim8.newAnimation(knight_grid("1-8", 4), 0.08),
+    }
+
+    -- Carrega spritesheet fireball
+    fireball_img = love.graphics.newImage("assets/fireball.png")
+    fireball_grid = anim8.newGrid(FIREBALL_FRAME_W, FIREBALL_FRAME_H, fireball_img:getWidth(), fireball_img:getHeight())
+    fireball_anim_template = anim8.newAnimation(fireball_grid("1-" .. FIREBALL_FRAME_COUNT, 1), FIREBALL_FRAME_DURATION)
 
     -- Connect to the loci2d server
     loci.connect(server_ip, server_port, client_name, "../../sdks/love2d/lib/")
@@ -378,10 +481,13 @@ function love.load(args)
     -- (verbose per-event prints removed — they were flooding stdout every
     --  network tick and tanking the framerate; keep only real error logs)
     loci.on_entity_spawned = function(entity)
+        entity_anims[entity.id] = make_entity_anim(get_entity_kind(entity))
+        entity_anims[entity.id].prev_x, entity_anims[entity.id].prev_y = entity.x, entity.y
     end
 
     loci.on_entity_despawned = function(entity_id)
         projectile_state[entity_id] = nil
+        entity_anims[entity_id] = nil
         if not is_spectator_cli and loci.my_entity_id == entity_id then
             respawn_timer = RESPAWN_DELAY
             respawn_attempts = 0
@@ -573,6 +679,20 @@ function love.update(dt)
     loci.update(dt)
     update_projectiles(dt)
 
+    -- Atualiza animações das entidades
+    local current_entities = loci.get_entities()
+    local alive_ids = {}
+    for _, entity in ipairs(current_entities) do
+        alive_ids[entity.id] = true
+        update_entity_anim(entity.id, entity, dt)
+    end
+    -- Limpa animações de entidades que sumiram
+    for id in pairs(entity_anims) do
+        if not alive_ids[id] then
+            entity_anims[id] = nil
+        end
+    end
+
     if is_spectator_cli then
         -- Spectator mode free camera & follow logic
         local kdx, kdy = get_held_direction()
@@ -696,75 +816,82 @@ function love.draw()
         local pos_x = center_x + (entity.x - cam_x) * 10
         local pos_y = center_y + (entity.y - cam_y) * 10
 
-        -- Render fireballs as green glowing circles
-        if is_projectile(entity) then
-            draw_fireball(entity, pos_x, pos_y, cam_x, cam_y, center_x, center_y)
+        local st = entity_anims[entity.id]
+        local is_fireball = st ~= nil and st.kind == "fireball"
+
+        if is_fireball then
+            -- Render fireball with sprite animation
+            love.graphics.setColor(1, 1, 1)
+            st.anim:draw(fireball_img, pos_x, pos_y, st.rotation, FIREBALL_SCALE, FIREBALL_SCALE,
+                FIREBALL_FRAME_W / 2, FIREBALL_FRAME_H / 2)
         else
-            -- Direct typed property access (Phase 6.5.3-1)
+            -- Render player with sprite animation
             local team = entity.team
-        if team == 1 or team == "1" then
-            love.graphics.setColor(0.8, 0.3, 0.3) -- Team 1 Red
-        elseif team == 2 or team == "2" then
-            love.graphics.setColor(0.3, 0.3, 0.8) -- Team 2 Blue
-        else
-            love.graphics.setColor(0.3, 0.8, 0.4) -- Default Green
-        end
+            if team == 1 or team == "1" then
+                love.graphics.setColor(1, 0.75, 0.75) -- Team 1 Red tint
+            elseif team == 2 or team == "2" then
+                love.graphics.setColor(0.75, 0.75, 1) -- Team 2 Blue tint
+            else
+                love.graphics.setColor(1, 1, 1)
+            end
 
-        if entity:is_local_player() then
-            love.graphics.setColor(0.3, 0.6, 1.0) -- Local Player Blue
-        end
+            if entity:is_local_player() then
+                love.graphics.setColor(0.75, 0.9, 1) -- Local Player tint
+            end
 
-        -- Draw Entity avatar
-        love.graphics.circle("fill", pos_x, pos_y, 16)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.circle("line", pos_x, pos_y, 16)
-        
-        -- Visual effect for Slow (blue tint around player)
-        if entity.properties and entity.properties.status_slow == "true" then
-            love.graphics.setColor(0.3, 0.6, 1.0, 0.4)
-            love.graphics.circle("fill", pos_x, pos_y, 20)
+            -- Draw Knight sprite (idle/walk, facing left/right)
+            if st then
+                local sx = SPRITE_SCALE * st.facing
+                st.anim:draw(knight_img, pos_x, pos_y, 0, sx, SPRITE_SCALE, SPRITE_FRAME_W / 2, SPRITE_FRAME_H / 2)
+            end
             love.graphics.setColor(1, 1, 1)
-            love.graphics.circle("line", pos_x, pos_y, 20)
-        end
-        
-        -- Visual effect for Dash (yellow tint around player)
-        if entity.properties and entity.properties.dash_active == "true" then
-            love.graphics.setColor(1.0, 0.8, 0.2, 0.5)
-            love.graphics.circle("fill", pos_x, pos_y, 22)
+
+            -- Visual effect for Slow (blue tint around player)
+            if entity.properties and entity.properties.status_slow == "true" then
+                love.graphics.setColor(0.3, 0.6, 1.0, 0.4)
+                love.graphics.circle("fill", pos_x, pos_y, 20)
+                love.graphics.setColor(1, 1, 1)
+                love.graphics.circle("line", pos_x, pos_y, 20)
+            end
+
+            -- Visual effect for Dash (yellow tint around player)
+            if entity.properties and entity.properties.dash_active == "true" then
+                love.graphics.setColor(1.0, 0.8, 0.2, 0.5)
+                love.graphics.circle("fill", pos_x, pos_y, 22)
+                love.graphics.setColor(1, 1, 1)
+                love.graphics.circle("line", pos_x, pos_y, 22)
+            end
+
+            -- Visual effect for Shield (cyan tint around player)
+            if entity.properties and entity.properties.shield_active == "true" then
+                love.graphics.setColor(0.2, 0.8, 0.9, 0.5)
+                love.graphics.circle("fill", pos_x, pos_y, 24)
+                love.graphics.setColor(1, 1, 1)
+                love.graphics.circle("line", pos_x, pos_y, 24)
+                love.graphics.circle("line", pos_x, pos_y, 28)
+            end
+
+            -- Highlight followed target in spectator mode
+            if is_spectating and following_entity_id == entity.id then
+                love.graphics.setColor(1, 0.85, 0.2, 0.85)
+                love.graphics.circle("line", pos_x, pos_y, 22)
+                love.graphics.print("[Target]", pos_x - 22, pos_y + 20)
+            end
+
+            -- Draw Entity label
+            local label = string.format("%s (id=%d)", entity.blueprint or "Entity", entity.id or 0)
+            local font = love.graphics.getFont()
+            local text_width = font:getWidth(label)
             love.graphics.setColor(1, 1, 1)
-            love.graphics.circle("line", pos_x, pos_y, 22)
-        end
-        
-        -- Visual effect for Shield (cyan tint around player)
-        if entity.properties and entity.properties.shield_active == "true" then
-            love.graphics.setColor(0.2, 0.8, 0.9, 0.5)
-            love.graphics.circle("fill", pos_x, pos_y, 24)
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.circle("line", pos_x, pos_y, 24)
-            love.graphics.circle("line", pos_x, pos_y, 28)  -- Segundo anel para escudo
-        end
+            love.graphics.print(label, pos_x - text_width / 2, pos_y - 32)
 
-        -- Highlight followed target in spectator mode
-        if is_spectating and following_entity_id == entity.id then
-            love.graphics.setColor(1, 0.85, 0.2, 0.85)
-            love.graphics.circle("line", pos_x, pos_y, 22)
-            love.graphics.print("[Target]", pos_x - 22, pos_y + 20)
+            -- Draw HP if it exists
+            local hp = entity.hp
+            if hp and (not is_spectating or following_entity_id ~= entity.id) then
+                love.graphics.setColor(1, 0.2, 0.2)
+                love.graphics.print("HP: " .. tostring(hp), pos_x - 20, pos_y + 20)
+            end
         end
-
-        -- Draw Entity label
-        local label = string.format("%s (id=%d)", entity.blueprint or "Entity", entity.id or 0)
-        local font = love.graphics.getFont()
-        local text_width = font:getWidth(label)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.print(label, pos_x - text_width / 2, pos_y - 32)
-
-        -- Draw HP if it exists (using direct typed property access)
-        local hp = entity.hp
-        if hp and (not is_spectating or following_entity_id ~= entity.id) then
-            love.graphics.setColor(1, 0.2, 0.2)
-            love.graphics.print("HP: " .. tostring(hp), pos_x - 20, pos_y + 20)
-        end
-        end  -- End of non-fireball rendering
     end
 
     -- Explosões de impacto das skills
