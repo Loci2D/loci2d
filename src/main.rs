@@ -244,13 +244,13 @@ fn main() {
                 verify_cfg.script_path = Some(path.clone());
             }
             let script_path = verify_cfg.resolve_script_path(&header.map_name);
-            if let Ok(script_content) = std::fs::read_to_string(&script_path) {
+            if std::path::Path::new(&script_path).exists() || std::path::Path::new(&script_path).parent().unwrap_or(std::path::Path::new("")).exists() {
                 println!(
-                    "[Verify] Loading local script from '{}' for hash verification",
+                    "[Verify] Loading local script bundle from '{}' for hash verification",
                     script_path
                 );
-                if let Err(e) = instance.load_script(&script_content) {
-                    eprintln!("[Verify] Failed to load script: {}", e);
+                if let Err(e) = instance.load_script_from_file(&script_path) {
+                    eprintln!("[Verify] Failed to load script bundle: {}", e);
                     process::exit(1);
                 }
             }
@@ -356,10 +356,10 @@ fn main() {
     let (script_hash, script_payload) = {
         let mut temp_instance = Instance::new(1, tick_rate, client_timeout_secs, seed);
         let script_path = cfg.resolve_script_path(&map_name);
-        if let Ok(script_content) = std::fs::read_to_string(&script_path) {
-            println!("[Script] Loading script from '{}'", script_path);
-            if let Err(e) = temp_instance.load_script(&script_content) {
-                eprintln!("[Script] Failed to load script: {}", e);
+        if std::path::Path::new(&script_path).exists() || std::path::Path::new(&script_path).parent().unwrap_or(std::path::Path::new("")).exists() {
+            println!("[Script] Loading script from '{}' (and bundling directory)", script_path);
+            if let Err(e) = temp_instance.load_script_from_file(&script_path) {
+                eprintln!("[Script] Failed to load script bundle: {}", e);
                 process::exit(1);
             }
             println!(
@@ -415,8 +415,8 @@ fn main() {
         let mut instance = Instance::new(1, tick_rate, client_timeout_secs, seed);
         instance.logging_enabled = true;
         let script_path = loop_cfg.resolve_script_path(&map_name_clone);
-        if let Ok(script_content) = std::fs::read_to_string(&script_path) {
-            let _ = instance.load_script(&script_content);
+        if std::path::Path::new(&script_path).exists() || std::path::Path::new(&script_path).parent().unwrap_or(std::path::Path::new("")).exists() {
+            let _ = instance.load_script_from_file(&script_path);
         }
         game_loop.start(instance, intent_rx, loop_socket);
     });

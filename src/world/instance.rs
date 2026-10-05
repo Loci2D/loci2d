@@ -126,11 +126,50 @@ impl Instance {
     }
 
     /// Evaluates a Lua script file from the specified path inside the instance's script engine.
+    /// It recursively bundles all `.lua` files in the parent directory of `path` (the map directory)
+    /// into a JSON Virtual Filesystem (VFS) to support multi-file modules and replay self-containment.
     pub fn load_script_from_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
         let path_ref = path.as_ref();
-        let content = std::fs::read_to_string(path_ref)
-            .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?;
-        self.load_script(&content)
+        
+        // The path is usually `scripts/map_name/main.lua`. We want the map directory.
+        let map_dir = path_ref.parent().unwrap_or(Path::new(""));
+        
+        let mut vfs = std::collections::HashMap::new();
+        
+        // Fallback if map_dir is empty or doesn't exist
+        if !map_dir.exists() || !map_dir.is_dir() {
+            let content = std::fs::read_to_string(path_ref)
+                .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?;
+            return self.load_script(&content);
+        }
+
+        // Helper closure to crawl directories
+        fn crawl_dir(dir: &Path, base_dir: &Path, vfs: &mut std::collections::HashMap<String, String>) -> Result<(), String> {
+            let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+            for entry in entries {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let path = entry.path();
+                if path.is_dir() {
+                    crawl_dir(&path, base_dir, vfs)?;
+                } else if path.extension().and_then(|s| s.to_str()) == Some("lua") {
+                    let relative = path.strip_prefix(base_dir).map_err(|e| e.to_string())?;
+                    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+                    // Convert backslashes to forward slashes for cross-platform consistency
+                    let relative_str = relative.to_string_lossy().replace("\\", "/");
+                    vfs.insert(relative_str, content);
+                }
+            }
+            Ok(())
+        }
+
+        crawl_dir(map_dir, map_dir, &mut vfs)?;
+
+        if !vfs.contains_key("main.lua") {
+            return Err(format!("'main.lua' not found in map directory '{}'", map_dir.display()));
+        }
+
+        let bundle_payload = serde_json::to_string(&vfs).map_err(|e| e.to_string())?;
+        self.load_script(&bundle_payload)
     }
 
     /// Handles an incoming client intent and returns an optional replay entry for match logging.
