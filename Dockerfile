@@ -1,5 +1,5 @@
 # Dockerfile para loci2d server
-FROM rust:nightly-bookworm
+FROM rust:latest
 
 WORKDIR /app
 
