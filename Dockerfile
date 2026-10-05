@@ -1,5 +1,5 @@
 # Dockerfile para loci2d server
-FROM rust:1.75-bookworm
+FROM rust:1.83-bookworm
 
 WORKDIR /app
 
