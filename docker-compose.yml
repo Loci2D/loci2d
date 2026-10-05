@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  loci2d-server:
+    build: .
+    container_name: loci2d-server
+    ports:
+      - "8080:8080/udp"
+      - "8080:8080/tcp"
+    environment:
+      - BIND_ADDR=0.0.0.0:8080
+      - TICK_RATE=30
+      - CLIENT_TIMEOUT_SECS=100
+      - MAX_SPECTATORS=5
+    restart: unless-stopped
