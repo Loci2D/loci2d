@@ -21,6 +21,7 @@ The template will be hosted at `examples/lua-template/` and should follow a modu
 
 ```text
 examples/lua-template/
+├── docker-compose.yml # Containerized engine runner (Zero-install DX)
 ├── main.lua          # Entry point. Receives engine hooks and delegates them.
 ├── src/
 │   ├── config.lua    # Global properties, map info, and initial setups.
@@ -31,7 +32,23 @@ examples/lua-template/
 
 * **Rationale:** A modular structure keeps files small, isolated, and easy to maintain. `main.lua` becomes merely a router for the engine callbacks.
 
-### 2.2 Best Practices Documented (Inline Comments)
+### 2.2 Developer Experience (DX): Docker Compose (Zero-Install)
+
+To eliminate the need for students to install the Rust toolchain (`cargo`, `rustc`) to test their games, the template will include a `docker-compose.yml` file. This mounts the local directory into the pre-compiled engine container:
+
+```yaml
+services:
+  server:
+    image: loci2d/engine:latest
+    ports:
+      - "8000:8000/udp"
+    volumes:
+      - ./:/game
+    command: ["--scripts-dir", "/game"]
+```
+* **Rationale:** This drastically lowers the barrier to entry. Students just need Docker installed, and they can run `docker compose up` to boot the authoritative server with their Lua scripts immediately.
+
+### 2.3 Best Practices Documented (Inline Comments)
 
 The code within these files must serve as living documentation. Crucial topics to cover via inline comments:
 
@@ -81,6 +98,6 @@ Demonstrates reading the `dir_x` and `dir_y` vector from an `ActionIntent`, norm
 
 ## 4. Verification
 
-1. **Run as Example:** Verify that running `cargo run -- --scripts-dir examples/lua-template/` boots the server without errors.
+1. **Run as Example:** Verify that running `docker compose up` (or `cargo run`) boots the server with the template scripts without errors.
 2. **Replay Validation:** Join with a client, perform actions (move, cast skills), disconnect, and ensure the resulting `.loci` file replays perfectly with matching checksums.
 3. **Module Resolution:** Ensure that all nested `require("src.module")` calls successfully resolve via the VFS without triggering sandbox path traversal errors.
