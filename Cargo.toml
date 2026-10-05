@@ -9,6 +9,7 @@ authors = ["Luiz André Furlan"]
 [dependencies]
 chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 prost = "0.13"
 dotenvy = "0.15"
 fixed = { version = "1.28", features = ["serde"] }
