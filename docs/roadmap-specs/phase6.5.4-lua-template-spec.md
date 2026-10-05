@@ -48,7 +48,11 @@ services:
 ```
 * **Rationale:** This drastically lowers the barrier to entry. Students just need Docker installed, and they can run `docker compose up` to boot the authoritative server with their Lua scripts immediately.
 
-### 2.3 Best Practices Documented (Inline Comments)
+### 2.3 Documentation Portal & Ecosystem Separation
+
+As the Loci2D project expands into an ecosystem (Engine + Arena MVP + Client SDKs), the comprehensive documentation will be extracted into a dedicated repository (e.g., `loci2d-docs`). This portal will use a static site generator (like VitePress or Docusaurus) to host the exhaustive Lua API Reference, Client SDK setup guides, and a case study of the `loci-arena` MVP. The `lua-template` described in this spec will serve as the official foundational boilerplate that the documentation portal references in its quickstarts.
+
+### 2.4 Best Practices Documented (Inline Comments)
 
 The code within these files must serve as living documentation. Crucial topics to cover via inline comments:
 
