@@ -9,7 +9,7 @@ local anim8 = require("anim8")
 local last_status = "Connecting to server..."
 local rejection_msg = ""
 local rejection_timer = 0
-local server_ip = "192.168.0.2"
+local server_ip = "127.0.0.1"
 local server_port = 8080
 
 local visual_fx = {}
@@ -540,6 +540,7 @@ function get_held_direction()
 end
 
 local last_sent_dx, last_sent_dy = 0, 0
+local last_facing_dx, last_facing_dy = 1, 0  -- Última direção que o jogador estava olhando
 
 function update_movement()
     local dx, dy = get_held_direction()
@@ -547,7 +548,57 @@ function update_movement()
         last_sent_dx = dx
         last_sent_dy = dy
         loci.send_move(dx, dy)
+        -- Atualiza última direção que o jogador está olhando
+        if dx ~= 0 or dy ~= 0 then
+            local len = math.sqrt(dx * dx + dy * dy)
+            last_facing_dx = dx / len
+            last_facing_dy = dy / len
+        end
     end
+end
+
+-- Função para encontrar o inimigo mais próximo dentro de um raio
+local function find_nearest_enemy(my_entity, max_range)
+    local nearest = nil
+    local nearest_dist_sq = max_range * max_range
+
+    for _, entity in ipairs(loci.get_entities()) do
+        -- Ignorar: si mesmo, projéteis, entidades mortas
+        if entity.id ~= my_entity.id and
+           not is_projectile(entity) and
+           not (entity.properties and entity.properties.is_dead == "true") then
+            -- Verificar se é inimigo (time diferente)
+            if entity.team ~= my_entity.team then
+                local dx = entity.x - my_entity.x
+                local dy = entity.y - my_entity.y
+                local dist_sq = dx * dx + dy * dy
+                if dist_sq < nearest_dist_sq then
+                    nearest_dist_sq = dist_sq
+                    nearest = entity
+                end
+            end
+        end
+    end
+
+    return nearest
+end
+
+-- Função para obter direção de ataque com auto-targeting
+local function get_attack_direction(my_entity, max_range)
+    local nearest_enemy = find_nearest_enemy(my_entity, max_range)
+
+    if nearest_enemy then
+        -- Calcular vetor normalizado na direção do inimigo
+        local dx = nearest_enemy.x - my_entity.x
+        local dy = nearest_enemy.y - my_entity.y
+        local len = math.sqrt(dx * dx + dy * dy)
+        if len > 0.01 then
+            return dx / len, dy / len
+        end
+    end
+
+    -- Se não houver inimigo próximo, usar última direção que o jogador estava olhando
+    return last_facing_dx, last_facing_dy
 end
 
 function love.keypressed(key)
@@ -598,6 +649,14 @@ function love.keypressed(key)
             local my_entity = loci.get_my_entity()
             if my_entity then
                 loci.send_action(4, my_entity.x, my_entity.y)
+            end
+        elseif key == "space" then
+            -- Ataque básico com auto-targeting (ability 1)
+            local my_entity = loci.get_my_entity()
+            if my_entity then
+                local max_range = 30.0  -- Raio de busca de inimigos
+                local dir_x, dir_y = get_attack_direction(my_entity, max_range)
+                loci.send_action(1, my_entity.x + dir_x * 100, my_entity.y + dir_y * 100)
             end
         end
     end
@@ -651,7 +710,10 @@ function love.mousepressed(x, y, button)
             local world_y = my_entity.y + (y - center_y) / 10
 
             if button == 1 then
-                loci.send_action(1, world_x, world_y)
+                -- Auto-targeting para ataque básico (ability 1)
+                local max_range = 30.0  -- Raio de busca de inimigos
+                local dir_x, dir_y = get_attack_direction(my_entity, max_range)
+                loci.send_action(1, my_entity.x + dir_x * 100, my_entity.y + dir_y * 100)
             elseif button == 2 then
                 loci.send_action(2, world_x, world_y)
             end
