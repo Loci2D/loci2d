@@ -51,7 +51,7 @@ local static_obstacles = {
 
 -- ===== Sprite / Animação =====
 local SPRITE_FRAME_W, SPRITE_FRAME_H = 48, 48
-local SPRITE_SCALE = 6
+local SPRITE_SCALE = 2
 local knight_img
 local knight_grid
 local anim_templates
@@ -547,13 +547,15 @@ function update_movement()
     if dx ~= last_sent_dx or dy ~= last_sent_dy then
         last_sent_dx = dx
         last_sent_dy = dy
-        loci.send_move(dx, dy)
-        -- Atualiza última direção que o jogador está olhando
+        -- Normalizar direção para permitir movimento diagonal
         if dx ~= 0 or dy ~= 0 then
             local len = math.sqrt(dx * dx + dy * dy)
-            last_facing_dx = dx / len
-            last_facing_dy = dy / len
+            dx = dx / len
+            dy = dy / len
+            last_facing_dx = dx
+            last_facing_dy = dy
         end
+        loci.send_move(dx, dy)
     end
 end
 
