@@ -608,8 +608,11 @@ function love.keypressed(key)
     local current_time = love.timer.getTime()
     local last_time = last_key_time[key] or 0
     
+    print("[DEBUG] Key pressed: " .. key .. " time_since_last: " .. tostring(current_time - last_time))
+    
     if current_time - last_time < DASH_DOUBLE_TAP_TIME and current_time - last_dash_time > DASH_COOLDOWN then
         -- Double-tap detectado - executar dash
+        print("[DEBUG] Double-tap detected for key: " .. key)
         local my_entity = loci.get_my_entity()
         if my_entity then
             local dir_x, dir_y = 0, 0
@@ -625,10 +628,14 @@ function love.keypressed(key)
                 dir_x = 1
             end
             
+            print("[DEBUG] Dash direction: " .. tostring(dir_x) .. ", " .. tostring(dir_y))
+            
             -- Enviar ação de dash (ability 3) com posição alvo distante
             local dash_target_x = my_entity.x + dir_x * 100
             local dash_target_y = my_entity.y + dir_y * 100
+            print("[DEBUG] Sending dash action to: " .. tostring(dash_target_x) .. ", " .. tostring(dash_target_y))
             loci.send_action(3, dash_target_x, dash_target_y)
+            print("[DEBUG] Dash action sent")
             
             last_dash_time = current_time
         end
