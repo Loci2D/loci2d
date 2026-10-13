@@ -2,6 +2,12 @@ name: Determinism & Safety Validation CI
 
 on:
   workflow_dispatch:
+    inputs:
+      run_benchmark:
+        description: 'Executar benchmark de determinismo (gera e valida benchmark.loci)'
+        required: false
+        type: boolean
+        default: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,6 +31,15 @@ jobs:
       run: cargo build --verbose
     - name: Run All Tests (includes determinism + iterator safety)
       run: cargo test --verbose
+    - name: Run Determinism Benchmark & Replay Verification
+      if: ${{ inputs.run_benchmark != false }}
+      run: cargo run --release --bin benchmark
+    - name: Upload Benchmark Replay Artifact (x86_64)
+      if: ${{ inputs.run_benchmark != false }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-replay-x86_64
+        path: benchmark.loci
       
   test_arm64:
     runs-on: macos-latest
@@ -44,3 +59,13 @@ jobs:
       run: cargo build --verbose
     - name: Run All Tests (includes determinism + iterator safety)
       run: cargo test --verbose
+    - name: Run Determinism Benchmark & Replay Verification
+      if: ${{ inputs.run_benchmark != false }}
+      run: cargo run --release --bin benchmark
+    - name: Upload Benchmark Replay Artifact (arm64)
+      if: ${{ inputs.run_benchmark != false }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-replay-arm64
+        path: benchmark.loci
+
