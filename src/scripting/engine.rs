@@ -205,15 +205,104 @@ impl ScriptEngine {
         self.instruction_counter.store(0, Ordering::Relaxed);
     }
 
-    /// Loads and evaluates a script from a raw string.
-    /// NOTE: This does not reset Lua globals. Should be called only once at Instance init.
-    /// Full VM resetting for hot-reloading is deferred to Phase 6.4/9.
+    /// Loads and evaluates a script payload.
+    /// If the payload is a valid JSON Virtual Filesystem (VFS) map, it initializes `require`
+    /// and loads `main.lua`. Otherwise, it treats the payload as raw Lua for backward compatibility.
     pub fn load_script(&self, script: &str) -> Result<(), String> {
         self.reset_instruction_counter();
-        self.lua
-            .load(script)
-            .exec()
-            .map_err(|e| format!("Lua script execution error: {e}"))
+        
+        let vfs_opt: Option<std::collections::BTreeMap<String, String>> = serde_json::from_str(script).ok();
+
+        if let Some(vfs) = vfs_opt {
+            let main_script = vfs.get("main.lua").ok_or_else(|| "VFS missing main.lua".to_string())?.clone();
+
+            let globals = self.lua.globals();
+
+            // Setup package.loaded
+            let package_table = self.lua.create_table().map_err(|e| e.to_string())?;
+            let loaded_table = self.lua.create_table().map_err(|e| e.to_string())?;
+            let loading_table = self.lua.create_table().map_err(|e| e.to_string())?;
+            package_table.set("loaded", loaded_table.clone()).map_err(|e| e.to_string())?;
+            globals.set("package", package_table).map_err(|e| e.to_string())?;
+
+            let vfs_arc = Arc::new(vfs);
+            
+            // Define safe `require`
+            let require_fn = self.lua.create_function({
+                let loaded = loaded_table;
+                let loading = loading_table;
+                let vfs_clone = vfs_arc.clone();
+                move |lua, modname: String| {
+                    // Check if already in the middle of loading (circular dependency)
+                    let is_loading: bool = loading.get(modname.clone()).unwrap_or(false);
+                    if is_loading {
+                        return Err(mlua::Error::RuntimeError(format!(
+                            "circular dependency detected while requiring module '{}'",
+                            modname
+                        )));
+                    }
+
+                    // Check if already loaded
+                    let existing: mlua::Value = loaded.get(modname.clone())?;
+                    if existing != mlua::Value::Nil {
+                        return Ok(existing);
+                    }
+
+                    // modname might be "skills.fireball", convert to "skills/fireball.lua"
+                    let path = modname.replace('.', "/") + ".lua";
+                    let code = match vfs_clone.get(&path) {
+                        Some(c) => c,
+                        None => return Err(mlua::Error::RuntimeError(format!("module '{}' not found in VFS", modname))),
+                    };
+
+                    // Mark as loading to prevent infinite recursion on circular dependencies
+                    loading.set(modname.clone(), true)?;
+
+                    let chunk = lua
+                        .load(code)
+                        .set_mode(mlua::ChunkMode::Text)
+                        .set_name(format!("@{}", path));
+                    
+                    let result: mlua::Value = match chunk.call(()) {
+                        Ok(val) => {
+                            let _ = loading.set(modname.clone(), false);
+                            val
+                        }
+                        Err(err) => {
+                            let _ = loading.set(modname.clone(), false);
+                            let _ = loaded.set(modname, mlua::Value::Nil);
+                            return Err(err);
+                        }
+                    };
+                    
+                    // If the module returns nothing, Lua's require defaults to true.
+                    let return_val = if result == mlua::Value::Nil {
+                        mlua::Value::Boolean(true)
+                    } else {
+                        result
+                    };
+
+                    loaded.set(modname, return_val.clone())?;
+                    Ok(return_val)
+                }
+            }).map_err(|e| e.to_string())?;
+
+            globals.set("require", require_fn).map_err(|e| e.to_string())?;
+
+            self.lua
+                .load(&main_script)
+                .set_mode(mlua::ChunkMode::Text)
+                .set_name("@main.lua")
+                .exec()
+                .map_err(|e| format!("Lua script execution error: {e}"))
+        } else {
+            self.lua
+                .load(script)
+                .set_mode(mlua::ChunkMode::Text)
+                .set_name("@main.lua")
+                .exec()
+                .map_err(|e| format!("Lua script execution error: {e}"))
+        }
     }
 
     /// Reads a file from local host path and evaluates its contents.

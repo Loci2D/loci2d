@@ -126,11 +126,84 @@ impl Instance {
     }
 
     /// Evaluates a Lua script file from the specified path inside the instance's script engine.
+    /// It recursively bundles all `.lua` files in the parent directory of `path` (the map directory)
+    /// into a JSON Virtual Filesystem (VFS) to support multi-file modules and replay self-containment.
+    ///
+    /// NOTE: Map directories must be dedicated exclusively to a single map; all `.lua` files and
+    /// subdirectories within will be bundled into the map's authoritative VFS.
     pub fn load_script_from_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
         let path_ref = path.as_ref();
-        let content = std::fs::read_to_string(path_ref)
-            .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?;
-        self.load_script(&content)
+        
+        // If path is a directory containing main.lua, or a main.lua file inside a map directory, bundle as VFS.
+        let (map_dir, is_bundle) = if path_ref.is_dir() {
+            (path_ref, true)
+        } else if path_ref.file_name().and_then(|s| s.to_str()) == Some("main.lua") {
+            (path_ref.parent().unwrap_or(Path::new("")), true)
+        } else {
+            (Path::new(""), false)
+        };
+
+        // Fallback if not a bundle or map_dir is empty or doesn't exist
+        if !is_bundle || !map_dir.exists() || !map_dir.is_dir() {
+            let content = std::fs::read_to_string(path_ref)
+                .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?
+                .replace("\r\n", "\n");
+            return self.load_script(&content);
+        }
+
+        const MAX_VFS_FILES: usize = 256;
+        const MAX_VFS_TOTAL_BYTES: usize = 10 * 1024 * 1024; // 10 MB
+
+        let mut vfs = std::collections::BTreeMap::new();
+        let mut total_bytes = 0usize;
+
+        // Helper closure to crawl directories
+        fn crawl_dir(
+            dir: &Path,
+            base_dir: &Path,
+            vfs: &mut std::collections::BTreeMap<String, String>,
+            total_bytes: &mut usize,
+        ) -> Result<(), String> {
+            let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+            for entry in entries {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let file_type = entry.file_type().map_err(|e| e.to_string())?;
+                if file_type.is_symlink() {
+                    // Skip symlinks to prevent infinite recursion and directory escape
+                    continue;
+                }
+
+                let path = entry.path();
+                if file_type.is_dir() {
+                    crawl_dir(&path, base_dir, vfs, total_bytes)?;
+                } else if file_type.is_file() && path.extension().and_then(|s| s.to_str()) == Some("lua") {
+                    if vfs.len() >= MAX_VFS_FILES {
+                        return Err(format!("VFS exceeded maximum file limit of {} files", MAX_VFS_FILES));
+                    }
+                    let content = std::fs::read_to_string(&path)
+                        .map_err(|e| e.to_string())?
+                        .replace("\r\n", "\n");
+                    *total_bytes += content.len();
+                    if *total_bytes > MAX_VFS_TOTAL_BYTES {
+                        return Err(format!("VFS exceeded maximum total payload size of {} bytes", MAX_VFS_TOTAL_BYTES));
+                    }
+                    let relative = path.strip_prefix(base_dir).map_err(|e| e.to_string())?;
+                    // Convert backslashes to forward slashes for cross-platform consistency
+                    let relative_str = relative.to_string_lossy().replace('\\', "/");
+                    vfs.insert(relative_str, content);
+                }
+            }
+            Ok(())
+        }
+
+        crawl_dir(map_dir, map_dir, &mut vfs, &mut total_bytes)?;
+
+        if !vfs.contains_key("main.lua") {
+            return Err(format!("'main.lua' not found in map directory '{}'", map_dir.display()));
+        }
+
+        let bundle_payload = serde_json::to_string(&vfs).map_err(|e| e.to_string())?;
+        self.load_script(&bundle_payload)
     }
 
     /// Handles an incoming client intent and returns an optional replay entry for match logging.

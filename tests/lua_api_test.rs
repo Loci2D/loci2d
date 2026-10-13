@@ -439,3 +439,179 @@ fn test_dash_ability_with_raycast_and_collision_filter() {
     assert_eq!(entity.collision_filter.layer, 1);
     assert_eq!(entity.collision_filter.mask, 0);
 }
+
+#[test]
+fn test_vfs_multi_file_require_and_caching() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+
+    let mut vfs = std::collections::BTreeMap::new();
+    vfs.insert("main.lua".to_string(), r#"
+        local utils = require("utils.math")
+        local greetings = require("greetings")
+        RESULT = utils.add(10, 20)
+        GREETING = greetings.message
+        CACHED = (package.loaded["greetings"] == greetings)
+    "#.to_string());
+    vfs.insert("utils/math.lua".to_string(), r#"
+        local M = {}
+        function M.add(a, b)
+            return a + b
+        end
+        return M
+    "#.to_string());
+    vfs.insert("greetings.lua".to_string(), r#"
+        return { message = "hello vfs" }
+    "#.to_string());
+
+    let payload = serde_json::to_string(&vfs).unwrap();
+    let res = instance.load_script(&payload);
+    assert!(res.is_ok(), "Failed to load VFS bundle: {:?}", res.err());
+
+    let lua = instance.script_engine.lua();
+    let result: i32 = lua.globals().get("RESULT").unwrap();
+    let greeting: String = lua.globals().get("GREETING").unwrap();
+    let cached: bool = lua.globals().get("CACHED").unwrap();
+
+    assert_eq!(result, 30);
+    assert_eq!(greeting, "hello vfs");
+    assert!(cached);
+}
+
+#[test]
+fn test_vfs_require_missing_module_error() {
+    let instance = Instance::new(1, 30, 10, 42);
+
+    let mut vfs = std::collections::BTreeMap::new();
+    vfs.insert("main.lua".to_string(), r#"
+        require("unknown_mod")
+    "#.to_string());
+
+    let payload = serde_json::to_string(&vfs).unwrap();
+    let res = instance.script_engine.load_script(&payload);
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert!(err.contains("module 'unknown_mod' not found in VFS"));
+}
+
+#[test]
+fn test_vfs_load_script_from_file_directory_bundle() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    let map_dir = dir.path();
+
+    std::fs::create_dir_all(map_dir.join("skills")).unwrap();
+    std::fs::write(
+        map_dir.join("main.lua"),
+        r#"
+        local skill = require("skills.attack")
+        DAMAGE = skill.power
+        "#,
+    ).unwrap();
+    std::fs::write(
+        map_dir.join("skills/attack.lua"),
+        r#"
+        return { power = 9000 }
+        "#,
+    ).unwrap();
+
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let res = instance.load_script_from_file(map_dir.join("main.lua"));
+    assert!(res.is_ok(), "Failed load_script_from_file: {:?}", res.err());
+
+    let damage: i32 = instance.script_engine.lua().globals().get("DAMAGE").unwrap();
+    assert_eq!(damage, 9000);
+    assert!(!instance.script_hash.is_empty());
+    assert!(!instance.script_payload.is_empty());
+
+    // Verify replay reload round-trip with stored payload
+    let mut replay_instance = Instance::new(2, 30, 10, 42);
+    let replay_res = replay_instance.load_script(&instance.script_payload);
+    assert!(replay_res.is_ok());
+    let replay_damage: i32 = replay_instance.script_engine.lua().globals().get("DAMAGE").unwrap();
+    assert_eq!(replay_damage, 9000);
+    assert_eq!(replay_instance.script_hash, instance.script_hash);
+}
+
+#[test]
+fn test_vfs_circular_require_detection() {
+    let instance = Instance::new(1, 30, 10, 42);
+
+    let mut vfs = std::collections::BTreeMap::new();
+    vfs.insert("main.lua".to_string(), r#"
+        require("module_a")
+    "#.to_string());
+    vfs.insert("module_a.lua".to_string(), r#"
+        local b = require("module_b")
+        return { name = "a" }
+    "#.to_string());
+    vfs.insert("module_b.lua".to_string(), r#"
+        local a = require("module_a")
+        return { name = "b" }
+    "#.to_string());
+
+    let payload = serde_json::to_string(&vfs).unwrap();
+    let res = instance.script_engine.load_script(&payload);
+    assert!(res.is_err(), "Circular require should have failed");
+    let err = res.unwrap_err();
+    assert!(
+        err.contains("circular dependency detected while requiring module 'module_a'"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+fn test_vfs_rejects_bytecode() {
+    let instance = Instance::new(1, 30, 10, 42);
+
+    let mut vfs = std::collections::BTreeMap::new();
+    // \x1bLua is the standard Lua bytecode header
+    vfs.insert("main.lua".to_string(), "\x1bLua\x51\x00\x01\x04\x08...".to_string());
+
+    let payload = serde_json::to_string(&vfs).unwrap();
+    let res = instance.script_engine.load_script(&payload);
+    assert!(res.is_err(), "Bytecode should be rejected");
+    let err = res.unwrap_err();
+    assert!(
+        err.contains("attempt to load a binary chunk") || err.contains("precompiled chunk"),
+        "Expected binary chunk rejection error, got: {err}"
+    );
+}
+
+#[test]
+fn test_vfs_crlf_normalization_and_symlink_skip() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    let map_dir = dir.path();
+
+    // Create main.lua with CRLF line endings
+    std::fs::write(
+        map_dir.join("main.lua"),
+        "x = 1\r\ny = 2\r\n",
+    ).unwrap();
+
+    // Create a symlink that points to main.lua (or a cyclic symlink)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        let _ = symlink(map_dir.join("main.lua"), map_dir.join("link.lua"));
+        let _ = symlink(map_dir, map_dir.join("recursive_link"));
+    }
+
+    let mut instance_crlf = Instance::new(1, 30, 10, 42);
+    let res = instance_crlf.load_script_from_file(map_dir.join("main.lua"));
+    assert!(res.is_ok(), "Failed to load: {:?}", res.err());
+
+    // Compare with an instance loaded with pure LF
+    let dir_lf = tempdir().unwrap();
+    std::fs::write(
+        dir_lf.path().join("main.lua"),
+        "x = 1\ny = 2\n",
+    ).unwrap();
+    let mut instance_lf = Instance::new(2, 30, 10, 42);
+    instance_lf.load_script_from_file(dir_lf.path().join("main.lua")).unwrap();
+
+    // Hashes must match despite CRLF vs LF on disk
+    assert_eq!(instance_crlf.script_hash, instance_lf.script_hash);
+}
+
+
