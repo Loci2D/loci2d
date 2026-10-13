@@ -211,22 +211,13 @@ impl ScriptEngine {
     pub fn load_script(&self, script: &str) -> Result<(), String> {
         self.reset_instruction_counter();
         
-        let mut is_vfs = true;
-        let vfs: std::collections::HashMap<String, String> = match serde_json::from_str(script) {
-            Ok(map) => map,
-            Err(_) => {
-                is_vfs = false;
-                let mut map = std::collections::HashMap::new();
-                map.insert("main.lua".to_string(), script.to_string());
-                map
-            }
-        };
+        let vfs_opt: Option<std::collections::BTreeMap<String, String>> = serde_json::from_str(script).ok();
 
-        let main_script = vfs.get("main.lua").ok_or_else(|| "VFS missing main.lua".to_string())?;
+        if let Some(vfs) = vfs_opt {
+            let main_script = vfs.get("main.lua").ok_or_else(|| "VFS missing main.lua".to_string())?.clone();
 
-        let globals = self.lua.globals();
+            let globals = self.lua.globals();
 
-        if is_vfs {
             // Setup package.loaded
             let package_table = self.lua.create_table().map_err(|e| e.to_string())?;
             let loaded_table = self.lua.create_table().map_err(|e| e.to_string())?;
@@ -269,13 +260,19 @@ impl ScriptEngine {
             }).map_err(|e| e.to_string())?;
 
             globals.set("require", require_fn).map_err(|e| e.to_string())?;
-        }
 
-        self.lua
-            .load(main_script)
-            .set_name("@main.lua")
-            .exec()
-            .map_err(|e| format!("Lua script execution error: {e}"))
+            self.lua
+                .load(&main_script)
+                .set_name("@main.lua")
+                .exec()
+                .map_err(|e| format!("Lua script execution error: {e}"))
+        } else {
+            self.lua
+                .load(script)
+                .set_name("@main.lua")
+                .exec()
+                .map_err(|e| format!("Lua script execution error: {e}"))
+        }
     }
 
     /// Reads a file from local host path and evaluates its contents.

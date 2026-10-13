@@ -565,6 +565,7 @@ dependencies = [
  "prost-build",
  "protoc-bin-vendored",
  "serde",
+ "serde_json",
  "sha2",
  "tempfile",
 ]

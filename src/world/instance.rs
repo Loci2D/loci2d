@@ -131,20 +131,26 @@ impl Instance {
     pub fn load_script_from_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
         let path_ref = path.as_ref();
         
-        // The path is usually `scripts/map_name/main.lua`. We want the map directory.
-        let map_dir = path_ref.parent().unwrap_or(Path::new(""));
-        
-        let mut vfs = std::collections::HashMap::new();
-        
-        // Fallback if map_dir is empty or doesn't exist
-        if !map_dir.exists() || !map_dir.is_dir() {
+        // If path is a directory containing main.lua, or a main.lua file inside a map directory, bundle as VFS.
+        let (map_dir, is_bundle) = if path_ref.is_dir() {
+            (path_ref, true)
+        } else if path_ref.file_name().and_then(|s| s.to_str()) == Some("main.lua") {
+            (path_ref.parent().unwrap_or(Path::new("")), true)
+        } else {
+            (Path::new(""), false)
+        };
+
+        // Fallback if not a bundle or map_dir is empty or doesn't exist
+        if !is_bundle || !map_dir.exists() || !map_dir.is_dir() {
             let content = std::fs::read_to_string(path_ref)
                 .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?;
             return self.load_script(&content);
         }
 
+        let mut vfs = std::collections::BTreeMap::new();
+
         // Helper closure to crawl directories
-        fn crawl_dir(dir: &Path, base_dir: &Path, vfs: &mut std::collections::HashMap<String, String>) -> Result<(), String> {
+        fn crawl_dir(dir: &Path, base_dir: &Path, vfs: &mut std::collections::BTreeMap<String, String>) -> Result<(), String> {
             let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
             for entry in entries {
                 let entry = entry.map_err(|e| e.to_string())?;
@@ -155,7 +161,7 @@ impl Instance {
                     let relative = path.strip_prefix(base_dir).map_err(|e| e.to_string())?;
                     let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
                     // Convert backslashes to forward slashes for cross-platform consistency
-                    let relative_str = relative.to_string_lossy().replace("\\", "/");
+                    let relative_str = relative.to_string_lossy().replace('\\', "/");
                     vfs.insert(relative_str, content);
                 }
             }

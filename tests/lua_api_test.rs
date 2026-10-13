@@ -439,3 +439,96 @@ fn test_dash_ability_with_raycast_and_collision_filter() {
     assert_eq!(entity.collision_filter.layer, 1);
     assert_eq!(entity.collision_filter.mask, 0);
 }
+
+#[test]
+fn test_vfs_multi_file_require_and_caching() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+
+    let mut vfs = std::collections::BTreeMap::new();
+    vfs.insert("main.lua".to_string(), r#"
+        local utils = require("utils.math")
+        local greetings = require("greetings")
+        RESULT = utils.add(10, 20)
+        GREETING = greetings.message
+        CACHED = (package.loaded["greetings"] == greetings)
+    "#.to_string());
+    vfs.insert("utils/math.lua".to_string(), r#"
+        local M = {}
+        function M.add(a, b)
+            return a + b
+        end
+        return M
+    "#.to_string());
+    vfs.insert("greetings.lua".to_string(), r#"
+        return { message = "hello vfs" }
+    "#.to_string());
+
+    let payload = serde_json::to_string(&vfs).unwrap();
+    let res = instance.load_script(&payload);
+    assert!(res.is_ok(), "Failed to load VFS bundle: {:?}", res.err());
+
+    let lua = instance.script_engine.lua();
+    let result: i32 = lua.globals().get("RESULT").unwrap();
+    let greeting: String = lua.globals().get("GREETING").unwrap();
+    let cached: bool = lua.globals().get("CACHED").unwrap();
+
+    assert_eq!(result, 30);
+    assert_eq!(greeting, "hello vfs");
+    assert!(cached);
+}
+
+#[test]
+fn test_vfs_require_missing_module_error() {
+    let instance = Instance::new(1, 30, 10, 42);
+
+    let mut vfs = std::collections::BTreeMap::new();
+    vfs.insert("main.lua".to_string(), r#"
+        require("unknown_mod")
+    "#.to_string());
+
+    let payload = serde_json::to_string(&vfs).unwrap();
+    let res = instance.script_engine.load_script(&payload);
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert!(err.contains("module 'unknown_mod' not found in VFS"));
+}
+
+#[test]
+fn test_vfs_load_script_from_file_directory_bundle() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    let map_dir = dir.path();
+
+    std::fs::create_dir_all(map_dir.join("skills")).unwrap();
+    std::fs::write(
+        map_dir.join("main.lua"),
+        r#"
+        local skill = require("skills.attack")
+        DAMAGE = skill.power
+        "#,
+    ).unwrap();
+    std::fs::write(
+        map_dir.join("skills/attack.lua"),
+        r#"
+        return { power = 9000 }
+        "#,
+    ).unwrap();
+
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let res = instance.load_script_from_file(map_dir.join("main.lua"));
+    assert!(res.is_ok(), "Failed load_script_from_file: {:?}", res.err());
+
+    let damage: i32 = instance.script_engine.lua().globals().get("DAMAGE").unwrap();
+    assert_eq!(damage, 9000);
+    assert!(!instance.script_hash.is_empty());
+    assert!(!instance.script_payload.is_empty());
+
+    // Verify replay reload round-trip with stored payload
+    let mut replay_instance = Instance::new(2, 30, 10, 42);
+    let replay_res = replay_instance.load_script(&instance.script_payload);
+    assert!(replay_res.is_ok());
+    let replay_damage: i32 = replay_instance.script_engine.lua().globals().get("DAMAGE").unwrap();
+    assert_eq!(replay_damage, 9000);
+    assert_eq!(replay_instance.script_hash, instance.script_hash);
+}
+
