@@ -128,6 +128,9 @@ impl Instance {
     /// Evaluates a Lua script file from the specified path inside the instance's script engine.
     /// It recursively bundles all `.lua` files in the parent directory of `path` (the map directory)
     /// into a JSON Virtual Filesystem (VFS) to support multi-file modules and replay self-containment.
+    ///
+    /// NOTE: Map directories must be dedicated exclusively to a single map; all `.lua` files and
+    /// subdirectories within will be bundled into the map's authoritative VFS.
     pub fn load_script_from_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
         let path_ref = path.as_ref();
         

@@ -570,6 +570,11 @@ fn test_vfs_rejects_bytecode() {
     let payload = serde_json::to_string(&vfs).unwrap();
     let res = instance.script_engine.load_script(&payload);
     assert!(res.is_err(), "Bytecode should be rejected");
+    let err = res.unwrap_err();
+    assert!(
+        err.contains("attempt to load a binary chunk") || err.contains("precompiled chunk"),
+        "Expected binary chunk rejection error, got: {err}"
+    );
 }
 
 #[test]

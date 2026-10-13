@@ -221,6 +221,7 @@ impl ScriptEngine {
             // Setup package.loaded
             let package_table = self.lua.create_table().map_err(|e| e.to_string())?;
             let loaded_table = self.lua.create_table().map_err(|e| e.to_string())?;
+            let loading_table = self.lua.create_table().map_err(|e| e.to_string())?;
             package_table.set("loaded", loaded_table.clone()).map_err(|e| e.to_string())?;
             globals.set("package", package_table).map_err(|e| e.to_string())?;
 
@@ -229,19 +230,22 @@ impl ScriptEngine {
             // Define safe `require`
             let require_fn = self.lua.create_function({
                 let loaded = loaded_table;
+                let loading = loading_table;
                 let vfs_clone = vfs_arc.clone();
                 move |lua, modname: String| {
-                    // Check if already loaded or currently loading
+                    // Check if already in the middle of loading (circular dependency)
+                    let is_loading: bool = loading.get(modname.clone()).unwrap_or(false);
+                    if is_loading {
+                        return Err(mlua::Error::RuntimeError(format!(
+                            "circular dependency detected while requiring module '{}'",
+                            modname
+                        )));
+                    }
+
+                    // Check if already loaded
                     let existing: mlua::Value = loaded.get(modname.clone())?;
-                    match existing {
-                        mlua::Value::String(ref s) if s.to_str().map(|str_val| str_val == "__LOCI_VFS_LOADING__").unwrap_or(false) => {
-                            return Err(mlua::Error::RuntimeError(format!(
-                                "circular dependency detected while requiring module '{}'",
-                                modname
-                            )));
-                        }
-                        val if val != mlua::Value::Nil => return Ok(val),
-                        _ => {}
+                    if existing != mlua::Value::Nil {
+                        return Ok(existing);
                     }
 
                     // modname might be "skills.fireball", convert to "skills/fireball.lua"
@@ -252,7 +256,7 @@ impl ScriptEngine {
                     };
 
                     // Mark as loading to prevent infinite recursion on circular dependencies
-                    loaded.set(modname.clone(), "__LOCI_VFS_LOADING__")?;
+                    loading.set(modname.clone(), true)?;
 
                     let chunk = lua
                         .load(code)
@@ -260,8 +264,12 @@ impl ScriptEngine {
                         .set_name(format!("@{}", path));
                     
                     let result: mlua::Value = match chunk.call(()) {
-                        Ok(val) => val,
+                        Ok(val) => {
+                            let _ = loading.set(modname.clone(), false);
+                            val
+                        }
                         Err(err) => {
+                            let _ = loading.set(modname.clone(), false);
                             let _ = loaded.set(modname, mlua::Value::Nil);
                             return Err(err);
                         }
