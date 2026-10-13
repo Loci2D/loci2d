@@ -143,23 +143,48 @@ impl Instance {
         // Fallback if not a bundle or map_dir is empty or doesn't exist
         if !is_bundle || !map_dir.exists() || !map_dir.is_dir() {
             let content = std::fs::read_to_string(path_ref)
-                .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?;
+                .map_err(|e| format!("Failed to read script file '{}': {e}", path_ref.display()))?
+                .replace("\r\n", "\n");
             return self.load_script(&content);
         }
 
+        const MAX_VFS_FILES: usize = 256;
+        const MAX_VFS_TOTAL_BYTES: usize = 10 * 1024 * 1024; // 10 MB
+
         let mut vfs = std::collections::BTreeMap::new();
+        let mut total_bytes = 0usize;
 
         // Helper closure to crawl directories
-        fn crawl_dir(dir: &Path, base_dir: &Path, vfs: &mut std::collections::BTreeMap<String, String>) -> Result<(), String> {
+        fn crawl_dir(
+            dir: &Path,
+            base_dir: &Path,
+            vfs: &mut std::collections::BTreeMap<String, String>,
+            total_bytes: &mut usize,
+        ) -> Result<(), String> {
             let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
             for entry in entries {
                 let entry = entry.map_err(|e| e.to_string())?;
+                let file_type = entry.file_type().map_err(|e| e.to_string())?;
+                if file_type.is_symlink() {
+                    // Skip symlinks to prevent infinite recursion and directory escape
+                    continue;
+                }
+
                 let path = entry.path();
-                if path.is_dir() {
-                    crawl_dir(&path, base_dir, vfs)?;
-                } else if path.extension().and_then(|s| s.to_str()) == Some("lua") {
+                if file_type.is_dir() {
+                    crawl_dir(&path, base_dir, vfs, total_bytes)?;
+                } else if file_type.is_file() && path.extension().and_then(|s| s.to_str()) == Some("lua") {
+                    if vfs.len() >= MAX_VFS_FILES {
+                        return Err(format!("VFS exceeded maximum file limit of {} files", MAX_VFS_FILES));
+                    }
+                    let content = std::fs::read_to_string(&path)
+                        .map_err(|e| e.to_string())?
+                        .replace("\r\n", "\n");
+                    *total_bytes += content.len();
+                    if *total_bytes > MAX_VFS_TOTAL_BYTES {
+                        return Err(format!("VFS exceeded maximum total payload size of {} bytes", MAX_VFS_TOTAL_BYTES));
+                    }
                     let relative = path.strip_prefix(base_dir).map_err(|e| e.to_string())?;
-                    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
                     // Convert backslashes to forward slashes for cross-platform consistency
                     let relative_str = relative.to_string_lossy().replace('\\', "/");
                     vfs.insert(relative_str, content);
@@ -168,7 +193,7 @@ impl Instance {
             Ok(())
         }
 
-        crawl_dir(map_dir, map_dir, &mut vfs)?;
+        crawl_dir(map_dir, map_dir, &mut vfs, &mut total_bytes)?;
 
         if !vfs.contains_key("main.lua") {
             return Err(format!("'main.lua' not found in map directory '{}'", map_dir.display()));

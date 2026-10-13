@@ -391,7 +391,7 @@ fn main() {
             checkpoint_interval,
             record_path,
             script_hash,
-            script_payload,
+            script_payload.clone(),
         );
     }
 
@@ -408,15 +408,16 @@ fn main() {
         "[Server] Server running. Type 'stop' or 'quit' (or press Ctrl+C) to shut down and save match recording.\n"
     );
 
-    let map_name_clone = map_name.clone();
     let loop_socket = Arc::clone(&socket);
-    let loop_cfg = cfg.clone();
+    let loop_payload = script_payload.clone();
     let loop_thread = thread::spawn(move || {
         let mut instance = Instance::new(1, tick_rate, client_timeout_secs, seed);
         instance.logging_enabled = true;
-        let script_path = loop_cfg.resolve_script_path(&map_name_clone);
-        if std::path::Path::new(&script_path).exists() {
-            let _ = instance.load_script_from_file(&script_path);
+        if !loop_payload.is_empty() {
+            match instance.load_script(&loop_payload) {
+                Ok(_) => {}
+                Err(e) => eprintln!("[Script] Failed to load script payload in game loop: {}", e),
+            }
         }
         game_loop.start(instance, intent_rx, loop_socket);
     });

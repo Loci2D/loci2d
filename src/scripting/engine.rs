@@ -231,21 +231,41 @@ impl ScriptEngine {
                 let loaded = loaded_table;
                 let vfs_clone = vfs_arc.clone();
                 move |lua, modname: String| {
-                    // Check if already loaded
+                    // Check if already loaded or currently loading
                     let existing: mlua::Value = loaded.get(modname.clone())?;
-                    if existing != mlua::Value::Nil {
-                        return Ok(existing);
+                    match existing {
+                        mlua::Value::String(ref s) if s.to_str().map(|str_val| str_val == "__LOCI_VFS_LOADING__").unwrap_or(false) => {
+                            return Err(mlua::Error::RuntimeError(format!(
+                                "circular dependency detected while requiring module '{}'",
+                                modname
+                            )));
+                        }
+                        val if val != mlua::Value::Nil => return Ok(val),
+                        _ => {}
                     }
 
                     // modname might be "skills.fireball", convert to "skills/fireball.lua"
-                    let path = modname.replace(".", "/") + ".lua";
+                    let path = modname.replace('.', "/") + ".lua";
                     let code = match vfs_clone.get(&path) {
                         Some(c) => c,
                         None => return Err(mlua::Error::RuntimeError(format!("module '{}' not found in VFS", modname))),
                     };
 
-                    let chunk = lua.load(code).set_name(format!("@{}", path));
-                    let result: mlua::Value = chunk.call(())?;
+                    // Mark as loading to prevent infinite recursion on circular dependencies
+                    loaded.set(modname.clone(), "__LOCI_VFS_LOADING__")?;
+
+                    let chunk = lua
+                        .load(code)
+                        .set_mode(mlua::ChunkMode::Text)
+                        .set_name(format!("@{}", path));
+                    
+                    let result: mlua::Value = match chunk.call(()) {
+                        Ok(val) => val,
+                        Err(err) => {
+                            let _ = loaded.set(modname, mlua::Value::Nil);
+                            return Err(err);
+                        }
+                    };
                     
                     // If the module returns nothing, Lua's require defaults to true.
                     let return_val = if result == mlua::Value::Nil {
@@ -263,12 +283,14 @@ impl ScriptEngine {
 
             self.lua
                 .load(&main_script)
+                .set_mode(mlua::ChunkMode::Text)
                 .set_name("@main.lua")
                 .exec()
                 .map_err(|e| format!("Lua script execution error: {e}"))
         } else {
             self.lua
                 .load(script)
+                .set_mode(mlua::ChunkMode::Text)
                 .set_name("@main.lua")
                 .exec()
                 .map_err(|e| format!("Lua script execution error: {e}"))
