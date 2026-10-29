@@ -51,7 +51,7 @@ sequenceDiagram
 
 ---
 
-## 🛠️ Pré-requisitos e Instalação
+## Pré-requisitos e Instalação
 
 Ao clonar o projeto em uma **máquina nova**, certifique-se de ter os pré-requisitos instalados:
 
@@ -62,7 +62,7 @@ Ao clonar o projeto em uma **máquina nova**, certifique-se de ter os pré-requi
 
 ### 2. Comandos de Instalação por Sistema Operacional
 
-#### 🐧 Linux (Ubuntu / Debian / Pop!_OS)
+#### Linux (Ubuntu / Debian / Pop!_OS)
 ```bash
 # 1. Instalar compilador C, pkg-config e Love2D
 sudo apt update
@@ -76,20 +76,20 @@ source "$HOME/.cargo/env"
 rustup update stable
 ```
 
-#### 🐧 Linux (Arch Linux / Manjaro)
+#### Linux (Arch Linux / Manjaro)
 ```bash
 sudo pacman -S base-devel pkgconf love rustup
 rustup default stable
 ```
 
-#### 🐧 Linux (Fedora / RHEL)
+#### Linux (Fedora / RHEL)
 ```bash
 sudo dnf install -y gcc gcc-c++ make pkg-config love
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 
-#### 🍏 macOS
+#### macOS
 ```bash
 # 1. Ferramentas de compilação da Apple
 xcode-select --install
@@ -102,13 +102,13 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 
-#### 🪟 Windows
+#### Windows
 1. **Rust**: Baixe e execute o instalador em [rustup.rs](https://rustup.rs/) (selecione C++ Build Tools do Visual Studio durante a instalação).
 2. **Love2D**: Baixe o instalador em [love2d.org](https://love2d.org/) ou instale via terminal: `winget install LOVE.LOVE`. Certifique-se de que o executável `love` está no seu PATH.
 
 ---
 
-### 🔍 Verificação Rápida do Ambiente
+### Verificação Rápida do Ambiente
 Você pode rodar o script utilitário para checar se todas as dependências estão prontas:
 ```bash
 ./tools/setup_environment.sh
@@ -116,7 +116,7 @@ Você pode rodar o script utilitário para checar se todas as dependências est�
 
 ---
 
-## 🚀 Como Rodar o Projeto
+## Como Rodar o Projeto
 
 O fluxo padrão de desenvolvimento consiste em rodar o **servidor Rust** e o **cliente Love2D**:
 

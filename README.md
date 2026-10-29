@@ -51,7 +51,7 @@ sequenceDiagram
 
 ---
 
-## 🛠️ Prerequisites & Installation
+## Prerequisites & Installation
 
 When setting up the project on a **new machine**, ensure the following tools are installed:
 
@@ -62,7 +62,7 @@ When setting up the project on a **new machine**, ensure the following tools are
 
 ### 2. OS-Specific Installation Commands
 
-#### 🐧 Linux (Ubuntu / Debian / Pop!_OS)
+#### Linux (Ubuntu / Debian / Pop!_OS)
 ```bash
 # 1. Install C compiler, pkg-config, and Love2D
 sudo apt update
@@ -76,20 +76,20 @@ source "$HOME/.cargo/env"
 rustup update stable
 ```
 
-#### 🐧 Linux (Arch Linux / Manjaro)
+#### Linux (Arch Linux / Manjaro)
 ```bash
 sudo pacman -S base-devel pkgconf love rustup
 rustup default stable
 ```
 
-#### 🐧 Linux (Fedora / RHEL)
+#### Linux (Fedora / RHEL)
 ```bash
 sudo dnf install -y gcc gcc-c++ make pkg-config love
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 
-#### 🍏 macOS
+#### macOS
 ```bash
 # 1. Apple build tools
 xcode-select --install
@@ -102,13 +102,13 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 
-#### 🪟 Windows
+#### Windows
 1. **Rust**: Download and run the installer from [rustup.rs](https://rustup.rs/) (select Visual Studio C++ Build Tools during setup).
 2. **Love2D**: Download the installer from [love2d.org](https://love2d.org/) or install via terminal: `winget install LOVE.LOVE`. Ensure the `love` executable is in your PATH.
 
 ---
 
-### 🔍 Quick Environment Check
+### Quick Environment Check
 Run the verification script to check if your machine has all required dependencies:
 ```bash
 ./tools/setup_environment.sh
@@ -116,7 +116,7 @@ Run the verification script to check if your machine has all required dependenci
 
 ---
 
-## 🚀 How to Run the Project
+## How to Run the Project
 
 The primary development workflow runs the **Rust server** alongside the **Love2D client**:
 
