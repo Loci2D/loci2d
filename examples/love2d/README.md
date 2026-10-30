@@ -1,6 +1,6 @@
 # Love2D (Lua) Client Example for loci2d
 
-This example demonstrates how a **LÖVE2D / Lua** game client communicates with the `loci2d` authoritative server using the official [Love2D Client SDK (`loci_client.lua`)](../../sdks/love2d/README.md).
+This example demonstrates how a **LÖVE2D / Lua** game client communicates with the `loci2d` authoritative server using the official [Love2D Client SDK (`loci_client.lua`)](https://github.com/Loci2D/sdk-love2d).
 
 ## Prerequisites & Installation
 
@@ -37,18 +37,17 @@ The dynamic proto compiler `protoc.lua` and pre-compiled schemas are located in 
 ## Project Structure
 
 - `main.lua`: The Love2D main entry file demonstrating game rendering, input handling, and particle effects using `loci_client.lua`.
-- `sdks/love2d/lib/`: Protocol buffer schemas (`game_packets.proto`, `game_packets.pb`) and runtime parser (`protoc.lua`).
 
 ## How It Works
 
-The example relies entirely on `loci_client.lua`, which encapsulates UDP networking, protobuf serialization, and fixed-point math:
+The example relies entirely on `loci_client.lua` from the [sdk-love2d](https://github.com/Loci2D/sdk-love2d) repository, which encapsulates UDP networking, protobuf serialization, and fixed-point math:
 
 ```lua
 local loci = require("loci_client")
 
 function love.load()
     -- Connect to server and load protobuf schema automatically
-    loci.connect("127.0.0.1", 8080, "Player1", "../../sdks/love2d/lib/")
+    loci.connect("127.0.0.1", 8080, "Player1")
 end
 ```
 
