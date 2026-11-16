@@ -1,10 +1,10 @@
 use super::entity::{Entity, EntityType};
-use super::physics::{MapBounds, StaticObstacle, TriggerEvent};
+use super::physics::{ColliderShape, MapBounds, StaticObstacle, TriggerEvent};
 use super::session::{ClientSession, SessionState};
 use crate::network::packets::client_intent::Intent;
 use crate::network::packets::{
     ActionBroadcast, ClientIntent, EntityState, EntityType as ProtoEntityType, MatchLifecycleState,
-    Property, ReplayIntentEntry, WorldState,
+    ObstacleShape, Property, ReplayIntentEntry, StaticObstacleState, WorldState,
 };
 use crate::scripting::{CommandBuffer, ScriptEngine};
 use fixed::types::I16F16;
@@ -69,6 +69,7 @@ pub struct Instance {
     // TODO(Phase 7+): If Instance is ever moved to a multi-threaded runtime,
     // replace Cell<u64> with AtomicU64 for Send + Sync compliance.
     next_entity_id: std::cell::Cell<u64>,
+    next_obstacle_id: std::cell::Cell<u64>,
     next_session_id: u64,
 }
 
@@ -77,6 +78,13 @@ impl Instance {
     pub fn allocate_entity_id(&self) -> u64 {
         let id = self.next_entity_id.get();
         self.next_entity_id.set(id + 1);
+        id
+    }
+
+    /// Allocates and returns a unique deterministic static obstacle ID.
+    pub fn allocate_obstacle_id(&self) -> u64 {
+        let id = self.next_obstacle_id.get();
+        self.next_obstacle_id.set(id + 1);
         id
     }
 
@@ -102,6 +110,7 @@ impl Instance {
             active_timers: BTreeMap::new(),
             tick_actions: Vec::new(),
             next_entity_id: std::cell::Cell::new(1),
+            next_obstacle_id: std::cell::Cell::new(1),
             next_session_id: 1,
         }
     }
@@ -402,6 +411,10 @@ impl Instance {
     }
 
     pub fn add_static_obstacle(&mut self, obstacle: StaticObstacle) {
+        let current_next = self.next_obstacle_id.get();
+        if obstacle.id >= current_next {
+            self.next_obstacle_id.set(obstacle.id + 1);
+        }
         self.static_obstacles.insert(obstacle.id, obstacle);
     }
 
@@ -436,7 +449,7 @@ impl Instance {
         self.tick_actions.clear();
     }
 
-    /// Generates a complete WorldState snapshot representing all active entities.
+    /// Generates a complete WorldState snapshot representing all active entities and static obstacles.
     pub fn create_snapshot(&self, tick: u64) -> WorldState {
         let entities = self
             .entities
@@ -459,6 +472,49 @@ impl Instance {
                         value: v.clone(),
                     })
                     .collect(),
+            })
+            .collect();
+
+        let obstacles = self
+            .static_obstacles
+            .values()
+            .map(|obs| {
+                let (shape, position, width_bits, height_bits, radius_bits) = match &obs.shape {
+                    ColliderShape::AABB(aabb) => (
+                        ObstacleShape::ObstacleAabb as i32,
+                        aabb.center().to_proto(),
+                        aabb.width().to_bits(),
+                        aabb.height().to_bits(),
+                        0,
+                    ),
+                    ColliderShape::Circle(circle) => (
+                        ObstacleShape::ObstacleCircle as i32,
+                        circle.center.to_proto(),
+                        0,
+                        0,
+                        circle.radius.to_bits(),
+                    ),
+                };
+
+                StaticObstacleState {
+                    id: obs.id,
+                    blueprint: obs.blueprint.clone(),
+                    shape,
+                    position: Some(position),
+                    width_bits,
+                    height_bits,
+                    radius_bits,
+                    is_solid: obs.is_solid,
+                    collision_type: obs.collision_type.clone(),
+                    properties: obs
+                        .properties
+                        .iter()
+                        .map(|(k, v)| Property {
+                            key: k.clone(),
+                            value: v.clone(),
+                        })
+                        .collect(),
+                }
             })
             .collect();
 
@@ -488,6 +544,7 @@ impl Instance {
             actions: self.tick_actions.clone(),
             match_state,
             match_winner,
+            obstacles,
         }
     }
 

@@ -1,7 +1,13 @@
 use crate::scripting::command::{Command, CommandBuffer};
 use crate::world::instance::{DeterministicVector2, Instance};
+use crate::world::physics::{
+    ColliderShape, CollisionFilter, DeterministicAABB, DeterministicCircle, MapBounds,
+    intersect_shapes,
+};
+use fixed::types::I16F16;
 use mlua::prelude::*;
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 fn extract_vector2(value: mlua::Value) -> LuaResult<DeterministicVector2> {
@@ -20,6 +26,176 @@ fn extract_vector2(value: mlua::Value) -> LuaResult<DeterministicVector2> {
         }
         _ => Err(mlua::Error::RuntimeError("Expected Loci.Vector2 or table with x, y".to_string())),
     }
+}
+
+fn extract_properties(props_table: mlua::Table) -> LuaResult<BTreeMap<String, String>> {
+    let mut properties = BTreeMap::new();
+    for pair in props_table.pairs::<String, mlua::Value>() {
+        let (k, v) = pair?;
+        let str_val = match v {
+            mlua::Value::String(s) => s.to_string_lossy().to_string(),
+            mlua::Value::Integer(n) => n.to_string(),
+            mlua::Value::Number(n) => n.to_string(),
+            mlua::Value::Boolean(b) => b.to_string(),
+            _ => {
+                return Err(mlua::Error::RuntimeError(format!(
+                    "property '{}' value must be string, number, or boolean",
+                    k
+                )));
+            }
+        };
+        properties.insert(k, str_val);
+    }
+    Ok(properties)
+}
+
+struct ParsedObstacleArgs {
+    blueprint: String,
+    shape: ColliderShape,
+    filter: CollisionFilter,
+    is_solid: bool,
+    collision_type: String,
+    properties: BTreeMap<String, String>,
+}
+
+fn parse_static_obstacle_args(args: &mlua::Table) -> LuaResult<ParsedObstacleArgs> {
+    let explicit_is_solid: Option<bool> = args.get::<Option<bool>>("is_solid")?;
+    let raw_collision_type: Option<String> = args.get::<Option<String>>("collision_type")?;
+
+    let collision_type = match raw_collision_type {
+        Some(ct) => {
+            let normalized = ct.trim().to_ascii_lowercase();
+            match normalized.as_str() {
+                "solid" | "destructible" | "trigger" => normalized,
+                _ => {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "spawn_static_obstacle: invalid collision_type '{}' (expected 'solid', 'destructible', or 'trigger')",
+                        ct
+                    )));
+                }
+            }
+        }
+        None => match explicit_is_solid {
+            Some(false) => "trigger".to_string(),
+            _ => "solid".to_string(),
+        },
+    };
+
+    let is_solid = explicit_is_solid.unwrap_or_else(|| collision_type != "trigger");
+
+    let blueprint = match args.get::<String>("blueprint") {
+        Ok(bp) => {
+            if bp.trim().is_empty() {
+                return Err(mlua::Error::RuntimeError(
+                    "spawn_static_obstacle: blueprint cannot be empty".to_string(),
+                ));
+            }
+            bp
+        }
+        Err(_) => {
+            if is_solid {
+                "wall".to_string()
+            } else {
+                "trigger".to_string()
+            }
+        }
+    };
+
+    let default_filter = if is_solid {
+        CollisionFilter::default_solid_wall()
+    } else {
+        CollisionFilter::default_trigger_zone()
+    };
+    let layer: u16 = args.get("layer").unwrap_or(default_filter.layer);
+    let mask: u16 = args.get("mask").unwrap_or(default_filter.mask);
+    let filter = CollisionFilter::new(layer, mask);
+
+    let has_radius = args.contains_key("radius")?;
+    let has_dims = args.contains_key("width")? || args.contains_key("height")?;
+    let shape_kind = match args.get::<String>("shape") {
+        Ok(s) => s.trim().to_ascii_lowercase(),
+        Err(_) => {
+            if has_radius && !has_dims {
+                "circle".to_string()
+            } else {
+                "aabb".to_string()
+            }
+        }
+    };
+
+    let shape = match shape_kind.as_str() {
+        "circle" => {
+            let pos_val: mlua::Value = args.get("position").map_err(|_| {
+                mlua::Error::RuntimeError("spawn_static_obstacle: circle obstacle requires 'position'".to_string())
+            })?;
+            let center = extract_vector2(pos_val)?;
+            let radius: f64 = args.get("radius").map_err(|_| {
+                mlua::Error::RuntimeError("spawn_static_obstacle: circle obstacle requires numeric 'radius'".to_string())
+            })?;
+            if !radius.is_finite() || radius <= 0.0 {
+                return Err(mlua::Error::RuntimeError(
+                    "spawn_static_obstacle: 'radius' must be finite and > 0".to_string(),
+                ));
+            }
+            ColliderShape::Circle(DeterministicCircle::new(center, I16F16::from_num(radius)))
+        }
+        "aabb" => {
+            if args.contains_key("min")? || args.contains_key("max")? {
+                let min_val: mlua::Value = args.get("min").map_err(|_| {
+                    mlua::Error::RuntimeError("spawn_static_obstacle: 'min' required when 'max' is provided".to_string())
+                })?;
+                let max_val: mlua::Value = args.get("max").map_err(|_| {
+                    mlua::Error::RuntimeError("spawn_static_obstacle: 'max' required when 'min' is provided".to_string())
+                })?;
+                let min = extract_vector2(min_val)?;
+                let max = extract_vector2(max_val)?;
+                if min.x >= max.x || min.y >= max.y {
+                    return Err(mlua::Error::RuntimeError(
+                        "spawn_static_obstacle: 'min' must be strictly less than 'max' on both axes".to_string(),
+                    ));
+                }
+                ColliderShape::AABB(DeterministicAABB::new(min, max))
+            } else {
+                let pos_val: mlua::Value = args.get("position").map_err(|_| {
+                    mlua::Error::RuntimeError("spawn_static_obstacle: AABB obstacle requires 'position' (or 'min'/'max')".to_string())
+                })?;
+                let center = extract_vector2(pos_val)?;
+                let width: f64 = args.get("width").map_err(|_| {
+                    mlua::Error::RuntimeError("spawn_static_obstacle: AABB obstacle requires numeric 'width'".to_string())
+                })?;
+                let height: f64 = args.get("height").map_err(|_| {
+                    mlua::Error::RuntimeError("spawn_static_obstacle: AABB obstacle requires numeric 'height'".to_string())
+                })?;
+                if !width.is_finite() || width <= 0.0 || !height.is_finite() || height <= 0.0 {
+                    return Err(mlua::Error::RuntimeError(
+                        "spawn_static_obstacle: 'width' and 'height' must be finite and > 0".to_string(),
+                    ));
+                }
+                let half_extents = DeterministicVector2::from_f64(width / 2.0, height / 2.0);
+                ColliderShape::AABB(DeterministicAABB::from_center_half_extents(center, half_extents))
+            }
+        }
+        other => {
+            return Err(mlua::Error::RuntimeError(format!(
+                "spawn_static_obstacle: invalid shape '{}' (expected 'aabb' or 'circle')",
+                other
+            )));
+        }
+    };
+
+    let properties = match args.get::<mlua::Table>("properties") {
+        Ok(tbl) => extract_properties(tbl)?,
+        Err(_) => BTreeMap::new(),
+    };
+
+    Ok(ParsedObstacleArgs {
+        blueprint,
+        shape,
+        filter,
+        is_solid,
+        collision_type,
+        properties,
+    })
 }
 
 /// Sets up the base Loci global API which doesn't require an active Instance context.
@@ -176,6 +352,69 @@ where
             scope.create_function(|_, key: String| Ok(instance.globals.get(&key).cloned()))?;
         loci_table.set("get_global", get_global)?;
 
+        // Loci.get_obstacle(id)
+        let get_obstacle = scope.create_function(|lua, id: u64| {
+            let Some(obs) = instance.get_static_obstacle(id) else {
+                return Ok(None);
+            };
+            let tbl = lua.create_table()?;
+            tbl.set("id", obs.id)?;
+            tbl.set("blueprint", obs.blueprint.clone())?;
+            tbl.set("is_solid", obs.is_solid)?;
+            tbl.set("collision_type", obs.collision_type.clone())?;
+            tbl.set("position", obs.shape.center())?;
+            match &obs.shape {
+                ColliderShape::AABB(aabb) => {
+                    tbl.set("shape", "aabb")?;
+                    tbl.set("width", aabb.width().to_num::<f64>())?;
+                    tbl.set("height", aabb.height().to_num::<f64>())?;
+                }
+                ColliderShape::Circle(circle) => {
+                    tbl.set("shape", "circle")?;
+                    tbl.set("radius", circle.radius.to_num::<f64>())?;
+                }
+            }
+            let props_tbl = lua.create_table()?;
+            for (k, v) in &obs.properties {
+                props_tbl.set(k.clone(), v.clone())?;
+            }
+            tbl.set("properties", props_tbl)?;
+            Ok(Some(tbl))
+        })?;
+        loci_table.set("get_obstacle", get_obstacle)?;
+
+        // Loci.get_obstacle_position(id)
+        let get_obstacle_position = scope.create_function(|_, id: u64| {
+            Ok(instance
+                .get_static_obstacle(id)
+                .map(|obs| obs.shape.center()))
+        })?;
+        loci_table.set("get_obstacle_position", get_obstacle_position)?;
+
+        // Loci.get_obstacle_property(id, key)
+        let get_obstacle_property = scope.create_function(|_, (id, key): (u64, String)| {
+            if let Some(obs) = instance.get_static_obstacle(id) {
+                Ok(obs.properties.get(&key).cloned())
+            } else {
+                Ok(None)
+            }
+        })?;
+        loci_table.set("get_obstacle_property", get_obstacle_property)?;
+
+        // Loci.get_obstacles_by_blueprint(blueprint)
+        let get_obstacles_by_blueprint = scope.create_function(|lua, blueprint: String| {
+            let table = lua.create_table()?;
+            let mut idx = 1usize;
+            for (&id, obs) in &instance.static_obstacles {
+                if obs.blueprint == blueprint {
+                    table.set(idx, id)?;
+                    idx += 1;
+                }
+            }
+            Ok(table)
+        })?;
+        loci_table.set("get_obstacles_by_blueprint", get_obstacles_by_blueprint)?;
+
         // Loci.Commands
         let commands_table = lua.create_table()?;
 
@@ -193,13 +432,10 @@ where
             let move_speed: f64 = args.get("move_speed").unwrap_or(1.0);
             let radius: f64 = args.get("radius").unwrap_or(2.0);
             
-            let mut properties = std::collections::BTreeMap::new();
-            if let Ok(props_table) = args.get::<mlua::Table>("properties") {
-                for pair in props_table.pairs::<String, String>() {
-                    let (k, v) = pair?;
-                    properties.insert(k, v);
-                }
-            }
+            let properties = match args.get::<mlua::Table>("properties") {
+                Ok(props_table) => extract_properties(props_table)?,
+                Err(_) => BTreeMap::new(),
+            };
 
             let entity_id = instance.allocate_entity_id();
 
@@ -356,6 +592,67 @@ where
         })?;
         commands_table.set("set_collision_filter", set_collision_filter)?;
 
+        let cmd_buf_spawn_obs = Rc::clone(&cmd_buffer_rc);
+        let spawn_static_obstacle = scope.create_function(move |_, args: mlua::Table| {
+            let parsed = parse_static_obstacle_args(&args)?;
+            let obstacle_id = instance.allocate_obstacle_id();
+            cmd_buf_spawn_obs
+                .borrow_mut()
+                .push(Command::SpawnStaticObstacle {
+                    obstacle_id,
+                    blueprint: parsed.blueprint,
+                    shape: parsed.shape,
+                    filter: parsed.filter,
+                    is_solid: parsed.is_solid,
+                    collision_type: parsed.collision_type,
+                    properties: parsed.properties,
+                });
+            Ok(obstacle_id)
+        })?;
+        commands_table.set("spawn_static_obstacle", spawn_static_obstacle)?;
+
+        let cmd_buf_destroy_obs = Rc::clone(&cmd_buffer_rc);
+        let destroy_static_obstacle = scope.create_function(move |_, obstacle_id: u64| {
+            cmd_buf_destroy_obs
+                .borrow_mut()
+                .push(Command::DestroyStaticObstacle { obstacle_id });
+            Ok(())
+        })?;
+        commands_table.set("destroy_static_obstacle", destroy_static_obstacle)?;
+
+        let cmd_buf_set_obs_prop = Rc::clone(&cmd_buffer_rc);
+        let set_obstacle_property =
+            scope.create_function(move |_, (obstacle_id, key, value): (u64, String, String)| {
+                cmd_buf_set_obs_prop
+                    .borrow_mut()
+                    .push(Command::SetObstacleProperty {
+                        obstacle_id,
+                        key,
+                        value,
+                    });
+                Ok(())
+            })?;
+        commands_table.set("set_obstacle_property", set_obstacle_property)?;
+
+        let cmd_buf_map_bounds = Rc::clone(&cmd_buffer_rc);
+        let set_map_bounds =
+            scope.create_function(move |_, (min_val, max_val): (mlua::Value, mlua::Value)| {
+                let min = extract_vector2(min_val)?;
+                let max = extract_vector2(max_val)?;
+                if min.x > max.x || min.y > max.y {
+                    return Err(mlua::Error::RuntimeError(
+                        "set_map_bounds: min must be <= max on both axes".to_string(),
+                    ));
+                }
+                cmd_buf_map_bounds
+                    .borrow_mut()
+                    .push(Command::SetMapBounds {
+                        bounds: MapBounds::new(min, max),
+                    });
+                Ok(())
+            })?;
+        commands_table.set("set_map_bounds", set_map_bounds)?;
+
         loci_table.set("Commands", commands_table)?;
 
         let physics_table = lua.create_table()?;
@@ -389,6 +686,31 @@ where
             }
         })?;
         physics_table.set("raycast", raycast_fn)?;
+
+        let get_obstacles_in_radius = scope.create_function(|lua, (pos_val, radius): (mlua::Value, f64)| {
+            if !radius.is_finite() || radius < 0.0 {
+                return Err(mlua::Error::RuntimeError(
+                    "get_obstacles_in_radius: radius must be finite and >= 0".to_string(),
+                ));
+            }
+            let center = extract_vector2(pos_val)?;
+            let query_shape = ColliderShape::Circle(DeterministicCircle::new(
+                center,
+                I16F16::from_num(radius),
+            ));
+
+            let table = lua.create_table()?;
+            let mut idx = 1usize;
+            for (&id, obs) in &instance.static_obstacles {
+                if intersect_shapes(&query_shape, &obs.shape).is_colliding {
+                    table.set(idx, id)?;
+                    idx += 1;
+                }
+            }
+            Ok(table)
+        })?;
+        physics_table.set("get_obstacles_in_radius", get_obstacles_in_radius)?;
+
         loci_table.set("Physics", physics_table)?;
 
         // Execute the user's closure
