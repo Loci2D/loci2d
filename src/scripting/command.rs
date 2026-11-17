@@ -1,5 +1,6 @@
 use crate::world::instance::DeterministicVector2;
 use crate::world::instance::{ActiveTimer, Instance, MatchState};
+use crate::world::physics::{ColliderShape, CollisionFilter, MapBounds, StaticObstacle};
 
 use fixed::types::I16F16;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +59,26 @@ pub enum Command {
         entity_id: u64,
         layer: u16,
         mask: u16,
+    },
+    SpawnStaticObstacle {
+        obstacle_id: u64,
+        blueprint: String,
+        shape: ColliderShape,
+        filter: CollisionFilter,
+        is_solid: bool,
+        collision_type: String,
+        properties: std::collections::BTreeMap<String, String>,
+    },
+    DestroyStaticObstacle {
+        obstacle_id: u64,
+    },
+    SetObstacleProperty {
+        obstacle_id: u64,
+        key: String,
+        value: String,
+    },
+    SetMapBounds {
+        bounds: MapBounds,
     },
 }
 
@@ -217,11 +238,50 @@ impl CommandBuffer {
                 }
                 Command::SetCollisionFilter { entity_id, layer, mask } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
-                        entity.collision_filter = crate::world::physics::map::CollisionFilter::new(layer, mask);
+                        entity.collision_filter = CollisionFilter::new(layer, mask);
                         if instance.logging_enabled {
                             println!("[CommandBuffer] SetCollisionFilter entity={} layer={} mask={}", entity_id, layer, mask);
                         }
                     }
+                }
+                Command::SpawnStaticObstacle {
+                    obstacle_id,
+                    blueprint,
+                    shape,
+                    filter,
+                    is_solid,
+                    collision_type,
+                    properties,
+                } => {
+                    let obstacle = StaticObstacle::new(obstacle_id, shape, filter, is_solid)
+                        .with_blueprint(blueprint.clone())
+                        .with_collision_type(collision_type)
+                        .with_properties(properties);
+                    instance.add_static_obstacle(obstacle);
+                    if instance.logging_enabled {
+                        println!(
+                            "[CommandBuffer] Spawned static obstacle {} from blueprint '{}' (is_solid={})",
+                            obstacle_id, blueprint, is_solid
+                        );
+                    }
+                }
+                Command::DestroyStaticObstacle { obstacle_id } => {
+                    instance.remove_static_obstacle(obstacle_id);
+                    if instance.logging_enabled {
+                        println!("[CommandBuffer] Destroyed static obstacle {}", obstacle_id);
+                    }
+                }
+                Command::SetObstacleProperty {
+                    obstacle_id,
+                    key,
+                    value,
+                } => {
+                    if let Some(obstacle) = instance.static_obstacles.get_mut(&obstacle_id) {
+                        obstacle.properties.insert(key, value);
+                    }
+                }
+                Command::SetMapBounds { bounds } => {
+                    instance.set_map_bounds(bounds);
                 }
             }
         }
