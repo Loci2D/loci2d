@@ -1,5 +1,6 @@
 // Replay player for deterministic match playback and offline verification (ADR-0010, ADR-0011).
 
+use super::csv::{CsvExportReport, CsvTelemetryWriter};
 use super::hash::compute_canonical_state_hash;
 use crate::network::packets::{
     ClientIntent, ReplayCheckpoint, ReplayFile, ReplayHeader, ReplayTickFrame, ServerPacket,
@@ -204,7 +205,74 @@ impl ReplayPlayer {
         })
     }
 
-    /// Streams the replay match in real-time (or at scaled speed) and broadcasts
+    /// Deterministically runs the replay and exports per-tick, per-entity telemetry to CSV.
+    pub fn export_csv<P: AsRef<Path>>(
+        &self,
+        output_path: P,
+    ) -> Result<CsvExportReport, Box<dyn std::error::Error>> {
+        let header = self.replay.header.as_ref().ok_or("Missing replay header")?;
+        let mut instance =
+            Instance::new(header.instance_id, header.tick_rate, 60, header.random_seed);
+        if !header.script_payload.is_empty() {
+            instance
+                .load_script(&header.script_payload)
+                .map_err(|e| format!("Failed to load embedded replay script: {}", e))?;
+        }
+        self.export_csv_with_instance(&mut instance, output_path)
+    }
+
+    /// Deterministically runs the replay against a caller-configured `Instance` and writes CSV telemetry.
+    pub fn export_csv_with_instance<P: AsRef<Path>>(
+        &self,
+        instance: &mut Instance,
+        output_path: P,
+    ) -> Result<CsvExportReport, Box<dyn std::error::Error>> {
+        let header = self.replay.header.as_ref().ok_or("Missing replay header")?;
+        if !instance.script_hash.is_empty() && instance.script_hash != header.script_hash {
+            return Err(format!(
+                "Script version mismatch (expected {}, got {}). CSV export aborted.",
+                header.script_hash, instance.script_hash
+            )
+            .into());
+        }
+
+        let frames_by_tick: BTreeMap<u64, &ReplayTickFrame> =
+            self.replay.frames.iter().map(|f| (f.tick, f)).collect();
+        let end_tick = frames_by_tick
+            .keys()
+            .next_back()
+            .copied()
+            .unwrap_or(0)
+            .max(
+                self.replay
+                    .checkpoints
+                    .iter()
+                    .map(|c| c.tick)
+                    .max()
+                    .unwrap_or(0),
+            );
+
+        let mut csv = CsvTelemetryWriter::create(&output_path)?;
+        for tick in 0..=end_tick {
+            if let Some(frame) = frames_by_tick.get(&tick) {
+                for entry in &frame.entries {
+                    instance.apply_replay_entry(entry);
+                }
+            }
+            instance
+                .tick(tick)
+                .map_err(|e| format!("Simulation error during CSV export at tick {}: {}", tick, e))?;
+            csv.write_instance_tick(tick, instance)?;
+        }
+        csv.flush()?;
+
+        Ok(CsvExportReport {
+            total_ticks: end_tick,
+            rows_written: csv.rows_written(),
+            output_path: output_path.as_ref().display().to_string(),
+        })
+    }
+
     /// Streams the replay match in real-time (or at scaled speed) and broadcasts
     /// authoritative WorldState snapshots over UDP to all connected spectator clients.
     pub fn broadcast_live(
@@ -240,9 +308,11 @@ impl ReplayPlayer {
             speed.clamp(0.1, 10.0)
         };
         if (speed - original_speed).abs() > 0.001 {
-            println!(
-                "[Spectator] Playback speed clamped from {:.1}x to {:.1}x",
-                original_speed, speed
+            crate::log_warn!(
+                "Spectator",
+                "Playback speed clamped from {:.1}x to {:.1}x",
+                original_speed,
+                speed
             );
         }
 
@@ -272,9 +342,12 @@ impl ReplayPlayer {
         let mut out_buf = Vec::with_capacity(2048);
 
         running.store(true, Ordering::Relaxed);
-        println!(
-            "[Spectator] Replay broadcast started ({} Hz at {:.1}x speed, total ticks: {})",
-            header.tick_rate, speed, end_tick
+        crate::log_info!(
+            "Spectator",
+            "Replay broadcast started ({} Hz at {:.1}x speed, total ticks: {})",
+            header.tick_rate,
+            speed,
+            end_tick
         );
 
         while running.load(Ordering::Relaxed) && tick_count <= end_tick {
@@ -292,22 +365,25 @@ impl ReplayPlayer {
                         spectators.insert(addr, now);
                     } else if spectators.len() < max_spectators {
                         spectators.insert(addr, now);
-                        println!(
-                            "[Spectator] New spectator client registered: {} ({}/{} active)",
+                        crate::log_info!(
+                            "Spectator",
+                            "New spectator client registered: {} ({}/{} active)",
                             addr,
                             spectators.len(),
                             max_spectators
                         );
                     } else {
-                        println!(
-                            "[Spectator] Rejected spectator client {}: maximum capacity ({} spectators) reached",
-                            addr, max_spectators
+                        crate::log_warn!(
+                            "Spectator",
+                            "Rejected spectator client {}: maximum capacity ({} spectators) reached",
+                            addr,
+                            max_spectators
                         );
                     }
 
                     if let Some(client_intent::Intent::Disconnect(_)) = intent.intent {
                         spectators.remove(&addr);
-                        println!("[Spectator] Spectator client disconnected: {}", addr);
+                        crate::log_info!("Spectator", "Spectator client disconnected: {}", addr);
                     }
                 }
 
@@ -315,7 +391,7 @@ impl ReplayPlayer {
                 let now = Instant::now();
                 spectators.retain(|addr, last_seen| {
                     if now.duration_since(*last_seen) > spectator_timeout {
-                        println!("[Spectator] Spectator client {} timed out", addr);
+                        crate::log_info!("Spectator", "Spectator client {} timed out", addr);
                         false
                     } else {
                         true
@@ -371,8 +447,9 @@ impl ReplayPlayer {
             }
         }
 
-        println!(
-            "[Spectator] Replay broadcast finished at tick {}.",
+        crate::log_info!(
+            "Spectator",
+            "Replay broadcast finished at tick {}",
             tick_count.saturating_sub(1)
         );
     }

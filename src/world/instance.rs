@@ -54,6 +54,8 @@ pub struct Instance {
     pub active_trigger_overlaps: BTreeSet<(u64, u64)>,
     pub previous_trigger_overlaps: BTreeSet<(u64, u64)>,
     pub trigger_events: Vec<TriggerEvent>,
+    pub active_solid_collisions: BTreeSet<(u64, u64)>,
+    pub active_dynamic_collisions: BTreeSet<(u64, u64)>,
     pub logging_enabled: bool,
     // Phase 6 Additions:
     pub script_engine: ScriptEngine,
@@ -101,6 +103,8 @@ impl Instance {
             active_trigger_overlaps: BTreeSet::new(),
             previous_trigger_overlaps: BTreeSet::new(),
             trigger_events: Vec::new(),
+            active_solid_collisions: BTreeSet::new(),
+            active_dynamic_collisions: BTreeSet::new(),
             logging_enabled: false,
             script_engine: ScriptEngine::new(seed).expect("Failed to initialize ScriptEngine"),
             script_hash: String::new(),
@@ -308,9 +312,12 @@ impl Instance {
             if let Some(entity) = self.entities.get_mut(&session.entity_id) {
                 entity.name = player_name;
             }
-            println!(
-                "[Session] Client {} re-joined as '{}' (EntityId {})",
-                addr, session.player_name, session.entity_id
+            crate::log_info!(
+                "Session",
+                "Client {} re-joined as '{}' (EntityId {})",
+                addr,
+                session.player_name,
+                session.entity_id
             );
             return session.entity_id;
         }
@@ -329,9 +336,13 @@ impl Instance {
         self.sessions.insert(addr, session);
         self.entity_to_addr.insert(entity_id, addr);
 
-        println!(
-            "[Join] Client {} joined as '{}' (SessionId {}, EntityId {})",
-            addr, player_name, session_id, entity_id
+        crate::log_info!(
+            "Session",
+            "Client {} joined as '{}' (SessionId {}, EntityId {})",
+            addr,
+            player_name,
+            session_id,
+            entity_id
         );
         entity_id
     }
@@ -348,9 +359,13 @@ impl Instance {
             } else {
                 reason
             };
-            println!(
-                "[Disconnect] Client {} ('{}', EntityId {}) disconnected gracefully. Reason: '{}'",
-                addr, session.player_name, session.entity_id, display_reason
+            crate::log_info!(
+                "Session",
+                "Client {} ('{}', EntityId {}) disconnected gracefully (reason: '{}')",
+                addr,
+                session.player_name,
+                session.entity_id,
+                display_reason
             );
         }
     }
@@ -382,9 +397,13 @@ impl Instance {
             // simulation.rs will dispatch on_player_leave and push a DestroyEntity command.
             // removed -> self.entities.remove(&session.entity_id);
             timed_out_entities.push((entity_id, player_name.clone()));
-            println!(
-                "[Timeout] Client {} ('{}', EntityId {}) timed out after {}s of inactivity",
-                addr, player_name, entity_id, timeout_secs
+            crate::log_info!(
+                "Session",
+                "Client {} ('{}', EntityId {}) timed out after {}s of inactivity",
+                addr,
+                player_name,
+                entity_id,
+                timeout_secs
             );
         }
         timed_out_entities
@@ -569,10 +588,10 @@ impl Instance {
             inner_intent,
         ) {
             crate::world::intent_handler::IntentResult::FatalError(e) => {
-                eprintln!("[Replay] Error applying intent: {}", e);
+                crate::log_error!("Replay", "Error applying intent: {}", e);
             }
             crate::world::intent_handler::IntentResult::Rejected(r) => {
-                eprintln!("[Replay] Intent rejected: {}", r);
+                crate::log_warn!("Replay", "Intent rejected: {}", r);
             }
             crate::world::intent_handler::IntentResult::Ok => {}
         }

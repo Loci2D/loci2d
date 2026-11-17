@@ -226,6 +226,9 @@ cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --sp
 
 # 5. Transmissão Acelerada de Replay (velocidade 2x ou 4x)
 cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 2.0
+
+# 6. Exportar Telemetria CSV (por tick e entidade) de um Replay
+cargo run --bin loci2d -- --replay match_01.loci --export-csv match_01.csv
 ```
 
 ---
@@ -245,6 +248,7 @@ O `loci2d` pode ser configurado através de variáveis de ambiente (ou arquivo `
 | `SCRIPTS_DIR` | `scripts` | Diretório base dos scripts Lua de regras de arena |
 | `SCRIPT_PATH` | *(nenhum)* | Caminho direto para o script Lua autoritativo (sobrescreve `SCRIPTS_DIR` e `--map`) |
 | `MAP_NAME` | `default_arena` | Identificador do mapa/subpasta a ser carregado |
+| `LOCI_LOG` | `info` | Nível de verbosidade dos logs (`off`, `error`, `warn`, `info`, `debug`, `trace`; também lê `RUST_LOG`) |
 
 ### Argumentos de Linha de Comando
 
@@ -256,12 +260,18 @@ OPÇÕES:
   --script-path <ARQUIVO>      Caminho explícito para o script Lua (sobrescreve --scripts-dir e --map)
   --map <NOME>                 Identificador do mapa da arena (padrão: default_arena)
   --record <ARQUIVO>           Habilita gravação de partida ao vivo para um arquivo .loci
+  --record-csv <ARQUIVO>       Captura telemetria CSV (por tick/entidade) durante a partida ao vivo
   --replay <ARQUIVO>           Carrega e executa um arquivo de replay .loci
   --verify                     Executa verificação determinística headless
+  --export-csv <ARQUIVO>       Exporta telemetria CSV (por tick/entidade) de um arquivo --replay
   --checkpoint-interval <N>    Frequência de checkpoints em ticks (padrão: 60)
   --seed <N>                   Seed PRNG aleatória para a instância (padrão: 42)
   --speed <FLOAT>              Multiplicador de velocidade de reprodução do replay (padrão: 1.0)
   --broadcast <ADDR>           Destino de transmissão UDP para espectadores (ex: 127.0.0.1:4000)
+  --log-level <NÍVEL>          Define verbosidade: off, error, warn, info, debug, trace (ou env LOCI_LOG)
+  --verbose, -v                Atalho para --log-level debug
+  --quiet, -q                  Atalho para --log-level warn
+  --log-file <CAMINHO>         Grava logs estruturados do servidor em arquivo no disco
   --help, -h                   Exibe esta mensagem de ajuda
 ```
 

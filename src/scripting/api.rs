@@ -215,21 +215,21 @@ pub fn setup_base_api(lua: &Lua) -> LuaResult<()> {
     log_table.set(
         "info",
         lua.create_function(|_, msg: String| {
-            println!("[Lua] INFO: {}", msg);
+            crate::log_info!("Lua", "{}", msg);
             Ok(())
         })?,
     )?;
     log_table.set(
         "warn",
         lua.create_function(|_, msg: String| {
-            eprintln!("[Lua] WARN: {}", msg);
+            crate::log_warn!("Lua", "{}", msg);
             Ok(())
         })?,
     )?;
     log_table.set(
         "error",
         lua.create_function(|_, msg: String| {
-            eprintln!("[Lua] ERROR: {}", msg);
+            crate::log_error!("Lua", "{}", msg);
             Ok(())
         })?,
     )?;

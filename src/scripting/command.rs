@@ -114,8 +114,9 @@ impl CommandBuffer {
                         "Enemy" | "NPC" => crate::world::entity::EntityType::NPC,
                         unknown => {
                             if instance.logging_enabled {
-                                println!(
-                                    "[CommandBuffer] Unknown entity_type '{}', defaulting to Prop",
+                                crate::log_warn!(
+                                    "CommandBuffer",
+                                    "Unknown entity_type '{}', defaulting to Prop",
                                     unknown
                                 );
                             }
@@ -141,8 +142,9 @@ impl CommandBuffer {
                     instance.entities.insert(entity_id, entity);
                     
                     if instance.logging_enabled {
-                        println!(
-                            "[CommandBuffer] Spawned entity {} from blueprint '{}' at ({}, {})",
+                        crate::log_debug!(
+                            "CommandBuffer",
+                            "Spawned entity {} from blueprint '{}' at ({}, {})",
                             entity_id,
                             blueprint,
                             pos_for_log.x.to_num::<f64>(),
@@ -165,7 +167,11 @@ impl CommandBuffer {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         let nav = entity.navigation.get_or_insert_with(|| {
                             if instance.logging_enabled {
-                                eprintln!("[Loci] WARNING: SetNavigationTarget called on entity {} without a NavigationComponent. Creating one with speed 0.0.", entity_id);
+                                crate::log_warn!(
+                                    "Lua",
+                                    "SetNavigationTarget called on entity {} without a NavigationComponent; creating one with speed 0.0",
+                                    entity_id
+                                );
                             }
                             crate::world::physics::navigation::NavigationComponent::new(
                                 I16F16::from_num(0),
@@ -207,9 +213,11 @@ impl CommandBuffer {
                 Command::SendEvent { event_name, data } => {
                     // TODO(Phase X): Implement actual event broadcasting to clients
                     if instance.logging_enabled {
-                        println!(
-                            "[CommandBuffer] Broadcasting event '{}' with data '{}'",
-                            event_name, data
+                        crate::log_debug!(
+                            "CommandBuffer",
+                            "Broadcasting event '{}' with data '{}'",
+                            event_name,
+                            data
                         );
                     }
                 }
@@ -240,7 +248,13 @@ impl CommandBuffer {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         entity.collision_filter = CollisionFilter::new(layer, mask);
                         if instance.logging_enabled {
-                            println!("[CommandBuffer] SetCollisionFilter entity={} layer={} mask={}", entity_id, layer, mask);
+                            crate::log_debug!(
+                                "CommandBuffer",
+                                "SetCollisionFilter entity={} layer={} mask={}",
+                                entity_id,
+                                layer,
+                                mask
+                            );
                         }
                     }
                 }
