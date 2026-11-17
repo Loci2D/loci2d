@@ -1,5 +1,6 @@
 use crate::world::instance::DeterministicVector2;
 use crate::world::instance::{ActiveTimer, Instance, MatchState};
+use crate::world::physics::{ColliderShape, CollisionFilter, MapBounds, StaticObstacle};
 
 use fixed::types::I16F16;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +60,26 @@ pub enum Command {
         layer: u16,
         mask: u16,
     },
+    SpawnStaticObstacle {
+        obstacle_id: u64,
+        blueprint: String,
+        shape: ColliderShape,
+        filter: CollisionFilter,
+        is_solid: bool,
+        collision_type: String,
+        properties: std::collections::BTreeMap<String, String>,
+    },
+    DestroyStaticObstacle {
+        obstacle_id: u64,
+    },
+    SetObstacleProperty {
+        obstacle_id: u64,
+        key: String,
+        value: String,
+    },
+    SetMapBounds {
+        bounds: MapBounds,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -93,8 +114,9 @@ impl CommandBuffer {
                         "Enemy" | "NPC" => crate::world::entity::EntityType::NPC,
                         unknown => {
                             if instance.logging_enabled {
-                                println!(
-                                    "[CommandBuffer] Unknown entity_type '{}', defaulting to Prop",
+                                crate::log_warn!(
+                                    "CommandBuffer",
+                                    "Unknown entity_type '{}', defaulting to Prop",
                                     unknown
                                 );
                             }
@@ -120,8 +142,9 @@ impl CommandBuffer {
                     instance.entities.insert(entity_id, entity);
                     
                     if instance.logging_enabled {
-                        println!(
-                            "[CommandBuffer] Spawned entity {} from blueprint '{}' at ({}, {})",
+                        crate::log_debug!(
+                            "CommandBuffer",
+                            "Spawned entity {} from blueprint '{}' at ({}, {})",
                             entity_id,
                             blueprint,
                             pos_for_log.x.to_num::<f64>(),
@@ -144,7 +167,11 @@ impl CommandBuffer {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
                         let nav = entity.navigation.get_or_insert_with(|| {
                             if instance.logging_enabled {
-                                eprintln!("[Loci] WARNING: SetNavigationTarget called on entity {} without a NavigationComponent. Creating one with speed 0.0.", entity_id);
+                                crate::log_warn!(
+                                    "Lua",
+                                    "SetNavigationTarget called on entity {} without a NavigationComponent; creating one with speed 0.0",
+                                    entity_id
+                                );
                             }
                             crate::world::physics::navigation::NavigationComponent::new(
                                 I16F16::from_num(0),
@@ -186,9 +213,11 @@ impl CommandBuffer {
                 Command::SendEvent { event_name, data } => {
                     // TODO(Phase X): Implement actual event broadcasting to clients
                     if instance.logging_enabled {
-                        println!(
-                            "[CommandBuffer] Broadcasting event '{}' with data '{}'",
-                            event_name, data
+                        crate::log_debug!(
+                            "CommandBuffer",
+                            "Broadcasting event '{}' with data '{}'",
+                            event_name,
+                            data
                         );
                     }
                 }
@@ -217,11 +246,56 @@ impl CommandBuffer {
                 }
                 Command::SetCollisionFilter { entity_id, layer, mask } => {
                     if let Some(entity) = instance.entities.get_mut(&entity_id) {
-                        entity.collision_filter = crate::world::physics::map::CollisionFilter::new(layer, mask);
+                        entity.collision_filter = CollisionFilter::new(layer, mask);
                         if instance.logging_enabled {
-                            println!("[CommandBuffer] SetCollisionFilter entity={} layer={} mask={}", entity_id, layer, mask);
+                            crate::log_debug!(
+                                "CommandBuffer",
+                                "SetCollisionFilter entity={} layer={} mask={}",
+                                entity_id,
+                                layer,
+                                mask
+                            );
                         }
                     }
+                }
+                Command::SpawnStaticObstacle {
+                    obstacle_id,
+                    blueprint,
+                    shape,
+                    filter,
+                    is_solid,
+                    collision_type,
+                    properties,
+                } => {
+                    let obstacle = StaticObstacle::new(obstacle_id, shape, filter, is_solid)
+                        .with_blueprint(blueprint.clone())
+                        .with_collision_type(collision_type)
+                        .with_properties(properties);
+                    instance.add_static_obstacle(obstacle);
+                    if instance.logging_enabled {
+                        println!(
+                            "[CommandBuffer] Spawned static obstacle {} from blueprint '{}' (is_solid={})",
+                            obstacle_id, blueprint, is_solid
+                        );
+                    }
+                }
+                Command::DestroyStaticObstacle { obstacle_id } => {
+                    instance.remove_static_obstacle(obstacle_id);
+                    if instance.logging_enabled {
+                        println!("[CommandBuffer] Destroyed static obstacle {}", obstacle_id);
+                    }
+                }
+                Command::SetObstacleProperty {
+                    obstacle_id,
+                    key,
+                    value,
+                } => {
+                    if let Some(obstacle) = instance.static_obstacles.get_mut(&obstacle_id) {
+                        obstacle.properties.insert(key, value);
+                    }
+                }
+                Command::SetMapBounds { bounds } => {
+                    instance.set_map_bounds(bounds);
                 }
             }
         }

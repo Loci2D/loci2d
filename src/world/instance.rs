@@ -1,11 +1,11 @@
 use super::entity::{Entity, EntityType};
-use super::physics::{MapBounds, StaticObstacle, TriggerEvent};
+use super::physics::{ColliderShape, MapBounds, StaticObstacle, TriggerEvent};
 use super::session::{ClientSession, SessionState};
 use crate::config::DEFAULT_SESSION_GRACE_PERIOD_SECS;
 use crate::network::packets::client_intent::Intent;
 use crate::network::packets::{
     ActionBroadcast, ClientIntent, EntityState, EntityType as ProtoEntityType, MatchLifecycleState,
-    Property, ReplayIntentEntry, ServerResponse, WorldState,
+    ObstacleShape, Property, ReplayIntentEntry, ServerResponse, StaticObstacleState, WorldState,
 };
 use crate::scripting::{CommandBuffer, ScriptEngine};
 use fixed::types::I16F16;
@@ -95,6 +95,8 @@ pub struct Instance {
     pub active_trigger_overlaps: BTreeSet<(u64, u64)>,
     pub previous_trigger_overlaps: BTreeSet<(u64, u64)>,
     pub trigger_events: Vec<TriggerEvent>,
+    pub active_solid_collisions: BTreeSet<(u64, u64)>,
+    pub active_dynamic_collisions: BTreeSet<(u64, u64)>,
     pub logging_enabled: bool,
     // Phase 6 Additions:
     pub script_engine: ScriptEngine,
@@ -111,6 +113,7 @@ pub struct Instance {
     // TODO(Phase 7+): If Instance is ever moved to a multi-threaded runtime,
     // replace Cell<u64> with AtomicU64 for Send + Sync compliance.
     next_entity_id: std::cell::Cell<u64>,
+    next_obstacle_id: std::cell::Cell<u64>,
     next_session_id: u64,
 }
 
@@ -119,6 +122,13 @@ impl Instance {
     pub fn allocate_entity_id(&self) -> u64 {
         let id = self.next_entity_id.get();
         self.next_entity_id.set(id + 1);
+        id
+    }
+
+    /// Allocates and returns a unique deterministic static obstacle ID.
+    pub fn allocate_obstacle_id(&self) -> u64 {
+        let id = self.next_obstacle_id.get();
+        self.next_obstacle_id.set(id + 1);
         id
     }
 
@@ -143,6 +153,8 @@ impl Instance {
             active_trigger_overlaps: BTreeSet::new(),
             previous_trigger_overlaps: BTreeSet::new(),
             trigger_events: Vec::new(),
+            active_solid_collisions: BTreeSet::new(),
+            active_dynamic_collisions: BTreeSet::new(),
             logging_enabled: false,
             script_engine: ScriptEngine::new(seed).expect("Failed to initialize ScriptEngine"),
             script_hash: String::new(),
@@ -153,6 +165,7 @@ impl Instance {
             tick_actions: Vec::new(),
             pending_responses: Vec::new(),
             next_entity_id: std::cell::Cell::new(1),
+            next_obstacle_id: std::cell::Cell::new(1),
             next_session_id: 1,
         }
     }
@@ -421,9 +434,12 @@ impl Instance {
                     let session_token = session.session_token.clone();
                     self.sessions.insert(addr, session);
                     self.entity_to_addr.insert(entity_id, addr);
-                    println!(
-                        "[Session] Resumed grace-period session for '{}' (EntityId {}) at {}",
-                        player_name, entity_id, addr
+                    crate::log_info!(
+                        "Session",
+                        "Resumed grace-period session for '{}' (EntityId {}) at {}",
+                        player_name,
+                        entity_id,
+                        addr
                     );
                     return JoinResult::Resumed {
                         entity_id,
@@ -440,9 +456,13 @@ impl Instance {
                     let session_token = session.session_token.clone();
                     self.sessions.insert(addr, session);
                     self.entity_to_addr.insert(entity_id, addr);
-                    println!(
-                        "[Session] Rebound active session for '{}' (EntityId {}) from {} to {}",
-                        player_name, entity_id, old_addr, addr
+                    crate::log_info!(
+                        "Session",
+                        "Rebound active session for '{}' (EntityId {}) from {} to {}",
+                        player_name,
+                        entity_id,
+                        old_addr,
+                        addr
                     );
                     return JoinResult::Resumed {
                         entity_id,
@@ -462,9 +482,12 @@ impl Instance {
             if let Some(entity) = self.entities.get_mut(&session.entity_id) {
                 entity.name = player_name;
             }
-            println!(
-                "[Session] Client {} re-joined as '{}' (EntityId {})",
-                addr, session.player_name, session.entity_id
+            crate::log_info!(
+                "Session",
+                "Client {} re-joined as '{}' (EntityId {})",
+                addr,
+                session.player_name,
+                session.entity_id
             );
             return JoinResult::Resumed {
                 entity_id: session.entity_id,
@@ -494,9 +517,13 @@ impl Instance {
         self.entity_to_addr.insert(entity_id, addr);
         self.tokens.insert(session_token.clone(), entity_id);
 
-        println!(
-            "[Join] Client {} joined as '{}' (SessionId {}, EntityId {})",
-            addr, player_name, session_id, entity_id
+        crate::log_info!(
+            "Session",
+            "Client {} joined as '{}' (SessionId {}, EntityId {})",
+            addr,
+            player_name,
+            session_id,
+            entity_id
         );
         JoinResult::Joined {
             entity_id,
@@ -518,9 +545,13 @@ impl Instance {
             } else {
                 reason
             };
-            println!(
-                "[Disconnect] Client {} ('{}', EntityId {}) disconnected gracefully. Reason: '{}'",
-                addr, session.player_name, session.entity_id, display_reason
+            crate::log_info!(
+                "Session",
+                "Client {} ('{}', EntityId {}) disconnected gracefully (reason: '{}')",
+                addr,
+                session.player_name,
+                session.entity_id,
+                display_reason
             );
         }
     }
@@ -553,9 +584,13 @@ impl Instance {
                 if grace_secs == 0 {
                     self.tokens.remove(&session.session_token);
                     expired_entities.push((entity_id, player_name.clone()));
-                    println!(
-                        "[Timeout] Client {} ('{}', EntityId {}) timed out after {}s of inactivity",
-                        addr, player_name, entity_id, timeout_secs
+                    crate::log_info!(
+                        "Session",
+                        "Client {} ('{}', EntityId {}) timed out after {}s of inactivity",
+                        addr,
+                        player_name,
+                        entity_id,
+                        timeout_secs
                     );
                 } else {
                     session.state = SessionState::GracePeriod {
@@ -568,9 +603,14 @@ impl Instance {
                         }
                     }
                     self.disconnected_sessions.insert(entity_id, session);
-                    println!(
-                        "[GracePeriod] Client {} ('{}', EntityId {}) entered {}s grace period after {}s inactivity",
-                        addr, player_name, entity_id, grace_secs, timeout_secs
+                    crate::log_info!(
+                        "Session",
+                        "Client {} ('{}', EntityId {}) entered {}s grace period after {}s inactivity",
+                        addr,
+                        player_name,
+                        entity_id,
+                        grace_secs,
+                        timeout_secs
                     );
                 }
             }
@@ -589,9 +629,12 @@ impl Instance {
                 if self.entities.contains_key(&entity_id) {
                     expired_entities.push((entity_id, session.player_name.clone()));
                 }
-                println!(
-                    "[Timeout] Grace period expired for '{}' (EntityId {}) after {}s",
-                    session.player_name, entity_id, grace_secs
+                crate::log_info!(
+                    "Session",
+                    "Grace period expired for '{}' (EntityId {}) after {}s",
+                    session.player_name,
+                    entity_id,
+                    grace_secs
                 );
             }
         }
@@ -620,6 +663,10 @@ impl Instance {
     }
 
     pub fn add_static_obstacle(&mut self, obstacle: StaticObstacle) {
+        let current_next = self.next_obstacle_id.get();
+        if obstacle.id >= current_next {
+            self.next_obstacle_id.set(obstacle.id + 1);
+        }
         self.static_obstacles.insert(obstacle.id, obstacle);
     }
 
@@ -654,7 +701,7 @@ impl Instance {
         self.tick_actions.clear();
     }
 
-    /// Generates a complete WorldState snapshot representing all active entities.
+    /// Generates a complete WorldState snapshot representing all active entities and static obstacles.
     pub fn create_snapshot(&self, tick: u64) -> WorldState {
         let entities = self
             .entities
@@ -677,6 +724,49 @@ impl Instance {
                         value: v.clone(),
                     })
                     .collect(),
+            })
+            .collect();
+
+        let obstacles = self
+            .static_obstacles
+            .values()
+            .map(|obs| {
+                let (shape, position, width_bits, height_bits, radius_bits) = match &obs.shape {
+                    ColliderShape::AABB(aabb) => (
+                        ObstacleShape::ObstacleAabb as i32,
+                        aabb.center().to_proto(),
+                        aabb.width().to_bits(),
+                        aabb.height().to_bits(),
+                        0,
+                    ),
+                    ColliderShape::Circle(circle) => (
+                        ObstacleShape::ObstacleCircle as i32,
+                        circle.center.to_proto(),
+                        0,
+                        0,
+                        circle.radius.to_bits(),
+                    ),
+                };
+
+                StaticObstacleState {
+                    id: obs.id,
+                    blueprint: obs.blueprint.clone(),
+                    shape,
+                    position: Some(position),
+                    width_bits,
+                    height_bits,
+                    radius_bits,
+                    is_solid: obs.is_solid,
+                    collision_type: obs.collision_type.clone(),
+                    properties: obs
+                        .properties
+                        .iter()
+                        .map(|(k, v)| Property {
+                            key: k.clone(),
+                            value: v.clone(),
+                        })
+                        .collect(),
+                }
             })
             .collect();
 
@@ -706,6 +796,7 @@ impl Instance {
             actions: self.tick_actions.clone(),
             match_state,
             match_winner,
+            obstacles,
         }
     }
 
@@ -734,10 +825,10 @@ impl Instance {
             is_resume,
         ) {
             crate::world::intent_handler::IntentResult::FatalError(e) => {
-                eprintln!("[Replay] Error applying intent: {}", e);
+                crate::log_error!("Replay", "Error applying intent: {}", e);
             }
             crate::world::intent_handler::IntentResult::Rejected(r) => {
-                eprintln!("[Replay] Intent rejected: {}", r);
+                crate::log_warn!("Replay", "Intent rejected: {}", r);
             }
             crate::world::intent_handler::IntentResult::Ok => {}
         }

@@ -93,6 +93,25 @@ message ActionBroadcast {
   Vector2 target_direction = 3;
 }
 
+enum ObstacleShape {
+  OBSTACLE_AABB = 0;
+  OBSTACLE_CIRCLE = 1;
+}
+
+// Authoritative Static Obstacle / Trigger Zone State in World Snapshot
+message StaticObstacleState {
+  uint64 id = 1;
+  string blueprint = 2;
+  ObstacleShape shape = 3;
+  Vector2 position = 4;
+  sint32 width_bits = 5;
+  sint32 height_bits = 6;
+  sint32 radius_bits = 7;
+  bool is_solid = 8;
+  string collision_type = 9;
+  repeated Property properties = 10;
+}
+
 // Full Authoritative World Snapshot
 message WorldState {
   uint64 tick = 1;
@@ -102,6 +121,7 @@ message WorldState {
   repeated ActionBroadcast actions = 5;
   MatchLifecycleState match_state = 6;
   string match_winner = 7;
+  repeated StaticObstacleState obstacles = 8;
 }
 
 // Direct Acknowledgment / Server Response

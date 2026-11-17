@@ -95,6 +95,55 @@ pub fn compute_canonical_state_hash(instance: &Instance, tick: u64) -> [u8; 32] 
         }
     }
 
+    // 7. Hash MapBounds when customized (preserves backwards-compatible hashes for default arenas)
+    if instance.map_bounds != crate::world::physics::MapBounds::default_arena() {
+        hasher.update([0xB0]);
+        hasher.update(instance.map_bounds.min.x.to_bits().to_be_bytes());
+        hasher.update(instance.map_bounds.min.y.to_bits().to_be_bytes());
+        hasher.update(instance.map_bounds.max.x.to_bits().to_be_bytes());
+        hasher.update(instance.map_bounds.max.y.to_bits().to_be_bytes());
+    }
+
+    // 8. Hash StaticObstacles in strict BTreeMap key order when present
+    if !instance.static_obstacles.is_empty() {
+        hasher.update([0x50]);
+        hasher.update((instance.static_obstacles.len() as u32).to_be_bytes());
+        for (obstacle_id, obstacle) in &instance.static_obstacles {
+            hasher.update(obstacle_id.to_be_bytes());
+            hasher.update((obstacle.blueprint.len() as u32).to_be_bytes());
+            hasher.update(obstacle.blueprint.as_bytes());
+            hasher.update([u8::from(obstacle.is_solid)]);
+            hasher.update((obstacle.collision_type.len() as u32).to_be_bytes());
+            hasher.update(obstacle.collision_type.as_bytes());
+            hasher.update(obstacle.filter.layer.to_be_bytes());
+            hasher.update(obstacle.filter.mask.to_be_bytes());
+
+            match &obstacle.shape {
+                crate::world::physics::ColliderShape::AABB(aabb) => {
+                    hasher.update([0]);
+                    hasher.update(aabb.min.x.to_bits().to_be_bytes());
+                    hasher.update(aabb.min.y.to_bits().to_be_bytes());
+                    hasher.update(aabb.max.x.to_bits().to_be_bytes());
+                    hasher.update(aabb.max.y.to_bits().to_be_bytes());
+                }
+                crate::world::physics::ColliderShape::Circle(circle) => {
+                    hasher.update([1]);
+                    hasher.update(circle.center.x.to_bits().to_be_bytes());
+                    hasher.update(circle.center.y.to_bits().to_be_bytes());
+                    hasher.update(circle.radius.to_bits().to_be_bytes());
+                }
+            }
+
+            hasher.update((obstacle.properties.len() as u32).to_be_bytes());
+            for (k, v) in &obstacle.properties {
+                hasher.update((k.len() as u32).to_be_bytes());
+                hasher.update(k.as_bytes());
+                hasher.update((v.len() as u32).to_be_bytes());
+                hasher.update(v.as_bytes());
+            }
+        }
+    }
+
     let result = hasher.finalize();
     let mut hash = [0u8; 32];
     hash.copy_from_slice(&result);

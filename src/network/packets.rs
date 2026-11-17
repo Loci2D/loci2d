@@ -160,6 +160,24 @@ mod tests {
                 }],
                 match_state: MatchLifecycleState::MatchRunning as i32,
                 match_winner: String::new(),
+                obstacles: vec![StaticObstacleState {
+                    id: 10,
+                    blueprint: "wall".to_string(),
+                    shape: ObstacleShape::ObstacleAabb as i32,
+                    position: Some(Vector2 {
+                        x_bits: (100.0f32 * 65536.0) as i32,
+                        y_bits: (-50.0f32 * 65536.0) as i32,
+                    }),
+                    width_bits: (80.0f32 * 65536.0) as i32,
+                    height_bits: (40.0f32 * 65536.0) as i32,
+                    radius_bits: 0,
+                    is_solid: true,
+                    collision_type: "solid".to_string(),
+                    properties: vec![Property {
+                        key: "material".to_string(),
+                        value: "stone".to_string(),
+                    }],
+                }],
             })),
         };
 
@@ -176,6 +194,17 @@ mod tests {
                 assert_eq!(ws.tick, 100);
                 assert_eq!(ws.timestamp, 1723140000000);
                 assert_eq!(ws.entities.len(), 2);
+                assert_eq!(ws.obstacles.len(), 1);
+
+                let obs = &ws.obstacles[0];
+                assert_eq!(obs.id, 10);
+                assert_eq!(obs.blueprint, "wall");
+                assert_eq!(obs.shape, ObstacleShape::ObstacleAabb as i32);
+                assert_eq!(obs.width_bits, (80.0f32 * 65536.0) as i32);
+                assert_eq!(obs.height_bits, (40.0f32 * 65536.0) as i32);
+                assert!(obs.is_solid);
+                assert_eq!(obs.collision_type, "solid");
+                assert_eq!(obs.properties.len(), 1);
 
                 let e1 = &ws.entities[0];
                 assert_eq!(e1.id, 1);

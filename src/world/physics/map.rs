@@ -5,6 +5,7 @@ use crate::world::fixed_point::DeterministicVector2;
 use crate::world::physics::primitives::{ColliderShape, DeterministicAABB};
 use fixed::types::I16F16;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// 16-bit bitmask filter for collision layers and masks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -66,41 +67,81 @@ impl Default for CollisionFilter {
     }
 }
 
-/// Static obstacle representing walls, pillars, or trigger sensors in the map.
+/// Static obstacle representing walls, crates, pillars, or trigger sensors in the map.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StaticObstacle {
     pub id: u64,
+    pub blueprint: String,
     pub shape: ColliderShape,
     pub filter: CollisionFilter,
     pub is_solid: bool, // True for physical blockers/walls, False for non-solid trigger sensors
+    pub collision_type: String, // e.g. "solid", "destructible", "trigger"
+    pub properties: BTreeMap<String, String>,
 }
 
 impl StaticObstacle {
     pub fn new(id: u64, shape: ColliderShape, filter: CollisionFilter, is_solid: bool) -> Self {
         Self {
             id,
+            blueprint: if is_solid {
+                "wall".to_string()
+            } else {
+                "trigger".to_string()
+            },
             shape,
             filter,
             is_solid,
+            collision_type: if is_solid {
+                "solid".to_string()
+            } else {
+                "trigger".to_string()
+            },
+            properties: BTreeMap::new(),
         }
     }
 
     pub fn solid_wall(id: u64, shape: ColliderShape) -> Self {
         Self {
             id,
+            blueprint: "wall".to_string(),
             shape,
             filter: CollisionFilter::default_solid_wall(),
             is_solid: true,
+            collision_type: "solid".to_string(),
+            properties: BTreeMap::new(),
         }
     }
 
     pub fn trigger_zone(id: u64, shape: ColliderShape) -> Self {
         Self {
             id,
+            blueprint: "trigger".to_string(),
             shape,
             filter: CollisionFilter::default_trigger_zone(),
             is_solid: false,
+            collision_type: "trigger".to_string(),
+            properties: BTreeMap::new(),
         }
+    }
+
+    pub fn with_blueprint(mut self, blueprint: impl Into<String>) -> Self {
+        self.blueprint = blueprint.into();
+        self
+    }
+
+    pub fn with_collision_type(mut self, collision_type: impl Into<String>) -> Self {
+        self.collision_type = collision_type.into();
+        self
+    }
+
+    pub fn with_properties(mut self, properties: BTreeMap<String, String>) -> Self {
+        self.properties = properties;
+        self
+    }
+
+    pub fn with_property(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.properties.insert(key.into(), value.into());
+        self
     }
 }
 
