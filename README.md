@@ -244,6 +244,7 @@ cargo run --bin loci2d -- --replay match_01.loci --export-csv match_01.csv
 | `BIND_ADDR` | `127.0.0.1:8080` | UDP host and port to bind the authoritative server |
 | `TICK_RATE` | `30` | Simulation tick frequency in Hz |
 | `CLIENT_TIMEOUT_SECS` | `10` | Inactivity threshold before dropping disconnected clients |
+| `SESSION_GRACE_PERIOD_SECS` | `30` | Grace period holding disconnected avatar for token-based Session Resume |
 | `MAX_SPECTATORS` | `128` | Maximum concurrent spectators allowed |
 | `SCRIPTS_DIR` | `scripts` | Base directory containing Lua map rule scripts |
 | `SCRIPT_PATH` | *(none)* | Explicit path to an authoritative script (overrides `SCRIPTS_DIR` and `--map`) |

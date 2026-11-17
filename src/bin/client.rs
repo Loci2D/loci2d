@@ -277,7 +277,7 @@ fn main() {
                 } else {
                     "Player".to_string()
                 };
-                client_intent::Intent::Join(JoinIntent { player_name , schema_version: 1 })
+                client_intent::Intent::Join(JoinIntent { player_name , schema_version: 1, session_token: String::new() })
             }
             cmd if cmd.starts_with("leave") => {
                 let parts: Vec<&str> = cmd.splitn(2, ' ').collect();

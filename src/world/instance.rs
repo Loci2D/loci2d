@@ -1,22 +1,60 @@
 use super::entity::{Entity, EntityType};
 use super::physics::{ColliderShape, MapBounds, StaticObstacle, TriggerEvent};
 use super::session::{ClientSession, SessionState};
+use crate::config::DEFAULT_SESSION_GRACE_PERIOD_SECS;
 use crate::network::packets::client_intent::Intent;
 use crate::network::packets::{
     ActionBroadcast, ClientIntent, EntityState, EntityType as ProtoEntityType, MatchLifecycleState,
-    ObstacleShape, Property, ReplayIntentEntry, StaticObstacleState, WorldState,
+    ObstacleShape, Property, ReplayIntentEntry, ServerResponse, StaticObstacleState, WorldState,
 };
 use crate::scripting::{CommandBuffer, ScriptEngine};
 use fixed::types::I16F16;
+use sha2::{Digest, Sha256};
+use std::collections::hash_map::RandomState;
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::BuildHasher;
 use std::net::SocketAddr;
 use std::path::Path;
+use std::time::Instant;
 
 // Re-export Vector2 from network and DeterministicVector2 from fixed_point
 pub use super::fixed_point::DeterministicVector2;
 pub use crate::network::packets::Vector2;
 
 pub const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JoinResult {
+    Joined {
+        entity_id: u64,
+        session_token: String,
+    },
+    Resumed {
+        entity_id: u64,
+        session_token: String,
+    },
+}
+
+impl JoinResult {
+    pub fn entity_id(&self) -> u64 {
+        match self {
+            JoinResult::Joined { entity_id, .. } | JoinResult::Resumed { entity_id, .. } => {
+                *entity_id
+            }
+        }
+    }
+
+    pub fn session_token(&self) -> &str {
+        match self {
+            JoinResult::Joined { session_token, .. }
+            | JoinResult::Resumed { session_token, .. } => session_token,
+        }
+    }
+
+    pub fn is_resume(&self) -> bool {
+        matches!(self, JoinResult::Resumed { .. })
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum ApplyIntentResult {
@@ -46,8 +84,11 @@ pub struct Instance {
     pub entities: BTreeMap<u64, Entity>,
     pub sessions: BTreeMap<SocketAddr, ClientSession>,
     pub entity_to_addr: BTreeMap<u64, SocketAddr>,
+    pub tokens: BTreeMap<String, u64>,
+    pub disconnected_sessions: BTreeMap<u64, ClientSession>,
     pub tick_rate: u32, // ticks per second
     pub client_timeout_secs: u64,
+    pub grace_period_secs: u64,
     // Phase 5 Additions:
     pub map_bounds: MapBounds,
     pub static_obstacles: BTreeMap<u64, StaticObstacle>,
@@ -66,6 +107,7 @@ pub struct Instance {
     pub active_timers: BTreeMap<String, ActiveTimer>,
     // Phase 6.5.3-1 Additions: Transient action broadcasts for clients
     pub(crate) tick_actions: Vec<ActionBroadcast>,
+    pending_responses: Vec<(SocketAddr, ServerResponse)>,
     // NOTE: Cell<u64> is intentionally not PartialEq-comparable. Instance equality
     // must be established via canonical_hash(), not structural comparison.
     // TODO(Phase 7+): If Instance is ever moved to a multi-threaded runtime,
@@ -91,13 +133,21 @@ impl Instance {
     }
 
     pub fn new(id: u64, tick_rate: u32, client_timeout_secs: u64, seed: u64) -> Self {
+        let grace_period_secs = if client_timeout_secs == 0 {
+            0
+        } else {
+            DEFAULT_SESSION_GRACE_PERIOD_SECS
+        };
         Self {
             id,
             entities: BTreeMap::new(),
             sessions: BTreeMap::new(),
             entity_to_addr: BTreeMap::new(),
+            tokens: BTreeMap::new(),
+            disconnected_sessions: BTreeMap::new(),
             tick_rate,
             client_timeout_secs,
+            grace_period_secs,
             map_bounds: MapBounds::default_arena(),
             static_obstacles: BTreeMap::new(),
             active_trigger_overlaps: BTreeSet::new(),
@@ -113,10 +163,39 @@ impl Instance {
             state: MatchState::Running,
             active_timers: BTreeMap::new(),
             tick_actions: Vec::new(),
+            pending_responses: Vec::new(),
             next_entity_id: std::cell::Cell::new(1),
             next_obstacle_id: std::cell::Cell::new(1),
             next_session_id: 1,
         }
+    }
+
+    pub fn set_grace_period_secs(&mut self, secs: u64) {
+        self.grace_period_secs = secs;
+    }
+
+    pub fn with_grace_period_secs(mut self, secs: u64) -> Self {
+        self.grace_period_secs = secs;
+        self
+    }
+
+    pub fn drain_pending_responses(&mut self) -> Vec<(SocketAddr, ServerResponse)> {
+        std::mem::take(&mut self.pending_responses)
+    }
+
+    fn generate_session_token(&self, session_id: u64, entity_id: u64) -> String {
+        let entropy = RandomState::new().hash_one((session_id, entity_id));
+        let mut hasher = Sha256::new();
+        hasher.update(self.id.to_le_bytes());
+        hasher.update(session_id.to_le_bytes());
+        hasher.update(entity_id.to_le_bytes());
+        hasher.update(entropy.to_le_bytes());
+        let digest = hasher.finalize();
+        let mut hex = String::with_capacity(32);
+        for byte in &digest[..16] {
+            hex.push_str(&format!("{:02x}", byte));
+        }
+        hex
     }
 
     /// Evaluates a Lua script content string inside the instance's script engine.
@@ -238,7 +317,7 @@ impl Instance {
                 return ApplyIntentResult::Ok(None);
             }
 
-        let (entity_id, player_name) = match inner_intent {
+        let (entity_id, player_name, join_result) = match inner_intent {
             Intent::Join(join_intent) => {
                 if join_intent.schema_version != SCHEMA_VERSION {
                     return ApplyIntentResult::Rejected(format!("Version mismatch. Server expects schema_version {}", SCHEMA_VERSION));
@@ -248,8 +327,14 @@ impl Instance {
                 } else {
                     join_intent.player_name.clone()
                 };
-                let entity_id = self.handle_join(addr, player_name.clone());
-                (entity_id, player_name)
+                let token_opt = if join_intent.session_token.trim().is_empty() {
+                    None
+                } else {
+                    Some(join_intent.session_token.as_str())
+                };
+                let res = self.handle_join_with_token(addr, player_name.clone(), token_opt);
+                let eid = res.entity_id();
+                (eid, player_name, Some(res))
             }
             Intent::Disconnect(disconnect_intent) => {
                 let session = match self.sessions.get(&addr) {
@@ -259,7 +344,7 @@ impl Instance {
                 let entity_id = session.entity_id;
                 let player_name = session.player_name.clone();
                 self.handle_disconnect(addr, &disconnect_intent.reason);
-                (entity_id, player_name)
+                (entity_id, player_name, None)
             }
             _ => {
                 let session = match self.sessions.get_mut(&addr) {
@@ -267,19 +352,40 @@ impl Instance {
                     None => return ApplyIntentResult::Ok(None),
                 };
                 session.refresh_activity();
-                (session.entity_id, String::new())
+                (session.entity_id, String::new(), None)
             }
         };
+
+        let is_resume = join_result.as_ref().is_some_and(JoinResult::is_resume);
 
         match crate::world::intent_handler::apply_resolved_intent(
             self,
             entity_id,
             player_name.clone(),
             inner_intent,
+            is_resume,
         ) {
-            crate::world::intent_handler::IntentResult::Ok => {}
+            crate::world::intent_handler::IntentResult::Ok => {
+                if let Some(ref res) = join_result {
+                    self.pending_responses.push((
+                        addr,
+                        ServerResponse {
+                            sequence_id: 0,
+                            status: if res.is_resume() {
+                                "resumed".to_string()
+                            } else {
+                                "joined".to_string()
+                            },
+                            session_token: res.session_token().to_string(),
+                        },
+                    ));
+                }
+            }
             crate::world::intent_handler::IntentResult::Rejected(reason) => {
-                if matches!(inner_intent, Intent::Join(_)) {
+                if let Some(ref res) = join_result
+                    && !res.is_resume()
+                {
+                    self.tokens.remove(res.session_token());
                     self.sessions.remove(&addr);
                     self.entities.remove(&entity_id);
                     self.entity_to_addr.remove(&entity_id);
@@ -304,8 +410,72 @@ impl Instance {
         ApplyIntentResult::Ok(intent_for_replay)
     }
 
-    /// Explicit client join
+    /// Explicit client join without a resume token (preserved for direct Rust callers/tests).
     pub fn handle_join(&mut self, addr: SocketAddr, player_name: String) -> u64 {
+        self.handle_join_with_token(addr, player_name, None)
+            .entity_id()
+    }
+
+    /// Client join supporting `session_token`-based Session Resume across IP/port or socket changes.
+    pub fn handle_join_with_token(
+        &mut self,
+        addr: SocketAddr,
+        player_name: String,
+        token: Option<&str>,
+    ) -> JoinResult {
+        if let Some(tok) = token.map(str::trim).filter(|t| !t.is_empty())
+            && let Some(&entity_id) = self.tokens.get(tok)
+        {
+            if self.entities.contains_key(&entity_id) {
+                if let Some(mut session) = self.disconnected_sessions.remove(&entity_id) {
+                    session.addr = addr;
+                    session.state = SessionState::Active;
+                    session.refresh_activity();
+                    let session_token = session.session_token.clone();
+                    self.sessions.insert(addr, session);
+                    self.entity_to_addr.insert(entity_id, addr);
+                    crate::log_info!(
+                        "Session",
+                        "Resumed grace-period session for '{}' (EntityId {}) at {}",
+                        player_name,
+                        entity_id,
+                        addr
+                    );
+                    return JoinResult::Resumed {
+                        entity_id,
+                        session_token,
+                    };
+                }
+
+                if let Some(&old_addr) = self.entity_to_addr.get(&entity_id)
+                    && let Some(mut session) = self.sessions.remove(&old_addr)
+                {
+                    session.addr = addr;
+                    session.state = SessionState::Active;
+                    session.refresh_activity();
+                    let session_token = session.session_token.clone();
+                    self.sessions.insert(addr, session);
+                    self.entity_to_addr.insert(entity_id, addr);
+                    crate::log_info!(
+                        "Session",
+                        "Rebound active session for '{}' (EntityId {}) from {} to {}",
+                        player_name,
+                        entity_id,
+                        old_addr,
+                        addr
+                    );
+                    return JoinResult::Resumed {
+                        entity_id,
+                        session_token,
+                    };
+                }
+            } else {
+                // Stale token whose entity no longer exists; clean up before fresh join
+                self.tokens.remove(tok);
+                self.disconnected_sessions.remove(&entity_id);
+            }
+        }
+
         if let Some(session) = self.sessions.get_mut(&addr) {
             session.player_name = player_name.clone();
             session.refresh_activity();
@@ -319,7 +489,10 @@ impl Instance {
                 session.player_name,
                 session.entity_id
             );
-            return session.entity_id;
+            return JoinResult::Resumed {
+                entity_id: session.entity_id,
+                session_token: session.session_token.clone(),
+            };
         }
 
         let entity_id = self.allocate_entity_id();
@@ -327,7 +500,14 @@ impl Instance {
         let session_id = self.next_session_id;
         self.next_session_id += 1;
 
-        let session = ClientSession::new(session_id, addr, entity_id, player_name.clone());
+        let session_token = self.generate_session_token(session_id, entity_id);
+        let session = ClientSession::new(
+            session_id,
+            addr,
+            entity_id,
+            player_name.clone(),
+            session_token.clone(),
+        );
         let entity = Entity::new(entity_id, player_name.clone(), EntityType::Player)
             .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1))
             .with_circle_collider(I16F16::from_num(2));
@@ -335,6 +515,7 @@ impl Instance {
         self.entities.insert(entity_id, entity);
         self.sessions.insert(addr, session);
         self.entity_to_addr.insert(entity_id, addr);
+        self.tokens.insert(session_token.clone(), entity_id);
 
         crate::log_info!(
             "Session",
@@ -344,7 +525,10 @@ impl Instance {
             session_id,
             entity_id
         );
-        entity_id
+        JoinResult::Joined {
+            entity_id,
+            session_token,
+        }
     }
 
     /// Explicit client disconnect
@@ -352,6 +536,8 @@ impl Instance {
         if let Some(mut session) = self.sessions.remove(&addr) {
             session.state = SessionState::Disconnected;
             self.entity_to_addr.remove(&session.entity_id);
+            self.tokens.remove(&session.session_token);
+            self.disconnected_sessions.remove(&session.entity_id);
             // We do not remove the entity from self.entities here, to allow on_player_leave
             // to access its properties. The intent handler will issue a DestroyEntity command.
             let display_reason = if reason.trim().is_empty() {
@@ -373,14 +559,16 @@ impl Instance {
     /// Advance physics using deterministic fixed-point integration, resolve solid collisions against
     /// static obstacles and dynamic entities, evaluate trigger sensor zones, clamp to map boundaries,
     /// and sweep for timed-out sessions.
-    /// Returns a list of (entity_id, player_name) for any sessions that timed out during this tick.
+    /// Returns a list of (entity_id, player_name) for any sessions whose grace period expired (or timed out with 0s grace).
     pub fn tick(&mut self, tick_count: u64) -> Result<Vec<(u64, String)>, String> {
         crate::world::simulation::tick(self, tick_count)
     }
 
-    /// Sweep and remove inactive sessions, returning the removed (entity_id, player_name) pairs.
+    /// Sweeps inactive sessions into `GracePeriod` (or expires immediately when `grace_period_secs == 0`)
+    /// and returns `(entity_id, player_name)` pairs for entities ready to be cleaned up.
     pub fn check_timeouts(&mut self) -> Vec<(u64, String)> {
         let timeout_secs = self.client_timeout_secs;
+        let grace_secs = self.grace_period_secs;
         let mut timed_out_addrs = Vec::new();
 
         for (addr, session) in &self.sessions {
@@ -389,24 +577,69 @@ impl Instance {
             }
         }
 
-        let mut timed_out_entities = Vec::new();
+        let mut expired_entities = Vec::new();
         for (addr, entity_id, player_name) in timed_out_addrs {
-            self.sessions.remove(&addr);
-            self.entity_to_addr.remove(&entity_id);
-            // We do not remove the entity from self.entities here.
-            // simulation.rs will dispatch on_player_leave and push a DestroyEntity command.
-            // removed -> self.entities.remove(&session.entity_id);
-            timed_out_entities.push((entity_id, player_name.clone()));
-            crate::log_info!(
-                "Session",
-                "Client {} ('{}', EntityId {}) timed out after {}s of inactivity",
-                addr,
-                player_name,
-                entity_id,
-                timeout_secs
-            );
+            if let Some(mut session) = self.sessions.remove(&addr) {
+                self.entity_to_addr.remove(&entity_id);
+                if grace_secs == 0 {
+                    self.tokens.remove(&session.session_token);
+                    expired_entities.push((entity_id, player_name.clone()));
+                    crate::log_info!(
+                        "Session",
+                        "Client {} ('{}', EntityId {}) timed out after {}s of inactivity",
+                        addr,
+                        player_name,
+                        entity_id,
+                        timeout_secs
+                    );
+                } else {
+                    session.state = SessionState::GracePeriod {
+                        entered_at: Instant::now(),
+                    };
+                    if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        entity.velocity = DeterministicVector2::ZERO;
+                        if let Some(ref mut nav) = entity.navigation {
+                            nav.clear();
+                        }
+                    }
+                    self.disconnected_sessions.insert(entity_id, session);
+                    crate::log_info!(
+                        "Session",
+                        "Client {} ('{}', EntityId {}) entered {}s grace period after {}s inactivity",
+                        addr,
+                        player_name,
+                        entity_id,
+                        grace_secs,
+                        timeout_secs
+                    );
+                }
+            }
         }
-        timed_out_entities
+
+        let mut expired_grace_ids = Vec::new();
+        for (&entity_id, session) in &self.disconnected_sessions {
+            if session.is_grace_expired(grace_secs) || !self.entities.contains_key(&entity_id) {
+                expired_grace_ids.push(entity_id);
+            }
+        }
+
+        for entity_id in expired_grace_ids {
+            if let Some(session) = self.disconnected_sessions.remove(&entity_id) {
+                self.tokens.remove(&session.session_token);
+                if self.entities.contains_key(&entity_id) {
+                    expired_entities.push((entity_id, session.player_name.clone()));
+                }
+                crate::log_info!(
+                    "Session",
+                    "Grace period expired for '{}' (EntityId {}) after {}s",
+                    session.player_name,
+                    entity_id,
+                    grace_secs
+                );
+            }
+        }
+
+        expired_entities
     }
 
     // [2026-08-08] Allowed dead_code: entity/session lifecycle helper methods for upcoming phases.
@@ -581,11 +814,15 @@ impl Instance {
             return;
         };
 
+        let is_resume =
+            matches!(inner_intent, Intent::Join(_)) && self.entities.contains_key(&entry.entity_id);
+
         match crate::world::intent_handler::apply_resolved_intent(
             self,
             entry.entity_id,
             entry.player_name.clone(),
             inner_intent,
+            is_resume,
         ) {
             crate::world::intent_handler::IntentResult::FatalError(e) => {
                 crate::log_error!("Replay", "Error applying intent: {}", e);
@@ -629,7 +866,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         };
         let _ = instance.apply_intent(addr, join_intent);
 
@@ -674,7 +911,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Bob".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         };
         let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
@@ -737,7 +974,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Charlie".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         };
         let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
@@ -759,7 +996,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Dave".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         };
         let _ = instance.apply_intent(addr, join_intent);
         assert_eq!(instance.sessions.len(), 1);
@@ -938,7 +1175,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         };
         let _ = instance.apply_intent(addr, join_intent);
 
@@ -1158,7 +1395,7 @@ mod tests {
         let join_intent = ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         };
         let _ = instance
             .apply_intent("127.0.0.1:1234".parse().unwrap(), join_intent);

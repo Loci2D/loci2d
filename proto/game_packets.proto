@@ -12,6 +12,7 @@ message Vector2 {
 message JoinIntent {
   string player_name = 1;
   uint32 schema_version = 2;
+  string session_token = 3;
 }
 
 message DisconnectIntent {
@@ -127,6 +128,7 @@ message WorldState {
 message ServerResponse {
   uint64 sequence_id = 1;
   string status = 2;
+  string session_token = 3;
 }
 
 // Top-level Outbound Server Packet Envelope

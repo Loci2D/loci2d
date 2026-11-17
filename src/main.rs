@@ -418,10 +418,11 @@ fn main() {
     }
     log_info!(
         "Config",
-        "bind_addr={} tick_rate={} Hz client_timeout={}s scripts_dir='{}' log_level={}",
+        "bind_addr={} tick_rate={} Hz client_timeout={}s grace_period={}s scripts_dir='{}' log_level={}",
         cfg.bind_addr,
         cfg.tick_rate,
         cfg.client_timeout_secs,
+        cfg.grace_period_secs,
         cfg.scripts_dir,
         logging::level().as_str().trim()
     );
@@ -433,6 +434,7 @@ fn main() {
     let (intent_tx, intent_rx) = mpsc::channel();
     let tick_rate = cfg.tick_rate;
     let client_timeout_secs = cfg.client_timeout_secs;
+    let grace_period_secs = cfg.grace_period_secs;
 
     let net_socket = Arc::clone(&socket);
     let _net_thread = thread::spawn(move || {
@@ -520,6 +522,7 @@ fn main() {
     let loop_payload = script_payload.clone();
     let loop_thread = thread::spawn(move || {
         let mut instance = Instance::new(1, tick_rate, client_timeout_secs, seed);
+        instance.set_grace_period_secs(grace_period_secs);
         instance.logging_enabled = true;
         if !loop_payload.is_empty()
             && let Err(e) = instance.load_script(&loop_payload)

@@ -45,7 +45,7 @@ fn build_recorded_match(
     let join_a = ClientIntent {
         intent: Some(client_intent::Intent::Join(JoinIntent {
             player_name: "Alice, Jr".to_string(),
-            schema_version: 1,
+            schema_version: 1, session_token: String::new()
         })),
     };
     let move_a = ClientIntent {
@@ -257,7 +257,7 @@ fn test_live_game_loop_record_csv() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Runner".to_string(),
-                schema_version: 1,
+                schema_version: 1, session_token: String::new()
             })),
         }),
     };
