@@ -226,6 +226,9 @@ cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --sp
 
 # 5. Fast-Forward Replay Broadcast (2x or 4x speed)
 cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 2.0
+
+# 6. Export Per-Tick / Per-Entity Telemetry CSV from a Replay
+cargo run --bin loci2d -- --replay match_01.loci --export-csv match_01.csv
 ```
 
 ---
@@ -245,6 +248,7 @@ cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --sp
 | `SCRIPTS_DIR` | `scripts` | Base directory containing Lua map rule scripts |
 | `SCRIPT_PATH` | *(none)* | Explicit path to an authoritative script (overrides `SCRIPTS_DIR` and `--map`) |
 | `MAP_NAME` | `default_arena` | Name of the map subdirectory to load |
+| `LOCI_LOG` | `info` | Server log verbosity (`off`, `error`, `warn`, `info`, `debug`, `trace`; also reads `RUST_LOG`) |
 
 ### Command-Line Arguments
 
@@ -256,12 +260,18 @@ OPTIONS:
   --script-path <FILE>         Explicit path to authoritative Lua script (overrides --scripts-dir and --map)
   --map <NAME>                 Map arena identifier (default: default_arena)
   --record <FILE>              Enable live match recording to a .loci file
+  --record-csv <FILE>          Capture per-tick/per-entity CSV telemetry during live match
   --replay <FILE>              Load and execute a .loci replay file
   --verify                     Run headless deterministic replay verification
+  --export-csv <FILE>          Export per-tick/per-entity CSV telemetry from a --replay file
   --checkpoint-interval <N>    Checkpoint frequency in ticks (default: 60)
   --seed <N>                   Random PRNG seed for match instance (default: 42)
   --speed <FLOAT>              Replay playback speed multiplier (default: 1.0)
   --broadcast <ADDR>           Spectator UDP broadcast destination (e.g. 127.0.0.1:4000)
+  --log-level <LEVEL>          Set log verbosity: off, error, warn, info, debug, trace (or LOCI_LOG env)
+  --verbose, -v                Shortcut for --log-level debug
+  --quiet, -q                  Shortcut for --log-level warn
+  --log-file <PATH>            Write structured server logs to a file on disk
   --help, -h                   Show this help message
 ```
 

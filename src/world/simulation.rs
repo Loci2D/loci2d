@@ -1,3 +1,4 @@
+use crate::logging::{self, LogLevel};
 use crate::scripting::CommandBuffer;
 use crate::world::instance::{Instance, MatchState};
 use crate::world::physics::{
@@ -44,6 +45,9 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
             }
         }
 
+        let log_trace_physics = instance.logging_enabled && logging::enabled(LogLevel::Trace);
+        let log_debug_physics = instance.logging_enabled && logging::enabled(LogLevel::Debug);
+
         // 1. Velocity Integration (Candidate Next Position) & Initial Map Bounds Clamping
         for entity in instance.entities.values_mut() {
             let old_pos = entity.position;
@@ -54,8 +58,10 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                 None => instance.map_bounds.clamp_point(entity.position),
             };
 
-            if instance.logging_enabled && entity.position != old_pos {
-                println!(
+            if log_trace_physics && entity.position != old_pos {
+                crate::log_trace!(
+                    tick = tick_count,
+                    "Physics",
                     "Player {} moved to ({:.2}, {:.2})",
                     entity.name,
                     entity.position.x.to_num::<f32>(),
@@ -66,6 +72,7 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
 
         // 2. Static Solid Obstacle Collision Resolution (100% Pushback & Wall Sliding)
         // Evaluated in strict ascending obstacle.id order
+        let mut current_solid_collisions = BTreeSet::new();
         for obstacle in instance.static_obstacles.values() {
             if !obstacle.is_solid {
                 continue;
@@ -80,13 +87,32 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                 let manifold = intersect_shapes(&entity_shape, &obstacle.shape);
                 if manifold.is_colliding {
                     resolve_static_collision(&mut entity.position, &mut entity.velocity, &manifold);
-                    if instance.logging_enabled {
-                        println!(
-                            "Player {} collided at coordinates ({:.2}, {:.2})",
-                            entity.name,
-                            entity.position.x.to_num::<f32>(),
-                            entity.position.y.to_num::<f32>()
-                        );
+                    if log_debug_physics {
+                        let pair = (entity.id, obstacle.id);
+                        current_solid_collisions.insert(pair);
+                        if !instance.active_solid_collisions.contains(&pair) {
+                            crate::log_debug!(
+                                tick = tick_count,
+                                "Physics",
+                                "Entity {} ('{}') entered static collision with obstacle #{} at ({:.2}, {:.2})",
+                                entity.id,
+                                entity.name,
+                                obstacle.id,
+                                entity.position.x.to_num::<f32>(),
+                                entity.position.y.to_num::<f32>()
+                            );
+                        } else if log_trace_physics {
+                            crate::log_trace!(
+                                tick = tick_count,
+                                "Physics",
+                                "Entity {} ('{}') collided with obstacle #{} at ({:.2}, {:.2})",
+                                entity.id,
+                                entity.name,
+                                obstacle.id,
+                                entity.position.x.to_num::<f32>(),
+                                entity.position.y.to_num::<f32>()
+                            );
+                        }
                     }
                     // Re-clamp to map bounds to ensure pushback didn't push outside arena
                     entity.position = match entity.current_collider() {
@@ -96,9 +122,15 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                 }
             }
         }
+        if log_debug_physics {
+            instance.active_solid_collisions = current_solid_collisions;
+        } else if !instance.active_solid_collisions.is_empty() {
+            instance.active_solid_collisions.clear();
+        }
 
         // 3. Dynamic Entity-vs-Entity Collision Resolution (50/50 Split Pushback)
         // Evaluated in strict ascending (entity_a.id, entity_b.id) pair order
+        let mut current_dynamic_collisions = BTreeSet::new();
         let entity_ids: Vec<u64> = instance.entities.keys().copied().collect();
         for i in 0..entity_ids.len() {
             for j in (i + 1)..entity_ids.len() {
@@ -138,19 +170,40 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                         .on_collision(instance, id_a, id_b, &mut cmd_buffer)
                         .map_err(|e| e.to_string())?;
 
-                    if instance.logging_enabled {
-                        println!(
-                            "Player {} collided at coordinates ({:.2}, {:.2})",
-                            instance.entities[&id_a].name,
-                            pos_a.x.to_num::<f32>(),
-                            pos_a.y.to_num::<f32>()
-                        );
-                        println!(
-                            "Player {} collided at coordinates ({:.2}, {:.2})",
-                            instance.entities[&id_b].name,
-                            pos_b.x.to_num::<f32>(),
-                            pos_b.y.to_num::<f32>()
-                        );
+                    if log_debug_physics {
+                        let pair = (id_a, id_b);
+                        current_dynamic_collisions.insert(pair);
+                        let name_a = &instance.entities[&id_a].name;
+                        let name_b = &instance.entities[&id_b].name;
+                        if !instance.active_dynamic_collisions.contains(&pair) {
+                            crate::log_debug!(
+                                tick = tick_count,
+                                "Physics",
+                                "Entity {} ('{}') entered dynamic collision with Entity {} ('{}') at ({:.2}, {:.2}) / ({:.2}, {:.2})",
+                                id_a,
+                                name_a,
+                                id_b,
+                                name_b,
+                                pos_a.x.to_num::<f32>(),
+                                pos_a.y.to_num::<f32>(),
+                                pos_b.x.to_num::<f32>(),
+                                pos_b.y.to_num::<f32>()
+                            );
+                        } else if log_trace_physics {
+                            crate::log_trace!(
+                                tick = tick_count,
+                                "Physics",
+                                "Entity {} ('{}') collided with Entity {} ('{}') at ({:.2}, {:.2}) / ({:.2}, {:.2})",
+                                id_a,
+                                name_a,
+                                id_b,
+                                name_b,
+                                pos_a.x.to_num::<f32>(),
+                                pos_a.y.to_num::<f32>(),
+                                pos_b.x.to_num::<f32>(),
+                                pos_b.y.to_num::<f32>()
+                            );
+                        }
                     }
 
                     let entity_a = instance.entities.get_mut(&id_a).unwrap();
@@ -168,6 +221,11 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                     }
                 }
             }
+        }
+        if log_debug_physics {
+            instance.active_dynamic_collisions = current_dynamic_collisions;
+        } else if !instance.active_dynamic_collisions.is_empty() {
+            instance.active_dynamic_collisions.clear();
         }
 
         // 4. Trigger / Sensor Zone Overlap Evaluation & Lifecycle Events
