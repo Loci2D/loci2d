@@ -6,6 +6,7 @@ use std::time::Instant;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionState {
     Active,
+    GracePeriod { entered_at: Instant },
     TimedOut,
     Disconnected,
 }
@@ -17,19 +18,27 @@ pub struct ClientSession {
     pub addr: SocketAddr,
     pub entity_id: u64,
     pub player_name: String,
+    pub session_token: String,
     pub connected_at: Instant,
     pub last_seen: Instant,
     pub state: SessionState,
 }
 
 impl ClientSession {
-    pub fn new(session_id: u64, addr: SocketAddr, entity_id: u64, player_name: String) -> Self {
+    pub fn new(
+        session_id: u64,
+        addr: SocketAddr,
+        entity_id: u64,
+        player_name: String,
+        session_token: String,
+    ) -> Self {
         let now = Instant::now();
         Self {
             session_id,
             addr,
             entity_id,
             player_name,
+            session_token,
             connected_at: now,
             last_seen: now,
             state: SessionState::Active,
@@ -41,8 +50,18 @@ impl ClientSession {
         self.last_seen = Instant::now();
     }
 
-    /// Check if the session has exceeded the timeout threshold.
+    /// Check if an active session has exceeded the inactivity timeout threshold.
     pub fn is_timed_out(&self, timeout_secs: u64) -> bool {
         self.last_seen.elapsed().as_secs() >= timeout_secs
+    }
+
+    /// Check if a session waiting in grace period has exceeded `grace_period_secs`.
+    pub fn is_grace_expired(&self, grace_period_secs: u64) -> bool {
+        match self.state {
+            SessionState::GracePeriod { entered_at } => {
+                entered_at.elapsed().as_secs() >= grace_period_secs
+            }
+            _ => false,
+        }
     }
 }

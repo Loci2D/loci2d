@@ -52,7 +52,9 @@ mod tests {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice".to_string(),
-                schema_version: 1 })),
+                    schema_version: 1,
+                    session_token: "tok_abc123".to_string(),
+                })),
             }),
         };
         let mut buf = Vec::new();
@@ -63,8 +65,28 @@ mod tests {
                 intent: Some(client_intent::Intent::Join(j)),
             }) => {
                 assert_eq!(j.player_name, "Alice");
+                assert_eq!(j.session_token, "tok_abc123");
             }
             _ => panic!("Expected Join intent"),
+        }
+
+        let resp_pkt = ServerPacket {
+            sequence_id: 1,
+            payload: Some(server_packet::Payload::Response(ServerResponse {
+                sequence_id: 1,
+                status: "joined".to_string(),
+                session_token: "tok_abc123".to_string(),
+            })),
+        };
+        let mut resp_buf = Vec::new();
+        resp_pkt.encode(&mut resp_buf).unwrap();
+        let decoded_resp = ServerPacket::decode(&resp_buf[..]).unwrap();
+        match decoded_resp.payload {
+            Some(server_packet::Payload::Response(r)) => {
+                assert_eq!(r.status, "joined");
+                assert_eq!(r.session_token, "tok_abc123");
+            }
+            _ => panic!("Expected ServerResponse payload"),
         }
 
         // Disconnect intent
@@ -138,6 +160,24 @@ mod tests {
                 }],
                 match_state: MatchLifecycleState::MatchRunning as i32,
                 match_winner: String::new(),
+                obstacles: vec![StaticObstacleState {
+                    id: 10,
+                    blueprint: "wall".to_string(),
+                    shape: ObstacleShape::ObstacleAabb as i32,
+                    position: Some(Vector2 {
+                        x_bits: (100.0f32 * 65536.0) as i32,
+                        y_bits: (-50.0f32 * 65536.0) as i32,
+                    }),
+                    width_bits: (80.0f32 * 65536.0) as i32,
+                    height_bits: (40.0f32 * 65536.0) as i32,
+                    radius_bits: 0,
+                    is_solid: true,
+                    collision_type: "solid".to_string(),
+                    properties: vec![Property {
+                        key: "material".to_string(),
+                        value: "stone".to_string(),
+                    }],
+                }],
             })),
         };
 
@@ -154,6 +194,17 @@ mod tests {
                 assert_eq!(ws.tick, 100);
                 assert_eq!(ws.timestamp, 1723140000000);
                 assert_eq!(ws.entities.len(), 2);
+                assert_eq!(ws.obstacles.len(), 1);
+
+                let obs = &ws.obstacles[0];
+                assert_eq!(obs.id, 10);
+                assert_eq!(obs.blueprint, "wall");
+                assert_eq!(obs.shape, ObstacleShape::ObstacleAabb as i32);
+                assert_eq!(obs.width_bits, (80.0f32 * 65536.0) as i32);
+                assert_eq!(obs.height_bits, (40.0f32 * 65536.0) as i32);
+                assert!(obs.is_solid);
+                assert_eq!(obs.collision_type, "solid");
+                assert_eq!(obs.properties.len(), 1);
 
                 let e1 = &ws.entities[0];
                 assert_eq!(e1.id, 1);

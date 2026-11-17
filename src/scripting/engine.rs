@@ -410,7 +410,11 @@ impl ScriptEngine {
                     return Ok(Some(reason));
                 }
             } else if instance.logging_enabled {
-                eprintln!("[Loci] WARNING: on_move_intent received but no handler defined. Entity {} will not move.", entity_id);
+                crate::log_warn!(
+                    "Lua",
+                    "on_move_intent received but no handler defined; Entity {} will not move",
+                    entity_id
+                );
             }
             Ok(None)
         })
@@ -439,7 +443,11 @@ impl ScriptEngine {
                     return Ok(Some(reason));
                 }
             } else if instance.logging_enabled {
-                eprintln!("[Loci] WARNING: on_nav_intent received but no handler defined. Entity {} will not navigate.", entity_id);
+                crate::log_warn!(
+                    "Lua",
+                    "on_nav_intent received but no handler defined; Entity {} will not navigate",
+                    entity_id
+                );
             }
             Ok(None)
         })

@@ -7,7 +7,7 @@
 Já engavetou uma ideia de jogo cooperativo ou PvP porque "a parte de rede é complicada demais"? É exatamente esse problema que o loci2d resolve. Ele é um servidor de jogos 2D multiplayer autoritativo e determinístico, escrito em Rust, que você conecta com qualquer engine cliente — Godot, Love2D, Python, ou seu próprio cliente em C++/WASM. Sua engine cuida da renderização e da movimentação do jogo; o loci2d cuida da simulação, da sincronização e das regras da partida.
 
 **Por que o loci2d?**
-- **Use a engine que quiser.** O loci2d fala Protobuf sobre UDP, então não importa se seu cliente é Godot, Love2D, Python ou qualquer outra coisa — construa a experiência do jogo na ferramenta que você já domina. *(Em breve: SDKs e templates oficiais para Godot 4 e Love2D)*
+- **Use a engine que quiser.** O loci2d fala Protobuf sobre UDP, então não importa se seu cliente é Godot, Love2D, Python ou qualquer outra coisa — construa a experiência do jogo na ferramenta que você já domina. *(SDKs Oficiais: [SDK de Cliente Love2D](https://github.com/Loci2D/sdk-love2d))*
 - **Você não escreve netcode.** Os clientes enviam *intenções* (ex: "mover nessa direção", "usar habilidade 1"); o servidor autoritativo cuida de toda a física, colisão e sincronização de estado. Nenhum cliente precisa prever ou reconciliar nada.
 - **As regras do jogo vivem num script Lua sandboxed, não no servidor.** O núcleo em Rust permanece genérico — vida, times, habilidades e condições de vitória são definidas por você em Lua, sem tocar em Rust nem recompilar o servidor.
 - **Determinístico por design.** Toda partida roda em matemática de ponto fixo, então a mesma partida pode ser reproduzida byte a byte em outra máquina — habilitando espectadores ao vivo, replays verificáveis e confiança de nível competitivo nos resultados.
@@ -226,6 +226,9 @@ cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --sp
 
 # 5. Transmissão Acelerada de Replay (velocidade 2x ou 4x)
 cargo run --bin loci2d -- --replay match_01.loci --broadcast 127.0.0.1:8080 --speed 2.0
+
+# 6. Exportar Telemetria CSV (por tick e entidade) de um Replay
+cargo run --bin loci2d -- --replay match_01.loci --export-csv match_01.csv
 ```
 
 ---
@@ -241,10 +244,12 @@ O `loci2d` pode ser configurado através de variáveis de ambiente (ou arquivo `
 | `BIND_ADDR` | `127.0.0.1:8080` | IP e porta UDP de escuta do servidor autoritativo |
 | `TICK_RATE` | `30` | Frequência de simulação em Hz |
 | `CLIENT_TIMEOUT_SECS` | `10` | Limite de inatividade antes de desconectar clientes |
+| `SESSION_GRACE_PERIOD_SECS` | `30` | Período de graça mantendo o avatar para reconexão via `session_token` |
 | `MAX_SPECTATORS` | `128` | Limite máximo de espectadores simultâneos |
 | `SCRIPTS_DIR` | `scripts` | Diretório base dos scripts Lua de regras de arena |
 | `SCRIPT_PATH` | *(nenhum)* | Caminho direto para o script Lua autoritativo (sobrescreve `SCRIPTS_DIR` e `--map`) |
 | `MAP_NAME` | `default_arena` | Identificador do mapa/subpasta a ser carregado |
+| `LOCI_LOG` | `info` | Nível de verbosidade dos logs (`off`, `error`, `warn`, `info`, `debug`, `trace`; também lê `RUST_LOG`) |
 
 ### Argumentos de Linha de Comando
 
@@ -256,12 +261,18 @@ OPÇÕES:
   --script-path <ARQUIVO>      Caminho explícito para o script Lua (sobrescreve --scripts-dir e --map)
   --map <NOME>                 Identificador do mapa da arena (padrão: default_arena)
   --record <ARQUIVO>           Habilita gravação de partida ao vivo para um arquivo .loci
+  --record-csv <ARQUIVO>       Captura telemetria CSV (por tick/entidade) durante a partida ao vivo
   --replay <ARQUIVO>           Carrega e executa um arquivo de replay .loci
   --verify                     Executa verificação determinística headless
+  --export-csv <ARQUIVO>       Exporta telemetria CSV (por tick/entidade) de um arquivo --replay
   --checkpoint-interval <N>    Frequência de checkpoints em ticks (padrão: 60)
   --seed <N>                   Seed PRNG aleatória para a instância (padrão: 42)
   --speed <FLOAT>              Multiplicador de velocidade de reprodução do replay (padrão: 1.0)
   --broadcast <ADDR>           Destino de transmissão UDP para espectadores (ex: 127.0.0.1:4000)
+  --log-level <NÍVEL>          Define verbosidade: off, error, warn, info, debug, trace (ou env LOCI_LOG)
+  --verbose, -v                Atalho para --log-level debug
+  --quiet, -q                  Atalho para --log-level warn
+  --log-file <CAMINHO>         Grava logs estruturados do servidor em arquivo no disco
   --help, -h                   Exibe esta mensagem de ajuda
 ```
 

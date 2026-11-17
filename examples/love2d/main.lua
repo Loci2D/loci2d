@@ -1,8 +1,8 @@
 -- Love2D Client Example for loci2d using loci_client.lua SDK
 -- Supports both Player Mode and Spectator Mode (Free Cam & Entity Follow)
 
-package.path = package.path .. ";../../sdks/love2d/?.lua;../../sdks/love2d/lib/?.lua;sdks/love2d/?.lua;sdks/love2d/lib/?.lua;./?.lua;./lib/?.lua"
-package.cpath = package.cpath .. ";../../sdks/love2d/lib/?.so;../../sdks/love2d/?.so;sdks/love2d/lib/?.so;sdks/love2d/?.so;./?.so;./lib/?.so"
+package.path = package.path .. ";../sdk-love2d/?.lua;../sdk-love2d/lib/?.lua;../../sdk-love2d/?.lua;../../sdk-love2d/lib/?.lua;./loci2d/?.lua;./loci2d/lib/?.lua;./?.lua;./lib/?.lua"
+package.cpath = package.cpath .. ";../sdk-love2d/lib/?.so;../../sdk-love2d/lib/?.so;./loci2d/lib/?.so;./?.so;./lib/?.so"
 local loci = require("loci_client")
 
 local last_status = "Connecting to server..."
@@ -45,7 +45,7 @@ function love.load(args)
     love.window.setMode(800, 600, { resizable = true })
 
     -- Connect to the loci2d server
-    loci.connect(server_ip, server_port, client_name, "../../sdks/love2d/lib/")
+    loci.connect(server_ip, server_port, client_name)
     last_status = is_spectator_cli and "Connected as Spectator" or ("Connected as '" .. client_name .. "'")
 
     -- Set up callbacks for game events

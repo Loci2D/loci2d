@@ -128,7 +128,7 @@ fn test_set_move_speed_command() {
     
     let join_intent = ClientIntent {
         intent: Some(client_intent::Intent::Join(loci2d::network::JoinIntent {
-            player_name: "Bob".to_string(), schema_version: 1 }))
+            player_name: "Bob".to_string(), schema_version: 1, session_token: String::new() }))
     };
     instance.apply_intent(addr, join_intent);
     
@@ -350,7 +350,7 @@ fn test_lifecycle_rejection_rollback() {
 
     let join_intent = ClientIntent {
         intent: Some(client_intent::Intent::Join(loci2d::network::JoinIntent {
-            player_name: "Eve".to_string(), schema_version: 1 }))
+            player_name: "Eve".to_string(), schema_version: 1, session_token: String::new() }))
     };
 
     let result = instance.apply_intent(addr, join_intent);
@@ -614,4 +614,333 @@ fn test_vfs_crlf_normalization_and_symlink_skip() {
     assert_eq!(instance_crlf.script_hash, instance_lf.script_hash);
 }
 
+#[test]
+fn test_spawn_static_obstacle_aabb_collision_raycast_and_snapshot() {
+    use loci2d::network::{MoveIntent, ObstacleShape};
 
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        WALL_ID = nil
+        function on_init()
+            WALL_ID = Loci.Commands.spawn_static_obstacle({
+                blueprint = "wall",
+                position = { x = 10, y = 0 },
+                width = 4,
+                height = 20,
+                collision_type = "solid",
+                properties = { material = "stone" }
+            })
+        end
+
+        function on_move_intent(entity_id, dx, dy)
+            Loci.Commands.set_velocity(entity_id, { x = dx, y = dy })
+        end
+    "#;
+    instance.load_script(script).unwrap();
+
+    let wall_id: u64 = instance.script_engine.lua().globals().get("WALL_ID").unwrap();
+    assert_eq!(wall_id, 1);
+    assert_eq!(instance.static_obstacles.len(), 1);
+
+    // Inspect via snapshot
+    let snapshot = instance.create_snapshot(0);
+    assert_eq!(snapshot.obstacles.len(), 1);
+    let obs_proto = &snapshot.obstacles[0];
+    assert_eq!(obs_proto.id, wall_id);
+    assert_eq!(obs_proto.blueprint, "wall");
+    assert_eq!(obs_proto.shape, ObstacleShape::ObstacleAabb as i32);
+    assert_eq!(obs_proto.position.as_ref().unwrap().x_bits, 10 << 16);
+    assert_eq!(obs_proto.position.as_ref().unwrap().y_bits, 0);
+    assert_eq!(obs_proto.width_bits, 4 << 16);
+    assert_eq!(obs_proto.height_bits, 20 << 16);
+    assert!(obs_proto.is_solid);
+    assert_eq!(obs_proto.collision_type, "solid");
+    assert_eq!(obs_proto.properties.len(), 1);
+    assert_eq!(obs_proto.properties[0].key, "material");
+    assert_eq!(obs_proto.properties[0].value, "stone");
+
+    // Verify raycast hits Lua-spawned wall and Lua getters work
+    let mut cmd_buf = CommandBuffer::new();
+    let check_lua = instance
+        .script_engine
+        .lua()
+        .load(
+            r#"
+            local obs = Loci.get_obstacle(WALL_ID)
+            assert(obs ~= nil)
+            assert(obs.blueprint == "wall")
+            assert(obs.shape == "aabb")
+            assert(obs.width == 4.0)
+            assert(obs.height == 20.0)
+            assert(obs.is_solid == true)
+            assert(obs.collision_type == "solid")
+            assert(obs.properties.material == "stone")
+            assert(Loci.get_obstacle_property(WALL_ID, "material") == "stone")
+            local pos = Loci.get_obstacle_position(WALL_ID)
+            assert(pos:x_float() == 10.0 and pos:y_float() == 0.0)
+
+            local hit = Loci.Physics.raycast({ x = 0, y = 0 }, { x = 1, y = 0 }, 20.0)
+            assert(hit ~= nil, "Raycast must hit Lua-spawned wall")
+            assert(hit.obstacle_id == WALL_ID)
+            assert(math.abs(hit.point_x - 8.0) < 0.01)
+            "#,
+        )
+        .into_function()
+        .unwrap();
+    with_scoped_api(instance.script_engine.lua(), &instance, &mut cmd_buf, || {
+        check_lua.call::<()>(())
+    })
+    .unwrap();
+
+    // Join player at (0, 0) with radius 2 and move East (+1, 0) toward wall [8..12]
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let player_id = instance.handle_join(addr, "Runner".to_string());
+    let move_intent = ClientIntent {
+        intent: Some(client_intent::Intent::Move(MoveIntent {
+            direction: Some(Vector2 {
+                x_bits: (2.0f32 * 65536.0) as i32,
+                y_bits: 0,
+            }),
+        })),
+    };
+    instance.apply_intent(addr, move_intent);
+
+    for tick in 1..=10 {
+        instance.tick(tick).unwrap();
+    }
+
+    let player = instance.get_entity(player_id).unwrap();
+    // Wall left edge is 8.0, player radius is 2.0 => clamped at x <= 6.0
+    assert!(
+        player.position.x <= I16F16::from_num(6.0),
+        "Player should be blocked by wall at x<=6.0, got {}",
+        player.position.x
+    );
+}
+
+#[test]
+fn test_destructible_crate_lifecycle_and_snapshot_removal() {
+    use loci2d::network::MoveIntent;
+
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        CRATE_ID = nil
+        function on_init()
+            CRATE_ID = Loci.Commands.spawn_static_obstacle({
+                blueprint = "crate",
+                position = { x = 6, y = 0 },
+                width = 4,
+                height = 4,
+                collision_type = "destructible",
+                properties = { hp = 2, state = "intact" }
+            })
+        end
+
+        function on_move_intent(entity_id, dx, dy)
+            Loci.Commands.set_velocity(entity_id, { x = dx, y = dy })
+        end
+
+        function on_action(entity_id, ability_id, dir_x, dir_y)
+            local pos = Loci.get_entity_position(entity_id)
+            local hits = Loci.Physics.get_obstacles_in_radius(pos, 6.0)
+            for _, obs_id in ipairs(hits) do
+                local obs = Loci.get_obstacle(obs_id)
+                if obs and obs.collision_type == "destructible" then
+                    local hp = tonumber(Loci.get_obstacle_property(obs_id, "hp")) or 0
+                    hp = hp - 1
+                    if hp <= 0 then
+                        Loci.Commands.destroy_static_obstacle(obs_id)
+                    else
+                        Loci.Commands.set_obstacle_property(obs_id, "hp", tostring(hp))
+                        Loci.Commands.set_obstacle_property(obs_id, "state", "damaged")
+                    end
+                end
+            end
+        end
+    "#;
+    instance.load_script(script).unwrap();
+
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let player_id = instance.handle_join(addr, "Breaker".to_string());
+
+    // Hit 1: crate goes from hp=2 to hp=1, remains solid & present in snapshot
+    instance.apply_intent(
+        addr,
+        ClientIntent {
+            intent: Some(client_intent::Intent::Action(ActionIntent {
+                ability_id: 1,
+                target_direction: None,
+            })),
+        },
+    );
+    let snap_after_hit1 = instance.create_snapshot(1);
+    assert_eq!(snap_after_hit1.obstacles.len(), 1);
+    let hp_prop = snap_after_hit1.obstacles[0]
+        .properties
+        .iter()
+        .find(|p| p.key == "hp")
+        .unwrap();
+    assert_eq!(hp_prop.value, "1");
+
+    // Walk East: blocked by crate left edge (4.0) - player radius (2.0) = 2.0
+    instance.apply_intent(
+        addr,
+        ClientIntent {
+            intent: Some(client_intent::Intent::Move(MoveIntent {
+                direction: Some(Vector2 {
+                    x_bits: (2.0f32 * 65536.0) as i32,
+                    y_bits: 0,
+                }),
+            })),
+        },
+    );
+    for t in 1..=5 {
+        instance.tick(t).unwrap();
+    }
+    assert!(instance.get_entity(player_id).unwrap().position.x <= I16F16::from_num(2.0));
+
+    // Hit 2: crate hp drops to 0 -> destroyed
+    instance.apply_intent(
+        addr,
+        ClientIntent {
+            intent: Some(client_intent::Intent::Action(ActionIntent {
+                ability_id: 1,
+                target_direction: None,
+            })),
+        },
+    );
+    assert!(instance.static_obstacles.is_empty());
+    assert!(instance.create_snapshot(6).obstacles.is_empty());
+
+    // Continue walking East: player now passes cleanly past x=6
+    instance.apply_intent(
+        addr,
+        ClientIntent {
+            intent: Some(client_intent::Intent::Move(MoveIntent {
+                direction: Some(Vector2 {
+                    x_bits: (2.0f32 * 65536.0) as i32,
+                    y_bits: 0,
+                }),
+            })),
+        },
+    );
+    for t in 6..=12 {
+        instance.tick(t).unwrap();
+    }
+    assert!(
+        instance.get_entity(player_id).unwrap().position.x > I16F16::from_num(8.0),
+        "Player should pass freely after crate destruction"
+    );
+}
+
+#[test]
+fn test_lua_circle_trigger_zone_and_min_max_aabb() {
+    use loci2d::network::ObstacleShape;
+
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        TRIGGER_LOG = ""
+        TRIGGER_ID = nil
+        WALL_ID = nil
+        function on_init()
+            TRIGGER_ID = Loci.Commands.spawn_static_obstacle({
+                blueprint = "heal_zone",
+                shape = "circle",
+                position = { x = 10, y = 0 },
+                radius = 4,
+                collision_type = "trigger"
+            })
+            WALL_ID = Loci.Commands.spawn_static_obstacle({
+                blueprint = "barrier",
+                min = { x = -30, y = -10 },
+                max = { x = -20, y = 10 },
+                collision_type = "solid"
+            })
+        end
+
+        function on_trigger_enter(entity_id, trigger_id)
+            TRIGGER_LOG = TRIGGER_LOG .. "enter:" .. tostring(trigger_id) .. ";"
+        end
+        function on_trigger_stay(entity_id, trigger_id)
+            TRIGGER_LOG = TRIGGER_LOG .. "stay:" .. tostring(trigger_id) .. ";"
+        end
+        function on_trigger_exit(entity_id, trigger_id)
+            TRIGGER_LOG = TRIGGER_LOG .. "exit:" .. tostring(trigger_id) .. ";"
+        end
+    "#;
+    instance.load_script(script).unwrap();
+
+    let trigger_id: u64 = instance.script_engine.lua().globals().get("TRIGGER_ID").unwrap();
+    let snap = instance.create_snapshot(0);
+    assert_eq!(snap.obstacles.len(), 2);
+    let trig_proto = snap.obstacles.iter().find(|o| o.id == trigger_id).unwrap();
+    assert_eq!(trig_proto.shape, ObstacleShape::ObstacleCircle as i32);
+    assert_eq!(trig_proto.radius_bits, 4 << 16);
+    assert!(!trig_proto.is_solid);
+    assert_eq!(trig_proto.collision_type, "trigger");
+
+    // Check get_obstacles_by_blueprint
+    let mut cmd_buf = CommandBuffer::new();
+    let check_bp = instance
+        .script_engine
+        .lua()
+        .load(
+            r#"
+            local list = Loci.get_obstacles_by_blueprint("heal_zone")
+            assert(#list == 1 and list[1] == TRIGGER_ID)
+            "#,
+        )
+        .into_function()
+        .unwrap();
+    with_scoped_api(instance.script_engine.lua(), &instance, &mut cmd_buf, || {
+        check_bp.call::<()>(())
+    })
+    .unwrap();
+
+    // Move player into trigger (x=10) and then out (x=25)
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let player_id = instance.handle_join(addr, "Tester".to_string());
+    instance.entities.get_mut(&player_id).unwrap().position = DeterministicVector2::from_f32(10.0, 0.0);
+    instance.tick(1).unwrap(); // enter
+    instance.tick(2).unwrap(); // stay
+    instance.entities.get_mut(&player_id).unwrap().position = DeterministicVector2::from_f32(25.0, 0.0);
+    instance.tick(3).unwrap(); // exit
+
+    let log: String = instance.script_engine.lua().globals().get("TRIGGER_LOG").unwrap();
+    assert_eq!(log, "enter:1;stay:1;exit:1;");
+}
+
+#[test]
+fn test_set_map_bounds_and_obstacle_validation_errors() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        function on_init()
+            Loci.Commands.set_map_bounds({ x = -50, y = -50 }, { x = 50, y = 50 })
+        end
+    "#;
+    instance.load_script(script).unwrap();
+
+    assert_eq!(
+        instance.map_bounds.min,
+        DeterministicVector2::from_i32(-50, -50)
+    );
+    assert_eq!(
+        instance.map_bounds.max,
+        DeterministicVector2::from_i32(50, 50)
+    );
+
+    // Validation errors on invalid obstacle inputs
+    let mut cmd_buf = CommandBuffer::new();
+    for bad_script in [
+        r#"Loci.Commands.spawn_static_obstacle({ position = { x = 0, y = 0 }, width = -5, height = 10 })"#,
+        r#"Loci.Commands.spawn_static_obstacle({ shape = "circle", position = { x = 0, y = 0 }, radius = 0 })"#,
+        r#"Loci.Commands.spawn_static_obstacle({ position = { x = 0, y = 0 }, width = 10, height = 10, collision_type = "bogus" })"#,
+        r#"Loci.Commands.set_map_bounds({ x = 10, y = 0 }, { x = -10, y = 5 })"#,
+    ] {
+        let f = instance.script_engine.lua().load(bad_script).into_function().unwrap();
+        let res = with_scoped_api(instance.script_engine.lua(), &instance, &mut cmd_buf, || {
+            f.call::<()>(())
+        });
+        assert!(res.is_err(), "Expected error for script: {}", bad_script);
+    }
+}

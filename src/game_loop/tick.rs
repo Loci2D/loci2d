@@ -1,8 +1,9 @@
 use crate::network::packets::{ClientIntent, ServerPacket, server_packet};
-use crate::replay::ReplayRecorder;
+use crate::replay::{CsvTelemetryWriter, ReplayRecorder};
 use crate::world::instance::Instance;
 use prost::Message;
 use std::net::{SocketAddr, UdpSocket};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -14,6 +15,8 @@ pub struct GameLoop {
     running: Arc<AtomicBool>,
     recorder: Option<ReplayRecorder>,
     record_path: Option<String>,
+    csv_writer: Option<CsvTelemetryWriter>,
+    csv_path: Option<String>,
 }
 
 impl GameLoop {
@@ -23,6 +26,8 @@ impl GameLoop {
             running: Arc::new(AtomicBool::new(false)),
             recorder: None,
             record_path: None,
+            csv_writer: None,
+            csv_path: None,
         }
     }
 
@@ -47,6 +52,14 @@ impl GameLoop {
             script_payload,
         ));
         self.record_path = Some(file_path);
+    }
+
+    /// Enables live buffered per-tick, per-entity CSV telemetry capture.
+    pub fn enable_csv_recording<P: AsRef<Path>>(&mut self, path: P) -> std::io::Result<()> {
+        let writer = CsvTelemetryWriter::create(&path)?;
+        self.csv_path = Some(path.as_ref().display().to_string());
+        self.csv_writer = Some(writer);
+        Ok(())
     }
 
     /// Returns a reference to the active replay recorder, if recording is enabled.
@@ -97,6 +110,7 @@ impl GameLoop {
                                 crate::network::packets::ServerResponse {
                                     sequence_id: 0,
                                     status: format!("rejected: {}", reason),
+                                    session_token: String::new(),
                                 },
                             );
                             let packet = ServerPacket {
@@ -107,14 +121,24 @@ impl GameLoop {
                             let _ = socket.send_to(&buf, addr);
                         }
                         crate::world::instance::ApplyIntentResult::FatalError(e) => {
-                            eprintln!(
-                                "[Server] Script Error during apply_intent: {}. Aborting instance.",
+                            crate::log_error!(
+                                "Server",
+                                "Script error during apply_intent: {}; aborting instance",
                                 e
                             );
                             self.running.store(false, Ordering::Relaxed);
                             break;
                         }
                     }
+                }
+
+                for (target_addr, response) in instance.drain_pending_responses() {
+                    let packet = ServerPacket {
+                        sequence_id: response.sequence_id,
+                        payload: Some(server_packet::Payload::Response(response)),
+                    };
+                    let buf = packet.encode_to_vec();
+                    let _ = socket.send_to(&buf, target_addr);
                 }
 
                 if !self.running.load(Ordering::Relaxed) {
@@ -130,8 +154,9 @@ impl GameLoop {
                 let timed_out = match instance.tick(tick_count) {
                     Ok(t) => t,
                     Err(e) => {
-                        eprintln!(
-                            "[Server] Script Error during tick: {}. Aborting instance.",
+                        crate::log_error!(
+                            "Server",
+                            "Script error during tick: {}; aborting instance",
                             e
                         );
                         self.running.store(false, Ordering::Relaxed);
@@ -143,6 +168,7 @@ impl GameLoop {
                                 crate::network::packets::ServerResponse {
                                     sequence_id: tick_count,
                                     status: "Disconnect: Server Error".to_string(),
+                                    session_token: String::new(),
                                 },
                             )),
                         };
@@ -155,13 +181,20 @@ impl GameLoop {
                     }
                 };
 
+                if let Some(ref mut csv) = self.csv_writer
+                    && let Err(e) = csv.write_instance_tick(tick_count, &instance)
+                {
+                    crate::log_warn!("CSV", "Failed to write CSV row at tick {}: {}", tick_count, e);
+                }
+
                 if matches!(
                     instance.state,
                     crate::world::instance::MatchState::Ended { .. }
                 ) {
                     if self.recorder.is_some() {
-                        println!(
-                            "[Server] MatchState::Ended reached. Triggering graceful shutdown to finalize replay."
+                        crate::log_info!(
+                            "Server",
+                            "MatchState::Ended reached; triggering graceful shutdown to finalize replay"
                         );
                     }
                     self.running.store(false, Ordering::Relaxed);
@@ -224,13 +257,28 @@ impl GameLoop {
         // Flush recorded replay file on shutdown
         if let (Some(recorder), Some(path)) = (&self.recorder, &self.record_path) {
             if let Err(e) = recorder.save_to_file(path) {
-                eprintln!("[Replay] Failed to save replay file '{}': {}", path, e);
+                crate::log_error!("Replay", "Failed to save replay file '{}': {}", path, e);
             } else {
-                println!(
-                    "[Replay] Successfully saved replay file '{}' ({} frames, {} checkpoints)",
+                crate::log_info!(
+                    "Replay",
+                    "Saved replay file '{}' ({} frames, {} checkpoints)",
                     path,
                     recorder.frame_count(),
                     recorder.checkpoint_count()
+                );
+            }
+        }
+
+        // Flush recorded CSV telemetry file on shutdown
+        if let (Some(csv), Some(path)) = (self.csv_writer.as_mut(), &self.csv_path) {
+            if let Err(e) = csv.flush() {
+                crate::log_error!("CSV", "Failed to flush CSV file '{}': {}", path, e);
+            } else {
+                crate::log_info!(
+                    "CSV",
+                    "Saved live CSV telemetry '{}' ({} rows)",
+                    path,
+                    csv.rows_written()
                 );
             }
         }

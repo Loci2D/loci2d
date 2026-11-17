@@ -1,5 +1,4 @@
 use super::packets::{ClientIntent, GamePacket};
-use chrono::Local;
 use prost::Message;
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
@@ -22,9 +21,9 @@ pub fn run_server(socket: Arc<UdpSocket>, intent_tx: mpsc::Sender<(SocketAddr, C
                         }
                     }
                     Err(e) => {
-                        println!(
-                            "[{}] Failed to deserialize GamePacket from {}: {}",
-                            Local::now().format("%Y-%m-%d %H:%M:%S"),
+                        crate::log_warn!(
+                            "Network",
+                            "Failed to deserialize GamePacket from {}: {}",
                             src_addr,
                             e
                         );
@@ -32,11 +31,7 @@ pub fn run_server(socket: Arc<UdpSocket>, intent_tx: mpsc::Sender<(SocketAddr, C
                 }
             }
             Err(e) => {
-                println!(
-                    "[{}] Error receiving data: {}",
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    e
-                );
+                crate::log_error!("Network", "Error receiving UDP data: {}", e);
             }
         }
     }

@@ -19,6 +19,7 @@ pub fn apply_resolved_intent(
     entity_id: u64,
     player_name: String,
     intent: &Intent,
+    is_resume: bool,
 ) -> IntentResult {
     match intent {
         Intent::Join(join_intent) => {
@@ -29,7 +30,12 @@ pub fn apply_resolved_intent(
             };
 
             if let Some(existing) = instance.entities.get_mut(&entity_id) {
-                existing.name = final_name;
+                if join_intent.session_token.trim().is_empty() {
+                    existing.name = final_name;
+                }
+                if is_resume {
+                    return IntentResult::Ok;
+                }
             } else {
                 let entity = Entity::new(entity_id, final_name, EntityType::Player)
                     .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1))
@@ -91,13 +97,16 @@ pub fn apply_resolved_intent(
             cmd_buffer.flush_and_apply(instance);
         }
         Intent::Action(action_intent) => {
-            if let Some(entity) = instance.entities.get(&entity_id) {
-                if instance.logging_enabled {
-                    println!(
-                        "[Intent] Entity {} ({}) executed action {}",
-                        entity_id, entity.name, action_intent.ability_id
-                    );
-                }
+            if instance.logging_enabled
+                && let Some(entity) = instance.entities.get(&entity_id)
+            {
+                crate::log_debug!(
+                    "Intent",
+                    "Entity {} ('{}') executed action {}",
+                    entity_id,
+                    entity.name,
+                    action_intent.ability_id
+                );
             }
 
             let (dir_x, dir_y) = match &action_intent.target_direction {

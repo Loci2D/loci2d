@@ -57,7 +57,8 @@ fn test_1000_tick_multi_player_replay_determinism() {
                 intent: Some(ClientIntent {
                     intent: Some(client_intent::Intent::Join(JoinIntent {
                         player_name: format!("Player_{}", pid),
-                        schema_version: 1
+                        schema_version: 1,
+                        session_token: String::new(),
                     })),
                 }),
             });
@@ -168,7 +169,7 @@ fn test_rejoin_entity_state_preservation_determinism() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice".to_string(),
-                schema_version: 1 })),
+                schema_version: 1, session_token: String::new() })),
             }),
         }],
     );
@@ -206,7 +207,7 @@ fn test_rejoin_entity_state_preservation_determinism() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice_Updated".to_string(),
-                schema_version: 1 })),
+                schema_version: 1, session_token: String::new() })),
             }),
         }],
     );
@@ -272,7 +273,7 @@ fn test_inactivity_timeout_disconnect_synchronization() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "TimeoutPlayer".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         }),
     };
     let mut buf = Vec::new();
@@ -308,7 +309,7 @@ fn test_desync_diagnostic_report_on_tampered_frame() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice".to_string(),
-                schema_version: 1 })),
+                schema_version: 1, session_token: String::new() })),
             }),
         }],
     );
@@ -390,7 +391,7 @@ fn test_click_to_move_replay_determinism() {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: name,
-                schema_version: 1 })),
+                schema_version: 1, session_token: String::new() })),
             }),
         });
     }
@@ -468,4 +469,124 @@ fn test_click_to_move_replay_determinism() {
         report.verified_checkpoints,
         (total_ticks / checkpoint_interval) as usize
     );
+}
+
+#[test]
+fn test_static_obstacles_and_crates_replay_determinism() {
+    use loci2d::network::ActionIntent;
+
+    let tick_rate = 30u32;
+    let total_ticks = 60u64;
+    let checkpoint_interval = 20u64;
+
+    let script = r#"
+        function on_init()
+            Loci.Commands.set_map_bounds({ x = -200, y = -200 }, { x = 200, y = 200 })
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "wall",
+                position = { x = 40, y = 0 },
+                width = 10,
+                height = 40,
+                collision_type = "solid"
+            })
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "crate",
+                position = { x = 10, y = 0 },
+                width = 4,
+                height = 4,
+                collision_type = "destructible",
+                properties = { hp = 1 }
+            })
+        end
+
+        function on_move_intent(entity_id, dx, dy)
+            Loci.Commands.set_velocity(entity_id, { x = dx, y = dy })
+        end
+
+        function on_action(entity_id, ability_id, dir_x, dir_y)
+            local pos = Loci.get_entity_position(entity_id)
+            if not pos then return end
+            for _, obs_id in ipairs(Loci.Physics.get_obstacles_in_radius(pos, 15.0)) do
+                local obs = Loci.get_obstacle(obs_id)
+                if obs and obs.collision_type == "destructible" then
+                    Loci.Commands.destroy_static_obstacle(obs_id)
+                end
+            end
+        end
+    "#;
+
+    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
+    author_instance.load_script(script).unwrap();
+
+    let mut recorder = ReplayRecorder::new(
+        1,
+        tick_rate,
+        42,
+        "obstacle_arena".to_string(),
+        checkpoint_interval,
+        author_instance.script_hash.clone(),
+        author_instance.script_payload.clone(),
+    );
+
+    let addr = "127.0.0.1:16001".parse().unwrap();
+
+    for tick in 1..=total_ticks {
+        let mut tick_entries = Vec::new();
+        if tick == 1 {
+            let join = ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: "Hero".to_string(),
+                    schema_version: 1, session_token: String::new()
+                })),
+            };
+            if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) =
+                author_instance.apply_intent(addr, join)
+            {
+                tick_entries.push(entry);
+            }
+        } else if tick == 5 {
+            let mv = ClientIntent {
+                intent: Some(client_intent::Intent::Move(MoveIntent {
+                    direction: Some(DeterministicVector2::from_f32(2.0, 0.0).to_proto()),
+                })),
+            };
+            if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) =
+                author_instance.apply_intent(addr, mv)
+            {
+                tick_entries.push(entry);
+            }
+        } else if tick == 25 {
+            // Destroy crate blocking at x=10
+            let act = ClientIntent {
+                intent: Some(client_intent::Intent::Action(ActionIntent {
+                    ability_id: 1,
+                    target_direction: None,
+                })),
+            };
+            if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) =
+                author_instance.apply_intent(addr, act)
+            {
+                tick_entries.push(entry);
+            }
+        }
+
+        recorder.record_tick(tick, tick_entries);
+        author_instance.tick(tick).unwrap();
+        recorder.maybe_record_checkpoint(tick, &author_instance);
+    }
+
+    // Crate was destroyed; only wall remains
+    assert_eq!(author_instance.static_obstacles.len(), 1);
+    assert_eq!(recorder.checkpoint_count(), 3);
+
+    let bytes = recorder.to_bytes().unwrap();
+    let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
+    let mut verify_instance = Instance::new(1, tick_rate, 60, 42);
+    verify_instance.load_script(script).unwrap();
+
+    let report = player
+        .verify_determinism_with_instance(&mut verify_instance)
+        .expect("Replay with Lua-created/destroyed static obstacles must verify cleanly");
+    assert_eq!(report.total_ticks, total_ticks);
+    assert_eq!(report.verified_checkpoints, 3);
 }
