@@ -241,6 +241,7 @@ O `loci2d` pode ser configurado através de variáveis de ambiente (ou arquivo `
 | `BIND_ADDR` | `127.0.0.1:8080` | IP e porta UDP de escuta do servidor autoritativo |
 | `TICK_RATE` | `30` | Frequência de simulação em Hz |
 | `CLIENT_TIMEOUT_SECS` | `10` | Limite de inatividade antes de desconectar clientes |
+| `SESSION_GRACE_PERIOD_SECS` | `30` | Período de graça mantendo o avatar para reconexão via `session_token` |
 | `MAX_SPECTATORS` | `128` | Limite máximo de espectadores simultâneos |
 | `SCRIPTS_DIR` | `scripts` | Diretório base dos scripts Lua de regras de arena |
 | `SCRIPT_PATH` | *(nenhum)* | Caminho direto para o script Lua autoritativo (sobrescreve `SCRIPTS_DIR` e `--map`) |

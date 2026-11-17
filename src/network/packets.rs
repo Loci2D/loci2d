@@ -52,7 +52,9 @@ mod tests {
             intent: Some(ClientIntent {
                 intent: Some(client_intent::Intent::Join(JoinIntent {
                     player_name: "Alice".to_string(),
-                schema_version: 1 })),
+                    schema_version: 1,
+                    session_token: "tok_abc123".to_string(),
+                })),
             }),
         };
         let mut buf = Vec::new();
@@ -63,8 +65,28 @@ mod tests {
                 intent: Some(client_intent::Intent::Join(j)),
             }) => {
                 assert_eq!(j.player_name, "Alice");
+                assert_eq!(j.session_token, "tok_abc123");
             }
             _ => panic!("Expected Join intent"),
+        }
+
+        let resp_pkt = ServerPacket {
+            sequence_id: 1,
+            payload: Some(server_packet::Payload::Response(ServerResponse {
+                sequence_id: 1,
+                status: "joined".to_string(),
+                session_token: "tok_abc123".to_string(),
+            })),
+        };
+        let mut resp_buf = Vec::new();
+        resp_pkt.encode(&mut resp_buf).unwrap();
+        let decoded_resp = ServerPacket::decode(&resp_buf[..]).unwrap();
+        match decoded_resp.payload {
+            Some(server_packet::Payload::Response(r)) => {
+                assert_eq!(r.status, "joined");
+                assert_eq!(r.session_token, "tok_abc123");
+            }
+            _ => panic!("Expected ServerResponse payload"),
         }
 
         // Disconnect intent

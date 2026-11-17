@@ -97,6 +97,7 @@ impl GameLoop {
                                 crate::network::packets::ServerResponse {
                                     sequence_id: 0,
                                     status: format!("rejected: {}", reason),
+                                    session_token: String::new(),
                                 },
                             );
                             let packet = ServerPacket {
@@ -115,6 +116,15 @@ impl GameLoop {
                             break;
                         }
                     }
+                }
+
+                for (target_addr, response) in instance.drain_pending_responses() {
+                    let packet = ServerPacket {
+                        sequence_id: response.sequence_id,
+                        payload: Some(server_packet::Payload::Response(response)),
+                    };
+                    let buf = packet.encode_to_vec();
+                    let _ = socket.send_to(&buf, target_addr);
                 }
 
                 if !self.running.load(Ordering::Relaxed) {
@@ -143,6 +153,7 @@ impl GameLoop {
                                 crate::network::packets::ServerResponse {
                                     sequence_id: tick_count,
                                     status: "Disconnect: Server Error".to_string(),
+                                    session_token: String::new(),
                                 },
                             )),
                         };

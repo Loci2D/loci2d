@@ -1,9 +1,12 @@
+pub const DEFAULT_SESSION_GRACE_PERIOD_SECS: u64 = 30;
+
 /// Configuration loaded once at startup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
     pub bind_addr: String,
     pub tick_rate: u32,
     pub client_timeout_secs: u64,
+    pub grace_period_secs: u64,
     pub max_spectators: usize,
     pub scripts_dir: String,
     pub script_path: Option<String>,
@@ -24,6 +27,10 @@ impl ServerConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
+            grace_period_secs: std::env::var("SESSION_GRACE_PERIOD_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_SESSION_GRACE_PERIOD_SECS),
             max_spectators: std::env::var("MAX_SPECTATORS")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -58,6 +65,7 @@ mod tests {
             bind_addr: "127.0.0.1:8080".to_string(),
             tick_rate: 30,
             client_timeout_secs: 10,
+            grace_period_secs: DEFAULT_SESSION_GRACE_PERIOD_SECS,
             max_spectators: 128,
             scripts_dir: "scripts".to_string(),
             script_path: None,
@@ -79,6 +87,7 @@ mod tests {
             bind_addr: "127.0.0.1:8080".to_string(),
             tick_rate: 30,
             client_timeout_secs: 10,
+            grace_period_secs: DEFAULT_SESSION_GRACE_PERIOD_SECS,
             max_spectators: 128,
             scripts_dir: "server/scripts".to_string(),
             script_path: None,
@@ -96,6 +105,7 @@ mod tests {
             bind_addr: "127.0.0.1:8080".to_string(),
             tick_rate: 30,
             client_timeout_secs: 10,
+            grace_period_secs: DEFAULT_SESSION_GRACE_PERIOD_SECS,
             max_spectators: 128,
             scripts_dir: "scripts".to_string(),
             script_path: Some("/custom/path/rules.lua".to_string()),

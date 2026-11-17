@@ -59,7 +59,7 @@ fn test_live_match_recording_flow() {
         intent: Some(ClientIntent {
             intent: Some(client_intent::Intent::Join(JoinIntent {
                 player_name: "Alice".to_string(),
-            schema_version: 1 })),
+            schema_version: 1, session_token: String::new() })),
         }),
     };
     let mut buf = Vec::new();

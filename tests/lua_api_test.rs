@@ -128,7 +128,7 @@ fn test_set_move_speed_command() {
     
     let join_intent = ClientIntent {
         intent: Some(client_intent::Intent::Join(loci2d::network::JoinIntent {
-            player_name: "Bob".to_string(), schema_version: 1 }))
+            player_name: "Bob".to_string(), schema_version: 1, session_token: String::new() }))
     };
     instance.apply_intent(addr, join_intent);
     
@@ -350,7 +350,7 @@ fn test_lifecycle_rejection_rollback() {
 
     let join_intent = ClientIntent {
         intent: Some(client_intent::Intent::Join(loci2d::network::JoinIntent {
-            player_name: "Eve".to_string(), schema_version: 1 }))
+            player_name: "Eve".to_string(), schema_version: 1, session_token: String::new() }))
     };
 
     let result = instance.apply_intent(addr, join_intent);
