@@ -442,3 +442,131 @@ pub fn fixed_raycast(
 
     closest_hit
 }
+
+/// Deterministic Continuous Collision Detection (CCD) for a moving circle of `radius`
+/// sweeping along `origin -> origin + delta` against a target `ColliderShape`.
+///
+/// Uses Minkowski-sum expansion of the target shape and exact fixed-point / 64-bit integer
+/// ray intersection math. Returns `Some((hit_distance, contact_normal))` where `hit_distance`
+/// is in `[0, length(delta)]` and `contact_normal` points outward from the target toward the circle.
+pub fn swept_circle_vs_shape(
+    origin: DeterministicVector2,
+    delta: DeterministicVector2,
+    radius: I16F16,
+    target: &ColliderShape,
+) -> Option<(I16F16, DeterministicVector2)> {
+    let max_distance = deterministic_distance(DeterministicVector2::ZERO, delta);
+    if max_distance <= I16F16::ZERO {
+        return None;
+    }
+
+    let dir = delta / max_distance;
+    if dir == DeterministicVector2::ZERO {
+        return None;
+    }
+
+    match target {
+        ColliderShape::Circle(circle) => {
+            let r = radius.max(I16F16::ZERO);
+            let expanded_radius = circle.radius.saturating_add(r);
+            let dx_raw = (origin.x - circle.center.x).to_bits() as i64;
+            let dy_raw = (origin.y - circle.center.y).to_bits() as i64;
+            let dist_sq_raw = dx_raw * dx_raw + dy_raw * dy_raw;
+            let er_raw = expanded_radius.to_bits() as i64;
+            let er_sq_raw = er_raw * er_raw;
+
+            if dist_sq_raw <= er_sq_raw {
+                let to_origin = origin - circle.center;
+                if to_origin.dot(delta) >= I16F16::ZERO {
+                    return None;
+                }
+                let normal = if to_origin == DeterministicVector2::ZERO {
+                    -dir
+                } else {
+                    to_origin.normalize_or_zero()
+                };
+                return Some((I16F16::ZERO, normal));
+            }
+
+            let expanded = DeterministicCircle::new(circle.center, expanded_radius);
+            ray_intersect_circle(origin, dir, max_distance, &expanded)
+        }
+        ColliderShape::AABB(aabb) => {
+            let r = radius.max(I16F16::ZERO);
+            let expanded = DeterministicAABB::new(
+                DeterministicVector2::new(
+                    aabb.min.x.saturating_sub(r),
+                    aabb.min.y.saturating_sub(r),
+                ),
+                DeterministicVector2::new(
+                    aabb.max.x.saturating_add(r),
+                    aabb.max.y.saturating_add(r),
+                ),
+            );
+            if expanded.contains_point(origin) {
+                // Moving away from or tangentially along a boundary face -> no collision
+                if (origin.x == expanded.min.x && dir.x <= I16F16::ZERO)
+                    || (origin.x == expanded.max.x && dir.x >= I16F16::ZERO)
+                    || (origin.y == expanded.min.y && dir.y <= I16F16::ZERO)
+                    || (origin.y == expanded.max.y && dir.y >= I16F16::ZERO)
+                {
+                    return None;
+                }
+                // Touching a flat face and moving directly inward
+                if origin.x == expanded.min.x
+                    && dir.x > I16F16::ZERO
+                    && origin.y >= aabb.min.y
+                    && origin.y <= aabb.max.y
+                {
+                    return Some((
+                        I16F16::ZERO,
+                        DeterministicVector2::new(-I16F16::ONE, I16F16::ZERO),
+                    ));
+                }
+                if origin.x == expanded.max.x
+                    && dir.x < I16F16::ZERO
+                    && origin.y >= aabb.min.y
+                    && origin.y <= aabb.max.y
+                {
+                    return Some((
+                        I16F16::ZERO,
+                        DeterministicVector2::new(I16F16::ONE, I16F16::ZERO),
+                    ));
+                }
+                if origin.y == expanded.min.y
+                    && dir.y > I16F16::ZERO
+                    && origin.x >= aabb.min.x
+                    && origin.x <= aabb.max.x
+                {
+                    return Some((
+                        I16F16::ZERO,
+                        DeterministicVector2::new(I16F16::ZERO, -I16F16::ONE),
+                    ));
+                }
+                if origin.y == expanded.max.y
+                    && dir.y < I16F16::ZERO
+                    && origin.x >= aabb.min.x
+                    && origin.x <= aabb.max.x
+                {
+                    return Some((
+                        I16F16::ZERO,
+                        DeterministicVector2::new(I16F16::ZERO, I16F16::ONE),
+                    ));
+                }
+
+                let manifold = intersect_circle_aabb(&DeterministicCircle::new(origin, r), aabb);
+                if manifold.is_colliding {
+                    if dir.dot(manifold.normal) >= I16F16::ZERO {
+                        None
+                    } else {
+                        Some((I16F16::ZERO, manifold.normal))
+                    }
+                } else {
+                    ray_intersect_aabb(origin, dir, max_distance, aabb)
+                }
+            } else {
+                ray_intersect_aabb(origin, dir, max_distance, &expanded)
+            }
+        }
+    }
+}

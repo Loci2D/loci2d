@@ -93,6 +93,15 @@ pub fn compute_canonical_state_hash(instance: &Instance, tick: u64) -> [u8; 32] 
             hasher.update((v.len() as u32).to_be_bytes());
             hasher.update(v.as_bytes());
         }
+
+        // Hash non-default sensor and lifetime state (tag-prefixed for backwards compatibility)
+        if entity.is_sensor {
+            hasher.update([0x5E]);
+        }
+        if let Some(ticks) = entity.remaining_lifetime_ticks {
+            hasher.update([0x4C]);
+            hasher.update(ticks.to_be_bytes());
+        }
     }
 
     // 7. Hash MapBounds when customized (preserves backwards-compatible hashes for default arenas)

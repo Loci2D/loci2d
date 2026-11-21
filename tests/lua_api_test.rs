@@ -148,9 +148,14 @@ fn test_spawn_entity_round_trip() {
         entity_id: 2,
         blueprint: "magic_missile".to_string(),
         position: DeterministicVector2::from_f64(10.0, 10.0),
+        velocity: None,
         entity_type: "Prop".to_string(),
         move_speed: I16F16::from_num(1.0),
         radius: I16F16::from_num(2.0),
+        is_sensor: None,
+        lifetime_ticks: None,
+        collision_layer: None,
+        collision_mask: None,
         properties: std::collections::BTreeMap::new(),
     });
     
@@ -943,4 +948,457 @@ fn test_set_map_bounds_and_obstacle_validation_errors() {
         });
         assert!(res.is_err(), "Expected error for script: {}", bad_script);
     }
+}
+
+#[test]
+fn test_spawn_projectile_defaults_and_snapshot() {
+    use loci2d::network::{EntityType as ProtoEntityType};
+    use loci2d::world::entity::EntityType;
+    use loci2d::world::physics::CollisionFilter;
+
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        PROJ_ID = nil
+        ENTITY_INFO_OK = false
+        LAYER_CONSTANTS_OK = false
+
+        function on_init()
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "fireball",
+                entity_type = "Projectile",
+                position = { x = 10, y = -5 },
+                velocity = { x = 6, y = 0 },
+                radius = 1.5,
+                lifetime_ticks = 10,
+                properties = { damage = 50, owner = "1" }
+            })
+        end
+
+        function on_tick(tick)
+            local ent = Loci.get_entity(PROJ_ID)
+            if ent and ent.entity_type == "Projectile" and ent.is_sensor == true
+               and ent.lifetime_ticks == 10 and ent.velocity.x == 6
+               and Loci.get_entity_type(PROJ_ID) == "Projectile" then
+                ENTITY_INFO_OK = true
+            end
+            if Loci.Physics.Layer.PROJECTILE == 8 and Loci.Physics.Layer.SOLID_WALL == 1
+               and Loci.Physics.Layer.PLAYER == 2 then
+                LAYER_CONSTANTS_OK = true
+            end
+        end
+    "#;
+    instance.load_script(script).unwrap();
+
+    let proj_id: u64 = instance.script_engine.lua().globals().get("PROJ_ID").unwrap();
+    let proj = instance.get_entity(proj_id).unwrap();
+    assert_eq!(proj.entity_type, EntityType::Projectile);
+    assert_eq!(proj.collision_filter, CollisionFilter::default_projectile());
+    assert!(proj.is_sensor);
+    assert!(proj.navigation.is_none());
+    assert_eq!(proj.velocity, DeterministicVector2::from_f32(6.0, 0.0));
+    assert_eq!(proj.remaining_lifetime_ticks, Some(10));
+
+    let snap = instance.create_snapshot(0);
+    let snap_ent = snap.entities.iter().find(|e| e.id == proj_id).unwrap();
+    assert_eq!(snap_ent.entity_type, ProtoEntityType::Projectile as i32);
+
+    instance.tick(1).unwrap();
+    let globals = instance.script_engine.lua().globals();
+    assert!(globals.get::<bool>("ENTITY_INFO_OK").unwrap());
+    assert!(globals.get::<bool>("LAYER_CONSTANTS_OK").unwrap());
+
+    // Mutate sensor and lifetime via Lua commands
+    let mut cmd_buf = CommandBuffer::new();
+    let mutate_fn = instance
+        .script_engine
+        .lua()
+        .load(
+            r#"
+            Loci.Commands.set_sensor(PROJ_ID, false)
+            Loci.Commands.set_lifetime(PROJ_ID, 25)
+            "#,
+        )
+        .into_function()
+        .unwrap();
+    with_scoped_api(instance.script_engine.lua(), &instance, &mut cmd_buf, || {
+        mutate_fn.call::<()>(())
+    })
+    .unwrap();
+    cmd_buf.flush_and_apply(&mut instance);
+
+    let updated = instance.get_entity(proj_id).unwrap();
+    assert!(!updated.is_sensor);
+    assert_eq!(updated.remaining_lifetime_ticks, Some(25));
+}
+
+#[test]
+fn test_projectile_sensor_collision_no_player_pushback() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let addr = "127.0.0.1:12345".parse().unwrap();
+    let player_id = instance.handle_join(addr, "TargetPlayer".to_string());
+    instance.entities.get_mut(&player_id).unwrap().position =
+        DeterministicVector2::from_f32(10.0, 0.0);
+
+    let script = r#"
+        HIT_LOG = ""
+        PROJ_ID = nil
+
+        function on_init()
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "arrow",
+                entity_type = "Projectile",
+                position = { x = 5, y = 0 },
+                velocity = { x = 4, y = 0 },
+                radius = 1.5
+            })
+        end
+
+        function on_collision(id_a, id_b)
+            HIT_LOG = HIT_LOG .. tostring(id_a) .. "," .. tostring(id_b) .. ";"
+            if id_a == PROJ_ID or id_b == PROJ_ID then
+                Loci.Commands.destroy_entity(PROJ_ID)
+            end
+        end
+    "#;
+    instance.load_script(script).unwrap();
+    let proj_id: u64 = instance.script_engine.lua().globals().get("PROJ_ID").unwrap();
+
+    instance.tick(1).unwrap();
+
+    // Collision fired and projectile destroyed, while player position & velocity stayed untouched
+    let hit_log: String = instance.script_engine.lua().globals().get("HIT_LOG").unwrap();
+    let expected = format!("{},{};", player_id.min(proj_id), player_id.max(proj_id));
+    assert_eq!(hit_log, expected);
+    assert!(instance.get_entity(proj_id).is_none());
+
+    let player_after = instance.get_entity(player_id).unwrap();
+    assert_eq!(player_after.position, DeterministicVector2::from_f32(10.0, 0.0));
+    assert_eq!(player_after.velocity, DeterministicVector2::ZERO);
+}
+
+#[test]
+fn test_projectile_static_and_boundary_collision_callbacks() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        STATIC_LOG = ""
+        BOUNDARY_LOG = ""
+        DESTRUCT_PROJ = nil
+        BOUNCE_PROJ = nil
+
+        function on_init()
+            Loci.Commands.set_map_bounds({ x = -20, y = -20 }, { x = 20, y = 20 })
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "wall",
+                position = { x = 10, y = 0 },
+                width = 4,
+                height = 10,
+                collision_type = "solid"
+            })
+            DESTRUCT_PROJ = Loci.Commands.spawn_entity({
+                blueprint = "fireball",
+                entity_type = "Projectile",
+                position = { x = 4, y = 0 },
+                velocity = { x = 6, y = 0 },
+                radius = 1.0
+            })
+            BOUNCE_PROJ = Loci.Commands.spawn_entity({
+                blueprint = "orb",
+                entity_type = "Projectile",
+                position = { x = 0, y = 17 },
+                velocity = { x = 0, y = 5 },
+                radius = 1.0
+            })
+        end
+
+        function on_static_collision(entity_id, obstacle_id, nx, ny)
+            STATIC_LOG = STATIC_LOG .. string.format("%d:%d:%.1f,%.1f;", entity_id, obstacle_id, nx, ny)
+            if entity_id == DESTRUCT_PROJ then
+                Loci.Commands.destroy_entity(entity_id)
+            end
+        end
+
+        function on_boundary_collision(entity_id, nx, ny)
+            BOUNDARY_LOG = BOUNDARY_LOG .. string.format("%d:%.1f,%.1f;", entity_id, nx, ny)
+            if entity_id == BOUNCE_PROJ then
+                local v = Loci.get_velocity(entity_id)
+                local dot = v.x * nx + v.y * ny
+                local rvx = v.x - 2 * dot * nx
+                local rvy = v.y - 2 * dot * ny
+                Loci.Commands.set_velocity(entity_id, { x = rvx, y = rvy })
+            end
+        end
+    "#;
+    instance.load_script(script).unwrap();
+
+    let destruct_id: u64 = instance.script_engine.lua().globals().get("DESTRUCT_PROJ").unwrap();
+    let bounce_id: u64 = instance.script_engine.lua().globals().get("BOUNCE_PROJ").unwrap();
+
+    instance.tick(1).unwrap();
+
+    let static_log: String = instance.script_engine.lua().globals().get("STATIC_LOG").unwrap();
+    let boundary_log: String = instance.script_engine.lua().globals().get("BOUNDARY_LOG").unwrap();
+    assert_eq!(static_log, format!("{}:1:-1.0,0.0;", destruct_id));
+    assert_eq!(boundary_log, format!("{}:0.0,-1.0;", bounce_id));
+    assert!(instance.get_entity(destruct_id).is_none());
+
+    // Bounce projectile reflected velocity to (0, -5) and sits clamped at y = 19
+    let bounce_after_t1 = instance.get_entity(bounce_id).unwrap();
+    assert_eq!(bounce_after_t1.position, DeterministicVector2::from_f32(0.0, 19.0));
+    assert_eq!(bounce_after_t1.velocity, DeterministicVector2::from_f32(0.0, -5.0));
+
+    instance.tick(2).unwrap();
+    let bounce_after_t2 = instance.get_entity(bounce_id).unwrap();
+    assert_eq!(bounce_after_t2.position, DeterministicVector2::from_f32(0.0, 14.0));
+}
+
+#[test]
+fn test_fast_projectile_swept_ccd_no_tunneling() {
+    // 1. Fast projectile vs thin static wall
+    let mut wall_inst = Instance::new(1, 30, 10, 42);
+    let wall_script = r#"
+        WALL_HIT = false
+        HIT_POS_X = nil
+        PROJ_ID = nil
+
+        function on_init()
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "thin_wall",
+                position = { x = 15, y = 0 },
+                width = 2.0,
+                height = 20.0,
+                collision_type = "solid"
+            })
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "rail_bolt",
+                entity_type = "Projectile",
+                position = { x = 0, y = 0 },
+                velocity = { x = 40, y = 0 },
+                radius = 1.0
+            })
+        end
+
+        function on_static_collision(entity_id, obstacle_id, nx, ny)
+            if entity_id == PROJ_ID and nx == -1.0 and ny == 0.0 then
+                WALL_HIT = true
+                local pos = Loci.get_entity_position(entity_id)
+                HIT_POS_X = pos:x_float()
+                Loci.Commands.destroy_entity(entity_id)
+            end
+        end
+    "#;
+    wall_inst.load_script(wall_script).unwrap();
+    wall_inst.tick(1).unwrap();
+
+    let globals = wall_inst.script_engine.lua().globals();
+    assert!(globals.get::<bool>("WALL_HIT").unwrap());
+    let hit_x: f64 = globals.get("HIT_POS_X").unwrap();
+    assert!(
+        (hit_x - 13.0).abs() < 0.05,
+        "Expected swept stop near x=13.0 (wall min.x=14 - radius=1), got {}",
+        hit_x
+    );
+
+    // 2. Fast projectile vs player entity (without tunneling and without pushback)
+    let mut player_inst = Instance::new(2, 30, 10, 42);
+    let addr = "127.0.0.1:12346".parse().unwrap();
+    let player_id = player_inst.handle_join(addr, "Target".to_string());
+    player_inst.entities.get_mut(&player_id).unwrap().position =
+        DeterministicVector2::from_f32(15.0, 0.0);
+
+    let player_script = r#"
+        PLAYER_HIT = false
+        PROJ_ID = nil
+
+        function on_init()
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "rail_bolt",
+                entity_type = "Projectile",
+                position = { x = 0, y = 0 },
+                velocity = { x = 40, y = 0 },
+                radius = 1.0
+            })
+        end
+
+        function on_collision(id_a, id_b)
+            if id_a == PROJ_ID or id_b == PROJ_ID then
+                PLAYER_HIT = true
+                Loci.Commands.destroy_entity(PROJ_ID)
+            end
+        end
+    "#;
+    player_inst.load_script(player_script).unwrap();
+    player_inst.tick(1).unwrap();
+
+    let p_globals = player_inst.script_engine.lua().globals();
+    assert!(p_globals.get::<bool>("PLAYER_HIT").unwrap());
+    let target = player_inst.get_entity(player_id).unwrap();
+    assert_eq!(target.position, DeterministicVector2::from_f32(15.0, 0.0));
+}
+
+#[test]
+fn test_projectile_lifetime_auto_despawn() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        PROJ_ID = nil
+        function on_init()
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "spark",
+                entity_type = "Projectile",
+                position = { x = 0, y = 0 },
+                velocity = { x = 2, y = 0 },
+                radius = 0.5,
+                lifetime_ticks = 3
+            })
+        end
+    "#;
+    instance.load_script(script).unwrap();
+    let proj_id: u64 = instance.script_engine.lua().globals().get("PROJ_ID").unwrap();
+
+    instance.tick(1).unwrap();
+    let p1 = instance.get_entity(proj_id).unwrap();
+    assert_eq!(p1.position, DeterministicVector2::from_f32(2.0, 0.0));
+    assert_eq!(p1.remaining_lifetime_ticks, Some(2));
+
+    instance.tick(2).unwrap();
+    let p2 = instance.get_entity(proj_id).unwrap();
+    assert_eq!(p2.position, DeterministicVector2::from_f32(4.0, 0.0));
+    assert_eq!(p2.remaining_lifetime_ticks, Some(1));
+
+    instance.tick(3).unwrap();
+    assert!(
+        instance.get_entity(proj_id).is_none(),
+        "Projectile should auto-despawn on tick 3"
+    );
+}
+
+#[test]
+fn test_projectile_wall_ricochet_moves_away_next_tick() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let script = r#"
+        WALL_HITS = 0
+        PROJ_ID = nil
+
+        function on_init()
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "wall",
+                position = { x = 15, y = 0 },
+                width = 2.0,
+                height = 20.0,
+                collision_type = "solid"
+            })
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "ricochet_orb",
+                entity_type = "Projectile",
+                position = { x = 0, y = 0 },
+                velocity = { x = 40, y = 0 },
+                radius = 1.0
+            })
+        end
+
+        function on_static_collision(entity_id, obstacle_id, nx, ny)
+            if entity_id == PROJ_ID then
+                WALL_HITS = WALL_HITS + 1
+                local v = Loci.get_velocity(entity_id)
+                local dot = v.x * nx + v.y * ny
+                Loci.Commands.set_velocity(entity_id, {
+                    x = v.x - 2 * dot * nx,
+                    y = v.y - 2 * dot * ny
+                })
+            end
+        end
+    "#;
+    instance.load_script(script).unwrap();
+    let proj_id: u64 = instance.script_engine.lua().globals().get("PROJ_ID").unwrap();
+
+    // Tick 1: swept CCD stops at x = 13.0 and reflects velocity to (-40, 0)
+    instance.tick(1).unwrap();
+    assert_eq!(instance.script_engine.lua().globals().get::<i32>("WALL_HITS").unwrap(), 1);
+    let p1 = instance.get_entity(proj_id).unwrap();
+    assert!((p1.position.x.to_num::<f64>() - 13.0).abs() < 0.05);
+    assert_eq!(p1.velocity, DeterministicVector2::from_f32(-40.0, 0.0));
+
+    // Tick 2: must move cleanly away to x ≈ -27.0 without sticking at t == 0 or re-colliding
+    instance.tick(2).unwrap();
+    assert_eq!(instance.script_engine.lua().globals().get::<i32>("WALL_HITS").unwrap(), 1);
+    let p2 = instance.get_entity(proj_id).unwrap();
+    assert!(
+        (p2.position.x.to_num::<f64>() - (-27.0)).abs() < 0.05,
+        "Expected ricochet to move away to x≈-27.0, got {}",
+        p2.position.x.to_num::<f64>()
+    );
+}
+
+#[test]
+fn test_fast_projectile_wall_occlusion_and_piercing_no_snag() {
+    let mut instance = Instance::new(1, 30, 10, 42);
+    let addr_ally = "127.0.0.1:12350".parse().unwrap();
+    let ally_id = instance.handle_join(addr_ally, "Ally".to_string());
+    instance.entities.get_mut(&ally_id).unwrap().position =
+        DeterministicVector2::from_f32(10.0, 0.0);
+
+    let addr_enemy = "127.0.0.1:12351".parse().unwrap();
+    let enemy_id = instance.handle_join(addr_enemy, "Enemy".to_string());
+    instance.entities.get_mut(&enemy_id).unwrap().position =
+        DeterministicVector2::from_f32(22.0, 0.0);
+
+    let addr_behind = "127.0.0.1:12352".parse().unwrap();
+    let behind_id = instance.handle_join(addr_behind, "BehindWall".to_string());
+    instance.entities.get_mut(&behind_id).unwrap().position =
+        DeterministicVector2::from_f32(36.0, 0.0);
+
+    let script = r#"
+        COLLISIONS = ""
+        WALL_HIT = false
+        PROJ_ID = nil
+
+        function on_init()
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "wall",
+                position = { x = 30, y = 0 },
+                width = 2.0,
+                height = 20.0,
+                collision_type = "solid"
+            })
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "piercing_bolt",
+                entity_type = "Projectile",
+                position = { x = 0, y = 0 },
+                velocity = { x = 40, y = 0 },
+                radius = 1.0
+            })
+        end
+
+        function on_collision(id_a, id_b)
+            local other = (id_a == PROJ_ID) and id_b or id_a
+            COLLISIONS = COLLISIONS .. tostring(other) .. ";"
+        end
+
+        function on_static_collision(entity_id, obstacle_id, nx, ny)
+            if entity_id == PROJ_ID then
+                WALL_HIT = true
+            end
+        end
+    "#;
+    instance.load_script(script).unwrap();
+    let proj_id: u64 = instance.script_engine.lua().globals().get("PROJ_ID").unwrap();
+
+    instance.tick(1).unwrap();
+
+    let globals = instance.script_engine.lua().globals();
+    let collisions: String = globals.get("COLLISIONS").unwrap();
+    let wall_hit: bool = globals.get("WALL_HIT").unwrap();
+
+    assert!(wall_hit, "Projectile should hit solid wall at x=30");
+    assert_eq!(
+        collisions,
+        format!("{};{};", ally_id, enemy_id),
+        "Should detect ally and enemy along path without snagging, and remain occluded from behind_id"
+    );
+
+    let proj_after = instance.get_entity(proj_id).unwrap();
+    assert!(
+        (proj_after.position.x.to_num::<f64>() - 28.0).abs() < 0.05,
+        "Projectile should travel past ally/enemy and stop at wall surface x≈28.0, got {}",
+        proj_after.position.x.to_num::<f64>()
+    );
 }

@@ -1,12 +1,15 @@
 use crate::logging::{self, LogLevel};
 use crate::scripting::CommandBuffer;
+use crate::world::entity::EntityType;
+use crate::world::fixed_point::DeterministicVector2;
 use crate::world::instance::{Instance, MatchState};
 use crate::world::physics::{
-    ColliderShape, DeterministicCircle, TriggerEvent, TriggerEventType, intersect_shapes,
-    resolve_dynamic_collision, resolve_static_collision, update_entity_navigation,
+    ColliderShape, CollisionFilter, DeterministicCircle, TriggerEvent, TriggerEventType,
+    deterministic_distance, intersect_shapes, resolve_dynamic_collision, resolve_static_collision,
+    swept_circle_vs_shape, update_entity_navigation,
 };
 use fixed::types::I16F16;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Advance physics using deterministic fixed-point integration, resolve solid collisions against
 /// static obstacles and dynamic entities, evaluate trigger sensor zones, clamp to map boundaries,
@@ -48,31 +51,158 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
         let log_trace_physics = instance.logging_enabled && logging::enabled(LogLevel::Trace);
         let log_debug_physics = instance.logging_enabled && logging::enabled(LogLevel::Debug);
 
-        // 1. Velocity Integration (Candidate Next Position) & Initial Map Bounds Clamping
-        for entity in instance.entities.values_mut() {
-            let old_pos = entity.position;
-            entity.position = entity.position.saturating_add(entity.velocity);
+        // 1. Velocity Integration (Candidate Next Position), Swept CCD & Map Bounds Clamping
+        let mut boundary_collisions: Vec<(u64, DeterministicVector2)> = Vec::new();
+        let mut swept_static_hits: BTreeMap<(u64, u64), DeterministicVector2> = BTreeMap::new();
+        let mut swept_dynamic_hits: BTreeMap<(u64, u64), I16F16> = BTreeMap::new();
 
-            entity.position = match entity.current_collider() {
-                Some(shape) => instance.map_bounds.clamp_shape(&shape),
-                None => instance.map_bounds.clamp_point(entity.position),
+        struct PreStepEntity {
+            id: u64,
+            old_pos: DeterministicVector2,
+            vel: DeterministicVector2,
+            entity_type: EntityType,
+            collider: Option<ColliderShape>,
+            filter: CollisionFilter,
+        }
+
+        let pre_step: Vec<PreStepEntity> = instance
+            .entities
+            .iter()
+            .map(|(&id, e)| PreStepEntity {
+                id,
+                old_pos: e.position,
+                vel: e.velocity,
+                entity_type: e.entity_type,
+                collider: e.collider,
+                filter: e.collision_filter,
+            })
+            .collect();
+
+        let mut integrated_positions: Vec<(u64, DeterministicVector2)> =
+            Vec::with_capacity(pre_step.len());
+
+        for ent in &pre_step {
+            let radius = match ent.collider {
+                Some(ColliderShape::Circle(c)) => c.radius,
+                Some(ColliderShape::AABB(a)) => a.half_extents().x.min(a.half_extents().y),
+                None => I16F16::ZERO,
+            };
+            let speed = deterministic_distance(DeterministicVector2::ZERO, ent.vel);
+            let use_ccd = ent.entity_type == EntityType::Projectile && speed > I16F16::ZERO;
+
+            let unclamped_pos = if use_ccd {
+                // Sweep against solid static obstacles first so walls stop & occlude the projectile
+                let mut best_static: Option<(I16F16, u64, DeterministicVector2)> = None;
+                for obstacle in instance.static_obstacles.values() {
+                    if !obstacle.is_solid || !ent.filter.can_collide(&obstacle.filter) {
+                        continue;
+                    }
+                    if let Some((hit_t, normal)) =
+                        swept_circle_vs_shape(ent.old_pos, ent.vel, radius, &obstacle.shape)
+                        && best_static.is_none_or(|(best_t, _, _)| hit_t < best_t)
+                    {
+                        best_static = Some((hit_t, obstacle.id, normal));
+                    }
+                }
+
+                let (travel_dist, candidate_pos) =
+                    if let Some((hit_t, obstacle_id, normal)) = best_static {
+                        swept_static_hits.insert((obstacle_id, ent.id), normal);
+                        let dir = ent.vel / speed;
+                        (
+                            hit_t,
+                            ent.old_pos.saturating_add(DeterministicVector2::new(
+                                dir.x * hit_t,
+                                dir.y * hit_t,
+                            )),
+                        )
+                    } else {
+                        (speed, ent.old_pos.saturating_add(ent.vel))
+                    };
+
+                // Sweep the wall-clamped segment against dynamic entities without snagging
+                let sweep_delta = candidate_pos.saturating_sub(ent.old_pos);
+                for other in &pre_step {
+                    if other.id == ent.id || !ent.filter.can_collide(&other.filter) {
+                        continue;
+                    }
+                    let Some(other_shape) = other.collider.map(|s| s.at_position(other.old_pos))
+                    else {
+                        continue;
+                    };
+                    if let Some((dyn_t, _normal)) =
+                        swept_circle_vs_shape(ent.old_pos, sweep_delta, radius, &other_shape)
+                        && dyn_t <= travel_dist
+                    {
+                        let pair = (ent.id.min(other.id), ent.id.max(other.id));
+                        swept_dynamic_hits
+                            .entry(pair)
+                            .and_modify(|existing| {
+                                if dyn_t < *existing {
+                                    *existing = dyn_t;
+                                }
+                            })
+                            .or_insert(dyn_t);
+                    }
+                }
+
+                candidate_pos
+            } else {
+                ent.old_pos.saturating_add(ent.vel)
             };
 
-            if log_trace_physics && entity.position != old_pos {
-                crate::log_trace!(
-                    tick = tick_count,
-                    "Physics",
-                    "Player {} moved to ({:.2}, {:.2})",
-                    entity.name,
-                    entity.position.x.to_num::<f32>(),
-                    entity.position.y.to_num::<f32>()
-                );
+            let clamped_pos = match ent.collider {
+                Some(shape) => instance
+                    .map_bounds
+                    .clamp_shape(&shape.at_position(unclamped_pos)),
+                None => instance.map_bounds.clamp_point(unclamped_pos),
+            };
+
+            if clamped_pos != unclamped_pos {
+                let diff_x = clamped_pos.x - unclamped_pos.x;
+                let diff_y = clamped_pos.y - unclamped_pos.y;
+                let nx = if diff_x > I16F16::ZERO {
+                    I16F16::ONE
+                } else if diff_x < I16F16::ZERO {
+                    -I16F16::ONE
+                } else {
+                    I16F16::ZERO
+                };
+                let ny = if diff_y > I16F16::ZERO {
+                    I16F16::ONE
+                } else if diff_y < I16F16::ZERO {
+                    -I16F16::ONE
+                } else {
+                    I16F16::ZERO
+                };
+                let normal = DeterministicVector2::new(nx, ny).normalize_or_zero();
+                boundary_collisions.push((ent.id, normal));
+            }
+
+            integrated_positions.push((ent.id, clamped_pos));
+        }
+
+        for (entity_id, new_pos) in integrated_positions {
+            if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                let old_pos = entity.position;
+                entity.position = new_pos;
+                if log_trace_physics && entity.position != old_pos {
+                    crate::log_trace!(
+                        tick = tick_count,
+                        "Physics",
+                        "Player {} moved to ({:.2}, {:.2})",
+                        entity.name,
+                        entity.position.x.to_num::<f32>(),
+                        entity.position.y.to_num::<f32>()
+                    );
+                }
             }
         }
 
-        // 2. Static Solid Obstacle Collision Resolution (100% Pushback & Wall Sliding)
+        // 2. Static Solid Obstacle Collision Resolution & Static/Boundary Callbacks
         // Evaluated in strict ascending obstacle.id order
         let mut current_solid_collisions = BTreeSet::new();
+        let mut static_callbacks: Vec<(u64, u64, DeterministicVector2)> = Vec::new();
         for obstacle in instance.static_obstacles.values() {
             if !obstacle.is_solid {
                 continue;
@@ -86,7 +216,20 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                 };
                 let manifold = intersect_shapes(&entity_shape, &obstacle.shape);
                 if manifold.is_colliding {
-                    resolve_static_collision(&mut entity.position, &mut entity.velocity, &manifold);
+                    if !entity.is_sensor {
+                        resolve_static_collision(
+                            &mut entity.position,
+                            &mut entity.velocity,
+                            &manifold,
+                        );
+                    } else if manifold.penetration_depth > I16F16::ZERO
+                        && manifold.normal != DeterministicVector2::ZERO
+                    {
+                        entity.position.x += manifold.normal.x * manifold.penetration_depth;
+                        entity.position.y += manifold.normal.y * manifold.penetration_depth;
+                    }
+                    static_callbacks.push((entity.id, obstacle.id, manifold.normal));
+
                     if log_debug_physics {
                         let pair = (entity.id, obstacle.id);
                         current_solid_collisions.insert(pair);
@@ -119,6 +262,10 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                         Some(shape) => instance.map_bounds.clamp_shape(&shape),
                         None => instance.map_bounds.clamp_point(entity.position),
                     };
+                } else if let Some(&swept_normal) =
+                    swept_static_hits.get(&(obstacle.id, entity.id))
+                {
+                    static_callbacks.push((entity.id, obstacle.id, swept_normal));
                 }
             }
         }
@@ -128,7 +275,34 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
             instance.active_solid_collisions.clear();
         }
 
-        // 3. Dynamic Entity-vs-Entity Collision Resolution (50/50 Split Pushback)
+        for (entity_id, obstacle_id, normal) in static_callbacks {
+            instance
+                .script_engine
+                .on_static_collision(
+                    instance,
+                    entity_id,
+                    obstacle_id,
+                    normal.x.to_num::<f64>(),
+                    normal.y.to_num::<f64>(),
+                    &mut cmd_buffer,
+                )
+                .map_err(|e| e.to_string())?;
+        }
+
+        for (entity_id, normal) in boundary_collisions {
+            instance
+                .script_engine
+                .on_boundary_collision(
+                    instance,
+                    entity_id,
+                    normal.x.to_num::<f64>(),
+                    normal.y.to_num::<f64>(),
+                    &mut cmd_buffer,
+                )
+                .map_err(|e| e.to_string())?;
+        }
+
+        // 3. Dynamic Entity-vs-Entity Collision Resolution (50/50 Split Pushback for Rigid, Zero Pushback for Sensors)
         // Evaluated in strict ascending (entity_a.id, entity_b.id) pair order
         let mut current_dynamic_collisions = BTreeSet::new();
         let entity_ids: Vec<u64> = instance.entities.keys().copied().collect();
@@ -154,16 +328,40 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                 let shape_a = instance.entities[&id_a].current_collider().unwrap();
                 let shape_b = instance.entities[&id_b].current_collider().unwrap();
                 let manifold = intersect_shapes(&shape_a, &shape_b);
+                let swept_hit = swept_dynamic_hits.contains_key(&(id_a, id_b));
 
-                if manifold.is_colliding {
-                    let mut pos_a = instance.entities[&id_a].position;
-                    let mut vel_a = instance.entities[&id_a].velocity;
-                    let mut pos_b = instance.entities[&id_b].position;
-                    let mut vel_b = instance.entities[&id_b].velocity;
+                if manifold.is_colliding || swept_hit {
+                    let is_sensor_pair =
+                        instance.entities[&id_a].is_sensor || instance.entities[&id_b].is_sensor;
 
-                    resolve_dynamic_collision(
-                        &mut pos_a, &mut vel_a, &mut pos_b, &mut vel_b, &manifold,
-                    );
+                    if !is_sensor_pair && manifold.is_colliding {
+                        let mut pos_a = instance.entities[&id_a].position;
+                        let mut vel_a = instance.entities[&id_a].velocity;
+                        let mut pos_b = instance.entities[&id_b].position;
+                        let mut vel_b = instance.entities[&id_b].velocity;
+
+                        resolve_dynamic_collision(
+                            &mut pos_a,
+                            &mut vel_a,
+                            &mut pos_b,
+                            &mut vel_b,
+                            &manifold,
+                        );
+
+                        let entity_a = instance.entities.get_mut(&id_a).unwrap();
+                        entity_a.position = pos_a;
+                        entity_a.velocity = vel_a;
+                        if let Some(shape) = entity_a.current_collider() {
+                            entity_a.position = instance.map_bounds.clamp_shape(&shape);
+                        }
+
+                        let entity_b = instance.entities.get_mut(&id_b).unwrap();
+                        entity_b.position = pos_b;
+                        entity_b.velocity = vel_b;
+                        if let Some(shape) = entity_b.current_collider() {
+                            entity_b.position = instance.map_bounds.clamp_shape(&shape);
+                        }
+                    }
 
                     instance
                         .script_engine
@@ -173,6 +371,8 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                     if log_debug_physics {
                         let pair = (id_a, id_b);
                         current_dynamic_collisions.insert(pair);
+                        let pos_a = instance.entities[&id_a].position;
+                        let pos_b = instance.entities[&id_b].position;
                         let name_a = &instance.entities[&id_a].name;
                         let name_b = &instance.entities[&id_b].name;
                         if !instance.active_dynamic_collisions.contains(&pair) {
@@ -204,20 +404,6 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                                 pos_b.y.to_num::<f32>()
                             );
                         }
-                    }
-
-                    let entity_a = instance.entities.get_mut(&id_a).unwrap();
-                    entity_a.position = pos_a;
-                    entity_a.velocity = vel_a;
-                    if let Some(shape) = entity_a.current_collider() {
-                        entity_a.position = instance.map_bounds.clamp_shape(&shape);
-                    }
-
-                    let entity_b = instance.entities.get_mut(&id_b).unwrap();
-                    entity_b.position = pos_b;
-                    entity_b.velocity = vel_b;
-                    if let Some(shape) = entity_b.current_collider() {
-                        entity_b.position = instance.map_bounds.clamp_shape(&shape);
                     }
                 }
             }
@@ -297,6 +483,24 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
 
         instance.previous_trigger_overlaps = current_overlaps.clone();
         instance.active_trigger_overlaps = current_overlaps;
+
+        // 4.5 Entity Lifetime Countdown (auto-despawn expired projectiles/entities)
+        let mut expired_entities = Vec::new();
+        for (&entity_id, entity) in instance.entities.iter_mut() {
+            if let Some(ref mut remaining) = entity.remaining_lifetime_ticks {
+                if *remaining > 0 {
+                    *remaining -= 1;
+                    if *remaining == 0 {
+                        expired_entities.push(entity_id);
+                    }
+                } else {
+                    expired_entities.push(entity_id);
+                }
+            }
+        }
+        for entity_id in expired_entities {
+            instance.entities.remove(&entity_id);
+        }
     }
 
     // 5. Check for timed out clients
