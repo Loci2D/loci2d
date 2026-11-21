@@ -1233,6 +1233,51 @@ fn test_fast_projectile_swept_ccd_no_tunneling() {
     assert!(p_globals.get::<bool>("PLAYER_HIT").unwrap());
     let target = player_inst.get_entity(player_id).unwrap();
     assert_eq!(target.position, DeterministicVector2::from_f32(15.0, 0.0));
+
+    // 3. Fast projectile vs circular static obstacle pillar
+    let mut circle_inst = Instance::new(3, 30, 10, 42);
+    let circle_script = r#"
+        PILLAR_HIT = false
+        HIT_POS_X = nil
+        PROJ_ID = nil
+
+        function on_init()
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "pillar",
+                shape = "circle",
+                position = { x = 15, y = 0 },
+                radius = 2.0,
+                collision_type = "solid"
+            })
+            PROJ_ID = Loci.Commands.spawn_entity({
+                blueprint = "rail_bolt",
+                entity_type = "Projectile",
+                position = { x = 0, y = 0 },
+                velocity = { x = 40, y = 0 },
+                radius = 1.0
+            })
+        end
+
+        function on_static_collision(entity_id, obstacle_id, nx, ny)
+            if entity_id == PROJ_ID and nx < -0.9 and ny == 0.0 then
+                PILLAR_HIT = true
+                local pos = Loci.get_entity_position(entity_id)
+                HIT_POS_X = pos:x_float()
+                Loci.Commands.destroy_entity(entity_id)
+            end
+        end
+    "#;
+    circle_inst.load_script(circle_script).unwrap();
+    circle_inst.tick(1).unwrap();
+
+    let c_globals = circle_inst.script_engine.lua().globals();
+    assert!(c_globals.get::<bool>("PILLAR_HIT").unwrap());
+    let c_hit_x: f64 = c_globals.get("HIT_POS_X").unwrap();
+    assert!(
+        (c_hit_x - 12.0).abs() < 0.05,
+        "Expected swept stop near x=12.0 (pillar center=15 - pillar_r=2 - proj_r=1), got {}",
+        c_hit_x
+    );
 }
 
 #[test]

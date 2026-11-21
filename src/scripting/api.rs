@@ -356,13 +356,7 @@ where
             tbl.set("id", entity.id)?;
             tbl.set("name", entity.name.clone())?;
             tbl.set("blueprint", entity.name.clone())?;
-            let type_str = match entity.entity_type {
-                crate::world::entity::EntityType::Player => "Player",
-                crate::world::entity::EntityType::NPC => "NPC",
-                crate::world::entity::EntityType::Prop => "Prop",
-                crate::world::entity::EntityType::Projectile => "Projectile",
-            };
-            tbl.set("entity_type", type_str)?;
+            tbl.set("entity_type", entity.entity_type.as_str())?;
             tbl.set("position", entity.position)?;
             let vel_tbl = lua.create_table()?;
             vel_tbl.set("x", entity.velocity.x.to_num::<f64>())?;
@@ -383,12 +377,7 @@ where
 
         // Loci.get_entity_type(id)
         let get_entity_type = scope.create_function(|_, id: u64| {
-            Ok(instance.get_entity(id).map(|entity| match entity.entity_type {
-                crate::world::entity::EntityType::Player => "Player",
-                crate::world::entity::EntityType::NPC => "NPC",
-                crate::world::entity::EntityType::Prop => "Prop",
-                crate::world::entity::EntityType::Projectile => "Projectile",
-            }))
+            Ok(instance.get_entity(id).map(|entity| entity.entity_type.as_str()))
         })?;
         loci_table.set("get_entity_type", get_entity_type)?;
 

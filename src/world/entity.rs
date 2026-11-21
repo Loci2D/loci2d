@@ -123,4 +123,13 @@ impl EntityType {
             EntityType::Projectile => 3,
         }
     }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EntityType::Player => "Player",
+            EntityType::NPC => "NPC",
+            EntityType::Prop => "Prop",
+            EntityType::Projectile => "Projectile",
+        }
+    }
 }

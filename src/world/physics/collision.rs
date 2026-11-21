@@ -353,11 +353,11 @@ fn ray_intersect_circle(
     max_distance: I16F16,
     circle: &DeterministicCircle,
 ) -> Option<(I16F16, DeterministicVector2)> {
-    let dx_raw = (circle.center.x - origin.x).to_bits() as i64;
-    let dy_raw = (circle.center.y - origin.y).to_bits() as i64;
+    let dx_raw = (circle.center.x.to_bits() as i128) - (origin.x.to_bits() as i128);
+    let dy_raw = (circle.center.y.to_bits() as i128) - (origin.y.to_bits() as i128);
     let dist_sq_raw = dx_raw * dx_raw + dy_raw * dy_raw;
 
-    let r_raw = circle.radius.to_bits() as i64;
+    let r_raw = circle.radius.to_bits() as i128;
     let r_sq_raw = r_raw * r_raw;
 
     if dist_sq_raw <= r_sq_raw {
@@ -365,15 +365,15 @@ fn ray_intersect_circle(
         return Some((I16F16::ZERO, -dir));
     }
 
-    let v = circle.center - origin;
+    let v = circle.center.saturating_sub(origin);
     let t_proj = v.dot(dir);
     if t_proj < I16F16::ZERO {
         return None;
     }
 
     let p_close = origin + dir * t_proj;
-    let px_raw = (circle.center.x - p_close.x).to_bits() as i64;
-    let py_raw = (circle.center.y - p_close.y).to_bits() as i64;
+    let px_raw = (circle.center.x.to_bits() as i128) - (p_close.x.to_bits() as i128);
+    let py_raw = (circle.center.y.to_bits() as i128) - (p_close.y.to_bits() as i128);
     let d_perp_sq_raw = px_raw * px_raw + py_raw * py_raw;
 
     if d_perp_sq_raw > r_sq_raw {
@@ -469,14 +469,14 @@ pub fn swept_circle_vs_shape(
         ColliderShape::Circle(circle) => {
             let r = radius.max(I16F16::ZERO);
             let expanded_radius = circle.radius.saturating_add(r);
-            let dx_raw = (origin.x - circle.center.x).to_bits() as i64;
-            let dy_raw = (origin.y - circle.center.y).to_bits() as i64;
+            let dx_raw = (origin.x.to_bits() as i128) - (circle.center.x.to_bits() as i128);
+            let dy_raw = (origin.y.to_bits() as i128) - (circle.center.y.to_bits() as i128);
             let dist_sq_raw = dx_raw * dx_raw + dy_raw * dy_raw;
-            let er_raw = expanded_radius.to_bits() as i64;
+            let er_raw = expanded_radius.to_bits() as i128;
             let er_sq_raw = er_raw * er_raw;
 
             if dist_sq_raw <= er_sq_raw {
-                let to_origin = origin - circle.center;
+                let to_origin = origin.saturating_sub(circle.center);
                 if to_origin.dot(delta) >= I16F16::ZERO {
                     return None;
                 }

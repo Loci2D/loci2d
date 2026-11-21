@@ -225,6 +225,8 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
                     } else if manifold.penetration_depth > I16F16::ZERO
                         && manifold.normal != DeterministicVector2::ZERO
                     {
+                        // Position sensor at contact surface without projecting velocity (ADR-0021)
+                        // so ricochet scripts can inspect pre-impact velocity cleanly and bounce away.
                         entity.position.x += manifold.normal.x * manifold.penetration_depth;
                         entity.position.y += manifold.normal.y * manifold.penetration_depth;
                     }
@@ -484,22 +486,22 @@ pub fn tick(instance: &mut Instance, tick_count: u64) -> Result<Vec<(u64, String
         instance.previous_trigger_overlaps = current_overlaps.clone();
         instance.active_trigger_overlaps = current_overlaps;
 
-        // 4.5 Entity Lifetime Countdown (auto-despawn expired projectiles/entities)
-        let mut expired_entities = Vec::new();
+        // 4.5 Entity Lifetime Countdown (auto-despawn expired projectiles/entities via CommandBuffer)
         for (&entity_id, entity) in instance.entities.iter_mut() {
             if let Some(ref mut remaining) = entity.remaining_lifetime_ticks {
                 if *remaining > 0 {
                     *remaining -= 1;
                     if *remaining == 0 {
-                        expired_entities.push(entity_id);
+                        cmd_buffer.push(crate::scripting::command::Command::DestroyEntity {
+                            entity_id,
+                        });
                     }
                 } else {
-                    expired_entities.push(entity_id);
+                    cmd_buffer.push(crate::scripting::command::Command::DestroyEntity {
+                        entity_id,
+                    });
                 }
             }
-        }
-        for entity_id in expired_entities {
-            instance.entities.remove(&entity_id);
         }
     }
 
