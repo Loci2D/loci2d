@@ -21,10 +21,19 @@ pub struct Entity {
     pub navigation: Option<NavigationComponent>,
     // Phase 6.5.0 Additions (Data-Driven Properties)
     pub properties: BTreeMap<String, String>,
+    // ADR-0021 Additions (Physical Projectiles & Sensors)
+    pub is_sensor: bool,
+    pub remaining_lifetime_ticks: Option<u32>,
 }
 
 impl Entity {
     pub fn new(id: u64, name: String, entity_type: EntityType) -> Self {
+        let collision_filter = if entity_type == EntityType::Projectile {
+            CollisionFilter::default_projectile()
+        } else {
+            CollisionFilter::default_player()
+        };
+        let is_sensor = matches!(entity_type, EntityType::Projectile);
         Self {
             id,
             name,
@@ -32,9 +41,11 @@ impl Entity {
             velocity: DeterministicVector2::ZERO,
             entity_type,
             collider: None,
-            collision_filter: CollisionFilter::default_player(),
+            collision_filter,
             navigation: None,
             properties: BTreeMap::new(),
+            is_sensor,
+            remaining_lifetime_ticks: None,
         }
     }
 
@@ -77,6 +88,16 @@ impl Entity {
         self
     }
 
+    pub fn with_sensor(mut self, is_sensor: bool) -> Self {
+        self.is_sensor = is_sensor;
+        self
+    }
+
+    pub fn with_lifetime_ticks(mut self, ticks: Option<u32>) -> Self {
+        self.remaining_lifetime_ticks = ticks;
+        self
+    }
+
     /// Returns the entity's collider shape translated to its current position.
     pub fn current_collider(&self) -> Option<ColliderShape> {
         self.collider.map(|shape| shape.at_position(self.position))
@@ -90,6 +111,7 @@ pub enum EntityType {
     Player,
     NPC,
     Prop,
+    Projectile,
 }
 
 impl EntityType {
@@ -98,6 +120,7 @@ impl EntityType {
             EntityType::Player => 0,
             EntityType::NPC => 1,
             EntityType::Prop => 2,
+            EntityType::Projectile => 3,
         }
     }
 }

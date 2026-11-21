@@ -715,6 +715,7 @@ impl Instance {
                     EntityType::Player => ProtoEntityType::Player as i32,
                     EntityType::NPC => ProtoEntityType::Npc as i32,
                     EntityType::Prop => ProtoEntityType::Prop as i32,
+                    EntityType::Projectile => ProtoEntityType::Projectile as i32,
                 },
                 properties: e
                     .properties

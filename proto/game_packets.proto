@@ -62,6 +62,7 @@ enum EntityType {
   PLAYER = 0;
   NPC = 1;
   PROP = 2;
+  PROJECTILE = 3;
 }
 
 // Phase 6.5.0: Entity Properties

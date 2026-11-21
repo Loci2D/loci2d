@@ -70,6 +70,7 @@ fn print_world_state(ws: &WorldState) {
                 0 => "Player",
                 1 => "NPC",
                 2 => "Prop",
+                3 => "Projectile",
                 _ => "Unknown",
             };
             let pos = entity

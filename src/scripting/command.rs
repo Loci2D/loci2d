@@ -9,10 +9,23 @@ pub enum Command {
         entity_id: u64,
         blueprint: String,
         position: DeterministicVector2,
+        velocity: Option<DeterministicVector2>,
         entity_type: String,
         move_speed: I16F16,
         radius: I16F16,
+        is_sensor: Option<bool>,
+        lifetime_ticks: Option<u32>,
+        collision_layer: Option<u16>,
+        collision_mask: Option<u16>,
         properties: std::collections::BTreeMap<String, String>,
+    },
+    SetSensor {
+        entity_id: u64,
+        is_sensor: bool,
+    },
+    SetLifetime {
+        entity_id: u64,
+        lifetime_ticks: Option<u32>,
     },
     DestroyEntity {
         entity_id: u64,
@@ -104,14 +117,21 @@ impl CommandBuffer {
                     entity_id,
                     blueprint,
                     position,
+                    velocity,
                     entity_type,
                     move_speed,
                     radius,
+                    is_sensor,
+                    lifetime_ticks,
+                    collision_layer,
+                    collision_mask,
                     properties,
                 } => {
                     let parsed_type = match entity_type.as_str() {
-                        "Player" => crate::world::entity::EntityType::Player,
-                        "Enemy" | "NPC" => crate::world::entity::EntityType::NPC,
+                        "Player" | "player" => crate::world::entity::EntityType::Player,
+                        "Enemy" | "NPC" | "npc" | "enemy" => crate::world::entity::EntityType::NPC,
+                        "Projectile" | "projectile" => crate::world::entity::EntityType::Projectile,
+                        "Prop" | "prop" => crate::world::entity::EntityType::Prop,
                         unknown => {
                             if instance.logging_enabled {
                                 crate::log_warn!(
@@ -123,24 +143,42 @@ impl CommandBuffer {
                             crate::world::entity::EntityType::Prop
                         }
                     };
-                    
+
                     let mut entity = crate::world::entity::Entity::new(
                         entity_id,
                         blueprint.clone(),
                         parsed_type,
                     )
-                    .with_default_navigation(move_speed, I16F16::from_num(1))
                     .with_circle_collider(radius);
-                    
+
+                    if parsed_type != crate::world::entity::EntityType::Projectile {
+                        entity = entity.with_default_navigation(move_speed, I16F16::from_num(1));
+                    }
+
+                    if let Some(vel) = velocity {
+                        entity.velocity = vel;
+                    }
+                    if let Some(sensor) = is_sensor {
+                        entity.is_sensor = sensor;
+                    }
+                    entity.remaining_lifetime_ticks = lifetime_ticks.filter(|&t| t > 0);
+
+                    if collision_layer.is_some() || collision_mask.is_some() {
+                        entity.collision_filter = CollisionFilter::new(
+                            collision_layer.unwrap_or(entity.collision_filter.layer),
+                            collision_mask.unwrap_or(entity.collision_filter.mask),
+                        );
+                    }
+
                     for (k, v) in properties {
                         entity.properties.insert(k, v);
                     }
 
                     let pos_for_log = position;
                     entity.position = position;
-                    
+
                     instance.entities.insert(entity_id, entity);
-                    
+
                     if instance.logging_enabled {
                         crate::log_debug!(
                             "CommandBuffer",
@@ -150,6 +188,22 @@ impl CommandBuffer {
                             pos_for_log.x.to_num::<f64>(),
                             pos_for_log.y.to_num::<f64>()
                         );
+                    }
+                }
+                Command::SetSensor {
+                    entity_id,
+                    is_sensor,
+                } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        entity.is_sensor = is_sensor;
+                    }
+                }
+                Command::SetLifetime {
+                    entity_id,
+                    lifetime_ticks,
+                } => {
+                    if let Some(entity) = instance.entities.get_mut(&entity_id) {
+                        entity.remaining_lifetime_ticks = lifetime_ticks.filter(|&t| t > 0);
                     }
                 }
                 Command::DestroyEntity { entity_id } => {

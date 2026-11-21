@@ -45,6 +45,7 @@ fn entity_type_label(t: &EntityType) -> &'static str {
         EntityType::Player => "Player",
         EntityType::NPC => "NPC",
         EntityType::Prop => "Prop",
+        EntityType::Projectile => "Projectile",
     }
 }
 

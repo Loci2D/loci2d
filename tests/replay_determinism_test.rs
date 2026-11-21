@@ -590,3 +590,115 @@ fn test_static_obstacles_and_crates_replay_determinism() {
     assert_eq!(report.total_ticks, total_ticks);
     assert_eq!(report.verified_checkpoints, 3);
 }
+
+#[test]
+fn test_projectiles_ccd_and_ricochet_replay_determinism() {
+    use loci2d::network::ActionIntent;
+
+    let tick_rate = 30u32;
+    let total_ticks = 60u64;
+    let checkpoint_interval = 15u64;
+
+    let script = r#"
+        function on_init()
+            Loci.Commands.set_map_bounds({ x = -100, y = -100 }, { x = 100, y = 100 })
+            Loci.Commands.spawn_static_obstacle({
+                blueprint = "wall",
+                position = { x = 40, y = 0 },
+                width = 4,
+                height = 60,
+                collision_type = "solid"
+            })
+        end
+
+        function on_action(entity_id, ability_id, dir_x, dir_y)
+            local pos = Loci.get_entity_position(entity_id)
+            if not pos then return end
+            Loci.Commands.spawn_entity({
+                blueprint = "ricochet_blade",
+                entity_type = "Projectile",
+                position = pos,
+                velocity = { x = dir_x * 25, y = dir_y * 25 },
+                radius = 1.0,
+                lifetime_ticks = 20
+            })
+        end
+
+        function on_static_collision(entity_id, obstacle_id, nx, ny)
+            local v = Loci.get_velocity(entity_id)
+            if v then
+                local dot = v.x * nx + v.y * ny
+                Loci.Commands.set_velocity(entity_id, {
+                    x = v.x - 2 * dot * nx,
+                    y = v.y - 2 * dot * ny
+                })
+            end
+        end
+
+        function on_boundary_collision(entity_id, nx, ny)
+            Loci.Commands.destroy_entity(entity_id)
+        end
+    "#;
+
+    let mut author_instance = Instance::new(1, tick_rate, 60, 42);
+    author_instance.load_script(script).unwrap();
+
+    let mut recorder = ReplayRecorder::new(
+        1,
+        tick_rate,
+        42,
+        "projectile_arena".to_string(),
+        checkpoint_interval,
+        author_instance.script_hash.clone(),
+        author_instance.script_payload.clone(),
+    );
+
+    let addr = "127.0.0.1:16002".parse().unwrap();
+
+    for tick in 1..=total_ticks {
+        let mut tick_entries = Vec::new();
+        if tick == 1 {
+            let join = ClientIntent {
+                intent: Some(client_intent::Intent::Join(JoinIntent {
+                    player_name: "Archer".to_string(),
+                    schema_version: 1,
+                    session_token: String::new(),
+                })),
+            };
+            if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) =
+                author_instance.apply_intent(addr, join)
+            {
+                tick_entries.push(entry);
+            }
+        } else if tick == 3 || tick == 18 {
+            let act = ClientIntent {
+                intent: Some(client_intent::Intent::Action(ActionIntent {
+                    ability_id: 1,
+                    target_direction: Some(DeterministicVector2::from_f32(1.0, 0.25).to_proto()),
+                })),
+            };
+            if let loci2d::world::instance::ApplyIntentResult::Ok(Some(entry)) =
+                author_instance.apply_intent(addr, act)
+            {
+                tick_entries.push(entry);
+            }
+        }
+
+        recorder.record_tick(tick, tick_entries);
+        author_instance.tick(tick).unwrap();
+        recorder.maybe_record_checkpoint(tick, &author_instance);
+    }
+
+    assert_eq!(recorder.checkpoint_count(), 4);
+
+    let bytes = recorder.to_bytes().unwrap();
+    let mut player = ReplayPlayer::from_bytes(&bytes).unwrap();
+    let mut verify_instance = Instance::new(1, tick_rate, 60, 42);
+    verify_instance.load_script(script).unwrap();
+
+    let report = player
+        .verify_determinism_with_instance(&mut verify_instance)
+        .expect("Replay with CCD projectiles and ricochets must verify cleanly");
+    assert_eq!(report.total_ticks, total_ticks);
+    assert_eq!(report.verified_checkpoints, 4);
+}
