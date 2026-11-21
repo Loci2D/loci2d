@@ -347,6 +347,40 @@ where
         })?;
         loci_table.set("get_entity_property", get_entity_property)?;
 
+        // Loci.get_entity(id)
+        let get_entity = scope.create_function(|lua, id: u64| {
+            let Some(entity) = instance.get_entity(id) else {
+                return Ok(None);
+            };
+            let tbl = lua.create_table()?;
+            tbl.set("id", entity.id)?;
+            tbl.set("name", entity.name.clone())?;
+            tbl.set("blueprint", entity.name.clone())?;
+            tbl.set("entity_type", entity.entity_type.as_str())?;
+            tbl.set("position", entity.position)?;
+            let vel_tbl = lua.create_table()?;
+            vel_tbl.set("x", entity.velocity.x.to_num::<f64>())?;
+            vel_tbl.set("y", entity.velocity.y.to_num::<f64>())?;
+            tbl.set("velocity", vel_tbl)?;
+            tbl.set("is_sensor", entity.is_sensor)?;
+            if let Some(ticks) = entity.remaining_lifetime_ticks {
+                tbl.set("lifetime_ticks", ticks)?;
+            }
+            let props_tbl = lua.create_table()?;
+            for (k, v) in &entity.properties {
+                props_tbl.set(k.clone(), v.clone())?;
+            }
+            tbl.set("properties", props_tbl)?;
+            Ok(Some(tbl))
+        })?;
+        loci_table.set("get_entity", get_entity)?;
+
+        // Loci.get_entity_type(id)
+        let get_entity_type = scope.create_function(|_, id: u64| {
+            Ok(instance.get_entity(id).map(|entity| entity.entity_type.as_str()))
+        })?;
+        loci_table.set("get_entity_type", get_entity_type)?;
+
         // Loci.get_global(key)
         let get_global =
             scope.create_function(|_, key: String| Ok(instance.globals.get(&key).cloned()))?;
@@ -427,11 +461,21 @@ where
 
             let position_val: mlua::Value = args.get("position")?;
             let position = extract_vector2(position_val)?;
-            
+
+            let velocity = match args.get::<mlua::Value>("velocity")? {
+                mlua::Value::Nil => None,
+                v => Some(extract_vector2(v)?),
+            };
+
             let entity_type: String = args.get("entity_type").unwrap_or_else(|_| "Prop".to_string());
             let move_speed: f64 = args.get("move_speed").unwrap_or(1.0);
             let radius: f64 = args.get("radius").unwrap_or(2.0);
-            
+            let is_sensor: Option<bool> = args.get("is_sensor")?;
+            let raw_lifetime: Option<i64> = args.get("lifetime_ticks")?;
+            let lifetime_ticks = raw_lifetime.and_then(|t| if t > 0 { u32::try_from(t).ok() } else { None });
+            let collision_layer: Option<u16> = args.get("collision_layer")?;
+            let collision_mask: Option<u16> = args.get("collision_mask")?;
+
             let properties = match args.get::<mlua::Table>("properties") {
                 Ok(props_table) => extract_properties(props_table)?,
                 Err(_) => BTreeMap::new(),
@@ -443,9 +487,14 @@ where
                 entity_id,
                 blueprint,
                 position,
+                velocity,
                 entity_type,
                 move_speed: fixed::types::I16F16::from_num(move_speed),
                 radius: fixed::types::I16F16::from_num(radius),
+                is_sensor,
+                lifetime_ticks,
+                collision_layer,
+                collision_mask,
                 properties,
             });
             Ok(entity_id)
@@ -592,6 +641,27 @@ where
         })?;
         commands_table.set("set_collision_filter", set_collision_filter)?;
 
+        let cmd_buf_set_sensor = Rc::clone(&cmd_buffer_rc);
+        let set_sensor = scope.create_function(move |_, (id, is_sensor): (u64, bool)| {
+            cmd_buf_set_sensor.borrow_mut().push(Command::SetSensor {
+                entity_id: id,
+                is_sensor,
+            });
+            Ok(())
+        })?;
+        commands_table.set("set_sensor", set_sensor)?;
+
+        let cmd_buf_set_lifetime = Rc::clone(&cmd_buffer_rc);
+        let set_lifetime = scope.create_function(move |_, (id, ticks): (u64, Option<i64>)| {
+            let lifetime_ticks = ticks.and_then(|t| if t > 0 { u32::try_from(t).ok() } else { None });
+            cmd_buf_set_lifetime.borrow_mut().push(Command::SetLifetime {
+                entity_id: id,
+                lifetime_ticks,
+            });
+            Ok(())
+        })?;
+        commands_table.set("set_lifetime", set_lifetime)?;
+
         let cmd_buf_spawn_obs = Rc::clone(&cmd_buffer_rc);
         let spawn_static_obstacle = scope.create_function(move |_, args: mlua::Table| {
             let parsed = parse_static_obstacle_args(&args)?;
@@ -710,6 +780,14 @@ where
             Ok(table)
         })?;
         physics_table.set("get_obstacles_in_radius", get_obstacles_in_radius)?;
+
+        let layer_table = lua.create_table()?;
+        layer_table.set("NONE", CollisionFilter::NONE)?;
+        layer_table.set("SOLID_WALL", CollisionFilter::SOLID_WALL)?;
+        layer_table.set("PLAYER", CollisionFilter::PLAYER)?;
+        layer_table.set("TRIGGER_ZONE", CollisionFilter::TRIGGER_ZONE)?;
+        layer_table.set("PROJECTILE", CollisionFilter::PROJECTILE)?;
+        physics_table.set("Layer", layer_table)?;
 
         loci_table.set("Physics", physics_table)?;
 

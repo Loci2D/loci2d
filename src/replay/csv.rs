@@ -41,11 +41,7 @@ fn escape_csv_field(field: &str) -> Cow<'_, str> {
 }
 
 fn entity_type_label(t: &EntityType) -> &'static str {
-    match t {
-        EntityType::Player => "Player",
-        EntityType::NPC => "NPC",
-        EntityType::Prop => "Prop",
-    }
+    t.as_str()
 }
 
 /// Shared buffered CSV writer for per-tick, per-entity simulation telemetry.
