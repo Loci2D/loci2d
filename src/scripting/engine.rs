@@ -516,6 +516,43 @@ impl ScriptEngine {
         })
     }
 
+    pub fn on_static_collision(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        obstacle_id: u64,
+        normal_x: f64,
+        normal_y: f64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_static_fn) = globals.get::<mlua::Function>("on_static_collision") {
+                on_static_fn.call::<()>((entity_id, obstacle_id, normal_x, normal_y))?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn on_boundary_collision(
+        &self,
+        instance: &Instance,
+        entity_id: u64,
+        normal_x: f64,
+        normal_y: f64,
+        cmd_buffer: &mut CommandBuffer,
+    ) -> LuaResult<()> {
+        self.reset_instruction_counter();
+        with_scoped_api(&self.lua, instance, cmd_buffer, || {
+            let globals = self.lua.globals();
+            if let Ok(on_bound_fn) = globals.get::<mlua::Function>("on_boundary_collision") {
+                on_bound_fn.call::<()>((entity_id, normal_x, normal_y))?;
+            }
+            Ok(())
+        })
+    }
+
     pub fn on_trigger_enter(
         &self,
         instance: &Instance,
