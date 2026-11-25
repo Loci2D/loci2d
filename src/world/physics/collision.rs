@@ -465,108 +465,325 @@ pub fn swept_circle_vs_shape(
         return None;
     }
 
+    let r = radius.max(I16F16::ZERO);
     match target {
         ColliderShape::Circle(circle) => {
-            let r = radius.max(I16F16::ZERO);
-            let expanded_radius = circle.radius.saturating_add(r);
-            let dx_raw = (origin.x.to_bits() as i128) - (circle.center.x.to_bits() as i128);
-            let dy_raw = (origin.y.to_bits() as i128) - (circle.center.y.to_bits() as i128);
-            let dist_sq_raw = dx_raw * dx_raw + dy_raw * dy_raw;
-            let er_raw = expanded_radius.to_bits() as i128;
-            let er_sq_raw = er_raw * er_raw;
-
-            if dist_sq_raw <= er_sq_raw {
-                let to_origin = origin.saturating_sub(circle.center);
-                if to_origin.dot(delta) >= I16F16::ZERO {
-                    return None;
-                }
-                let normal = if to_origin == DeterministicVector2::ZERO {
-                    -dir
-                } else {
-                    to_origin.normalize_or_zero()
-                };
-                return Some((I16F16::ZERO, normal));
-            }
-
-            let expanded = DeterministicCircle::new(circle.center, expanded_radius);
-            ray_intersect_circle(origin, dir, max_distance, &expanded)
+            swept_circle_vs_circle(origin, delta, dir, max_distance, r, circle)
         }
-        ColliderShape::AABB(aabb) => {
-            let r = radius.max(I16F16::ZERO);
-            let expanded = DeterministicAABB::new(
-                DeterministicVector2::new(
-                    aabb.min.x.saturating_sub(r),
-                    aabb.min.y.saturating_sub(r),
-                ),
-                DeterministicVector2::new(
-                    aabb.max.x.saturating_add(r),
-                    aabb.max.y.saturating_add(r),
-                ),
-            );
-            if expanded.contains_point(origin) {
-                // Moving away from or tangentially along a boundary face -> no collision
-                if (origin.x == expanded.min.x && dir.x <= I16F16::ZERO)
-                    || (origin.x == expanded.max.x && dir.x >= I16F16::ZERO)
-                    || (origin.y == expanded.min.y && dir.y <= I16F16::ZERO)
-                    || (origin.y == expanded.max.y && dir.y >= I16F16::ZERO)
-                {
-                    return None;
-                }
-                // Touching a flat face and moving directly inward
-                if origin.x == expanded.min.x
-                    && dir.x > I16F16::ZERO
-                    && origin.y >= aabb.min.y
-                    && origin.y <= aabb.max.y
-                {
-                    return Some((
-                        I16F16::ZERO,
-                        DeterministicVector2::new(-I16F16::ONE, I16F16::ZERO),
-                    ));
-                }
-                if origin.x == expanded.max.x
-                    && dir.x < I16F16::ZERO
-                    && origin.y >= aabb.min.y
-                    && origin.y <= aabb.max.y
-                {
-                    return Some((
-                        I16F16::ZERO,
-                        DeterministicVector2::new(I16F16::ONE, I16F16::ZERO),
-                    ));
-                }
-                if origin.y == expanded.min.y
-                    && dir.y > I16F16::ZERO
-                    && origin.x >= aabb.min.x
-                    && origin.x <= aabb.max.x
-                {
-                    return Some((
-                        I16F16::ZERO,
-                        DeterministicVector2::new(I16F16::ZERO, -I16F16::ONE),
-                    ));
-                }
-                if origin.y == expanded.max.y
-                    && dir.y < I16F16::ZERO
-                    && origin.x >= aabb.min.x
-                    && origin.x <= aabb.max.x
-                {
-                    return Some((
-                        I16F16::ZERO,
-                        DeterministicVector2::new(I16F16::ZERO, I16F16::ONE),
-                    ));
-                }
+        ColliderShape::AABB(aabb) => swept_circle_vs_aabb(origin, dir, max_distance, r, aabb),
+    }
+}
 
-                let manifold = intersect_circle_aabb(&DeterministicCircle::new(origin, r), aabb);
-                if manifold.is_colliding {
-                    if dir.dot(manifold.normal) >= I16F16::ZERO {
-                        None
-                    } else {
-                        Some((I16F16::ZERO, manifold.normal))
-                    }
-                } else {
-                    ray_intersect_aabb(origin, dir, max_distance, aabb)
-                }
-            } else {
-                ray_intersect_aabb(origin, dir, max_distance, &expanded)
-            }
+/// Evaluates swept-circle CCD against a circular target using exact `i128` squared-distance checks.
+fn swept_circle_vs_circle(
+    origin: DeterministicVector2,
+    delta: DeterministicVector2,
+    dir: DeterministicVector2,
+    max_distance: I16F16,
+    radius: I16F16,
+    circle: &DeterministicCircle,
+) -> Option<(I16F16, DeterministicVector2)> {
+    let expanded_radius = circle.radius.saturating_add(radius);
+    let dx_raw = (origin.x.to_bits() as i128) - (circle.center.x.to_bits() as i128);
+    let dy_raw = (origin.y.to_bits() as i128) - (circle.center.y.to_bits() as i128);
+    let dist_sq_raw = dx_raw * dx_raw + dy_raw * dy_raw;
+    let er_raw = expanded_radius.to_bits() as i128;
+    let er_sq_raw = er_raw * er_raw;
+
+    if dist_sq_raw <= er_sq_raw {
+        let to_origin = origin.saturating_sub(circle.center);
+        if to_origin.dot(delta) >= I16F16::ZERO {
+            return None;
         }
+        let normal = if to_origin == DeterministicVector2::ZERO {
+            -dir
+        } else {
+            to_origin.normalize_or_zero()
+        };
+        return Some((I16F16::ZERO, normal));
+    }
+
+    let expanded = DeterministicCircle::new(circle.center, expanded_radius);
+    ray_intersect_circle(origin, dir, max_distance, &expanded)
+}
+
+/// Evaluates swept-circle CCD against an AABB target via Minkowski-expanded AABB ray intersection
+/// and decomposed flat-face / corner contact helpers when `origin` lies inside the expanded box.
+fn swept_circle_vs_aabb(
+    origin: DeterministicVector2,
+    dir: DeterministicVector2,
+    max_distance: I16F16,
+    radius: I16F16,
+    aabb: &DeterministicAABB,
+) -> Option<(I16F16, DeterministicVector2)> {
+    let expanded = DeterministicAABB::new(
+        DeterministicVector2::new(
+            aabb.min.x.saturating_sub(radius),
+            aabb.min.y.saturating_sub(radius),
+        ),
+        DeterministicVector2::new(
+            aabb.max.x.saturating_add(radius),
+            aabb.max.y.saturating_add(radius),
+        ),
+    );
+    if !expanded.contains_point(origin) {
+        return ray_intersect_aabb(origin, dir, max_distance, &expanded);
+    }
+
+    // Moving away from or tangentially along a boundary face -> no collision
+    if is_receding_from_expanded_aabb(origin, dir, &expanded) {
+        return None;
+    }
+
+    swept_circle_vs_aabb_face(origin, dir, aabb, &expanded)
+        .or_else(|| swept_circle_vs_aabb_corner(origin, dir, max_distance, radius, aabb))
+}
+
+/// Returns `true` when `origin` touches an expanded AABB boundary and moves away or tangentially.
+fn is_receding_from_expanded_aabb(
+    origin: DeterministicVector2,
+    dir: DeterministicVector2,
+    expanded: &DeterministicAABB,
+) -> bool {
+    (origin.x == expanded.min.x && dir.x <= I16F16::ZERO)
+        || (origin.x == expanded.max.x && dir.x >= I16F16::ZERO)
+        || (origin.y == expanded.min.y && dir.y <= I16F16::ZERO)
+        || (origin.y == expanded.max.y && dir.y >= I16F16::ZERO)
+}
+
+/// Checks if `origin` is touching one of the four flat Minkowski AABB faces and moving inward.
+fn swept_circle_vs_aabb_face(
+    origin: DeterministicVector2,
+    dir: DeterministicVector2,
+    aabb: &DeterministicAABB,
+    expanded: &DeterministicAABB,
+) -> Option<(I16F16, DeterministicVector2)> {
+    let in_y_span = origin.y >= aabb.min.y && origin.y <= aabb.max.y;
+    let in_x_span = origin.x >= aabb.min.x && origin.x <= aabb.max.x;
+
+    let faces = [
+        (
+            origin.x == expanded.min.x && dir.x > I16F16::ZERO && in_y_span,
+            DeterministicVector2::new(-I16F16::ONE, I16F16::ZERO),
+        ),
+        (
+            origin.x == expanded.max.x && dir.x < I16F16::ZERO && in_y_span,
+            DeterministicVector2::new(I16F16::ONE, I16F16::ZERO),
+        ),
+        (
+            origin.y == expanded.min.y && dir.y > I16F16::ZERO && in_x_span,
+            DeterministicVector2::new(I16F16::ZERO, -I16F16::ONE),
+        ),
+        (
+            origin.y == expanded.max.y && dir.y < I16F16::ZERO && in_x_span,
+            DeterministicVector2::new(I16F16::ZERO, I16F16::ONE),
+        ),
+    ];
+
+    faces
+        .into_iter()
+        .find_map(|(hit, normal)| hit.then_some((I16F16::ZERO, normal)))
+}
+
+/// Evaluates rounded-corner / interior overlap and outer corner pocket raycasts for an AABB.
+fn swept_circle_vs_aabb_corner(
+    origin: DeterministicVector2,
+    dir: DeterministicVector2,
+    max_distance: I16F16,
+    radius: I16F16,
+    aabb: &DeterministicAABB,
+) -> Option<(I16F16, DeterministicVector2)> {
+    let manifold = intersect_circle_aabb(&DeterministicCircle::new(origin, radius), aabb);
+    if manifold.is_colliding {
+        if dir.dot(manifold.normal) >= I16F16::ZERO {
+            None
+        } else {
+            Some((I16F16::ZERO, manifold.normal))
+        }
+    } else {
+        ray_intersect_aabb(origin, dir, max_distance, aabb)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_aabb() -> DeterministicAABB {
+        DeterministicAABB::new(
+            DeterministicVector2::from_i32(-10, -10),
+            DeterministicVector2::from_i32(10, 10),
+        )
+    }
+
+    fn expand_aabb(aabb: &DeterministicAABB, r: I16F16) -> DeterministicAABB {
+        DeterministicAABB::new(
+            DeterministicVector2::new(aabb.min.x.saturating_sub(r), aabb.min.y.saturating_sub(r)),
+            DeterministicVector2::new(aabb.max.x.saturating_add(r), aabb.max.y.saturating_add(r)),
+        )
+    }
+
+    #[test]
+    fn test_swept_circle_vs_aabb_face_all_four_faces_and_spans() {
+        let aabb = test_aabb();
+        let r = I16F16::from_num(2);
+        let expanded = expand_aabb(&aabb, r);
+
+        let cases = [
+            (
+                DeterministicVector2::from_i32(-12, 0),
+                DeterministicVector2::UNIT_X,
+                -DeterministicVector2::UNIT_X,
+            ),
+            (
+                DeterministicVector2::from_i32(12, 0),
+                -DeterministicVector2::UNIT_X,
+                DeterministicVector2::UNIT_X,
+            ),
+            (
+                DeterministicVector2::from_i32(0, -12),
+                DeterministicVector2::UNIT_Y,
+                -DeterministicVector2::UNIT_Y,
+            ),
+            (
+                DeterministicVector2::from_i32(0, 12),
+                -DeterministicVector2::UNIT_Y,
+                DeterministicVector2::UNIT_Y,
+            ),
+        ];
+
+        for (origin, dir, expected_normal) in cases {
+            let hit = swept_circle_vs_aabb_face(origin, dir, &aabb, &expanded);
+            assert_eq!(hit, Some((I16F16::ZERO, expected_normal)));
+
+            // Moving away or tangentially must be caught as receding
+            assert!(is_receding_from_expanded_aabb(origin, -dir, &expanded));
+        }
+
+        // Outside the flat face span (corner pocket) must return None from face helper
+        let corner_pocket = DeterministicVector2::from_i32(-12, 11);
+        assert_eq!(
+            swept_circle_vs_aabb_face(corner_pocket, DeterministicVector2::UNIT_X, &aabb, &expanded),
+            None
+        );
+    }
+
+    #[test]
+    fn test_swept_circle_vs_aabb_corner_overlap_receding_and_pocket() {
+        let aabb = test_aabb();
+        let r = I16F16::from_num(2);
+
+        // Overlapping the top-right rounded corner at (11, 11): distance to (10, 10) is sqrt(2) < 2
+        let corner_origin = DeterministicVector2::from_i32(11, 11);
+        let inward_dir = DeterministicVector2::new(-I16F16::ONE, -I16F16::ONE).normalize_or_zero();
+        let inward_hit = swept_circle_vs_aabb_corner(
+            corner_origin,
+            inward_dir,
+            I16F16::from_num(5),
+            r,
+            &aabb,
+        );
+        assert!(inward_hit.is_some());
+        let (t, normal) = inward_hit.unwrap();
+        assert_eq!(t, I16F16::ZERO);
+        assert!(normal.x > I16F16::ZERO && normal.y > I16F16::ZERO);
+
+        // Moving away from the corner must return None
+        let outward_dir = -inward_dir;
+        assert_eq!(
+            swept_circle_vs_aabb_corner(corner_origin, outward_dir, I16F16::from_num(5), r, &aabb),
+            None
+        );
+
+        // Inside the expanded box corner pocket (11.5, 11.5): dist to (10, 10) is ~2.12 > 2
+        // Moving diagonally toward the AABB corner should intersect the inner AABB
+        let pocket_origin = DeterministicVector2::from_f32(11.5, 11.5);
+        let pocket_hit = swept_circle_vs_aabb_corner(
+            pocket_origin,
+            inward_dir,
+            I16F16::from_num(10),
+            r,
+            &aabb,
+        );
+        assert!(pocket_hit.is_some());
+        assert!(pocket_hit.unwrap().0 > I16F16::ZERO);
+    }
+
+    #[test]
+    fn test_swept_circle_vs_shape_aabb_and_circle_end_to_end() {
+        let aabb_shape = ColliderShape::AABB(test_aabb());
+        let r = I16F16::from_num(1);
+
+        // Approach from -X outside expanded box
+        let hit = swept_circle_vs_shape(
+            DeterministicVector2::from_i32(-20, 0),
+            DeterministicVector2::from_i32(20, 0),
+            r,
+            &aabb_shape,
+        );
+        assert_eq!(
+            hit,
+            Some((I16F16::from_num(9), -DeterministicVector2::UNIT_X))
+        );
+
+        // Ricochet from boundary x = -11 moving away (-X) must not stick at t = 0
+        assert_eq!(
+            swept_circle_vs_shape(
+                DeterministicVector2::from_i32(-11, 0),
+                DeterministicVector2::from_i32(-5, 0),
+                r,
+                &aabb_shape,
+            ),
+            None
+        );
+
+        // Zero delta returns None
+        assert_eq!(
+            swept_circle_vs_shape(
+                DeterministicVector2::from_i32(-20, 0),
+                DeterministicVector2::ZERO,
+                r,
+                &aabb_shape,
+            ),
+            None
+        );
+
+        // Circle target: external approach, receding overlap, and concentric fallback
+        let circle_shape = ColliderShape::Circle(DeterministicCircle::new(
+            DeterministicVector2::ZERO,
+            I16F16::from_num(5),
+        ));
+        let circle_hit = swept_circle_vs_shape(
+            DeterministicVector2::from_i32(-10, 0),
+            DeterministicVector2::from_i32(10, 0),
+            r,
+            &circle_shape,
+        );
+        assert_eq!(
+            circle_hit,
+            Some((I16F16::from_num(4), -DeterministicVector2::UNIT_X))
+        );
+
+        // Receding from inside expanded circle
+        assert_eq!(
+            swept_circle_vs_shape(
+                DeterministicVector2::from_i32(-3, 0),
+                DeterministicVector2::from_i32(-4, 0),
+                r,
+                &circle_shape,
+            ),
+            None
+        );
+
+        // Inward overlap inside expanded circle returns t = 0 with outward radial normal
+        assert_eq!(
+            swept_circle_vs_shape(
+                DeterministicVector2::from_i32(-3, 0),
+                DeterministicVector2::from_i32(5, 0),
+                r,
+                &circle_shape,
+            ),
+            Some((I16F16::ZERO, -DeterministicVector2::UNIT_X))
+        );
     }
 }

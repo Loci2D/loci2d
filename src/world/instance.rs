@@ -98,6 +98,7 @@ pub struct Instance {
     pub active_solid_collisions: BTreeSet<(u64, u64)>,
     pub active_dynamic_collisions: BTreeSet<(u64, u64)>,
     pub logging_enabled: bool,
+    pub(crate) simulation_buffers: super::simulation::SimulationBuffers,
     // Phase 6 Additions:
     pub script_engine: ScriptEngine,
     pub script_hash: String,
@@ -156,6 +157,7 @@ impl Instance {
             active_solid_collisions: BTreeSet::new(),
             active_dynamic_collisions: BTreeSet::new(),
             logging_enabled: false,
+            simulation_buffers: super::simulation::SimulationBuffers::default(),
             script_engine: ScriptEngine::new(seed).expect("Failed to initialize ScriptEngine"),
             script_hash: String::new(),
             script_payload: String::new(),
