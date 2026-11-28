@@ -1,8 +1,8 @@
 use fixed::types::I16F16;
 use loci2d::world::fixed_point::DeterministicVector2;
 use loci2d::world::physics::{
-    DeterministicAABB, DeterministicCircle, deterministic_distance, intersect_circle_aabb,
-    intersect_circle_circle,
+    DeterministicAABB, DeterministicCircle, deterministic_distance, integer_sqrt_u64,
+    integer_sqrt_u128, intersect_circle_aabb, intersect_circle_circle,
 };
 
 #[test]
@@ -97,4 +97,48 @@ fn test_collision_at_large_coordinates() {
     assert!(m_box.is_colliding);
     assert_eq!(m_box.normal, DeterministicVector2::UNIT_X);
     assert_eq!(m_box.penetration_depth, I16F16::from_num(50));
+}
+
+#[test]
+fn test_distance_beyond_46k_units_no_overflow_and_saturates() {
+    // 50,000-unit span exceeds the ~46,340-unit i64 squared-raw threshold.
+    let a = DeterministicVector2::new(I16F16::from_num(-25_000), I16F16::ZERO);
+    let b = DeterministicVector2::new(I16F16::from_num(25_000), I16F16::ZERO);
+    assert_eq!(deterministic_distance(a, b), I16F16::MAX);
+    assert_eq!(deterministic_distance(b, a), I16F16::MAX);
+
+    // Full I16F16 domain extremes (~92,681.9 units diagonal, exceeding u64::MAX squared-raw).
+    let min_min = DeterministicVector2::new(I16F16::MIN, I16F16::MIN);
+    let max_max = DeterministicVector2::new(I16F16::MAX, I16F16::MAX);
+    assert_eq!(deterministic_distance(min_min, max_max), I16F16::MAX);
+
+    let min_max = DeterministicVector2::new(I16F16::MIN, I16F16::MAX);
+    let max_min = DeterministicVector2::new(I16F16::MAX, I16F16::MIN);
+    assert_eq!(deterministic_distance(min_max, max_min), I16F16::MAX);
+
+    // Near-max non-saturating diagonal: 23,000 * sqrt(2) ≈ 32,526.9119 < I16F16::MAX.
+    let d1 = DeterministicVector2::new(I16F16::from_num(-11_500), I16F16::from_num(-11_500));
+    let d2 = DeterministicVector2::new(I16F16::from_num(11_500), I16F16::from_num(11_500));
+    let dist = deterministic_distance(d1, d2);
+    let expected = (23_000.0f64 * 23_000.0 + 23_000.0 * 23_000.0).sqrt();
+    let diff = (dist.to_num::<f64>() - expected).abs();
+    assert!(
+        diff < 0.05,
+        "Near-max diagonal distance failed: got {dist}, expected {expected}"
+    );
+}
+
+#[test]
+fn test_integer_sqrt_u128_parity_and_large_values() {
+    let samples = [0u64, 1, 2, 3, 4, 65_535, 65_536, u32::MAX as u64, u64::MAX];
+    for val in samples {
+        assert_eq!(
+            integer_sqrt_u128(val as u128),
+            integer_sqrt_u64(val) as u128,
+            "Parity mismatch for val={val}"
+        );
+    }
+
+    assert_eq!(integer_sqrt_u128(1u128 << 66), 1u128 << 33);
+    assert_eq!(integer_sqrt_u128(u128::MAX), u64::MAX as u128);
 }
