@@ -10,6 +10,6 @@ pub use collision::{
     resolve_static_collision, swept_circle_vs_shape,
 };
 pub use map::{CollisionFilter, MapBounds, StaticObstacle, TriggerEvent, TriggerEventType};
-pub use math::{deterministic_distance, fixed_sqrt, integer_sqrt_u64};
+pub use math::{deterministic_distance, fixed_sqrt, integer_sqrt_u64, integer_sqrt_u128};
 pub use navigation::{NavigationComponent, update_entity_navigation};
 pub use primitives::{ColliderShape, DeterministicAABB, DeterministicCircle};
